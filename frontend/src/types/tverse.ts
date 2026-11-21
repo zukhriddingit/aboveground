@@ -12,7 +12,15 @@ export type StationId =
   | "place-boyls" // Boylston
   | "place-pktrm" // Park Street
   | "place-harsq" // Harvard
-  | "place-knncl"; // Kendall/MIT
+  | "place-knncl" // Kendall/MIT
+  // Added for T-Feed so Orange/Blue posts have stops (real MBTA parent-station ids).
+  // The map has no `Station` for these; T-Feed flies to them by lng/lat.
+  | "place-chmnl" // Charles/MGH (Red)
+  | "place-dwnxg" // Downtown Crossing (Orange, Red)
+  | "place-chncl" // Chinatown (Orange)
+  | "place-state" // State (Orange, Blue)
+  | "place-aqucl" // Aquarium (Blue)
+  | "place-gover"; // Government Center (Green, Blue)
 
 export type TLine = "Green" | "Red" | "Orange" | "Blue";
 
@@ -95,4 +103,86 @@ export interface TriggerAlertRequest {
 }
 export interface TriggerAlertResponse {
   alert: TranslatedAlert;
+}
+
+// ---- T-Feed: community feed by T line (added for the T-Feed feature; additive only) ----
+
+/** Same four lines as TLine; T-Feed code uses this name. */
+export type TransitLine = TLine;
+
+/** What a post is about. */
+export type PostVibe = "ON_THE_T" | "FOOD_SPOT" | "CROWD_CHECK" | "STREET_VIBES" | "DELAY_VENT";
+
+/** The reaction strip: ❤️ heart, 🚇 train, ☕ dunkin, 🔥 fire. */
+export type ReactionKey = "heart" | "train" | "dunkin" | "fire";
+
+/** Rider badge shown next to a handle. */
+export type RiderBadge = "BU" | "MIT" | "NEU" | "Local" | "Tourist";
+
+export interface CommunityReply {
+  id: string;
+  postId: string;
+  author: string;
+  authorBadge?: RiderBadge;
+  text: string;
+  /** Handle this reply answers (shown as an @mention). */
+  replyToAuthor?: string;
+  likes: number;
+  /** Client-side only: the backend has no accounts, the browser remembers its own likes. */
+  likedByMe?: boolean;
+  createdAt: string; // ISO 8601
+}
+
+export interface CommunityPost {
+  id: string;
+  line: TransitLine;
+  /** MBTA route id when it matters, e.g. "Green-B". */
+  branch?: string;
+  stationId: StationId;
+  stationName: string;
+  vibe: PostVibe;
+  author: string;
+  authorBadge?: RiderBadge;
+  /** Avatar fill, a CSS hex colour. */
+  avatarColor: string;
+  caption: string;
+  /** Base64 JPEG/SVG data URL. No image = gradient caption card. */
+  imageUrl?: string;
+  reactions: Record<ReactionKey, number>;
+  /** Client-side only: which reactions this browser has added. */
+  myReactions?: ReactionKey[];
+  replies: CommunityReply[];
+  createdAt: string; // ISO 8601
+}
+
+/** GET /api/community/posts query. `line` defaults to "ALL", `sort` to "latest" (trending = reactions + replies). */
+export interface CommunityFeedQuery {
+  line?: TransitLine | "ALL";
+  stationId?: StationId;
+  vibe?: PostVibe;
+  sort?: "latest" | "trending";
+}
+
+/** POST /api/community/posts body. The server fills in id, createdAt, zeroed reactions and replies: []. */
+export type NewCommunityPost = Omit<CommunityPost, "id" | "createdAt" | "reactions" | "myReactions" | "replies">;
+
+/** POST /api/community/posts/{postId}/replies body. Returns a CommunityReply. */
+export type NewCommunityReply = Pick<CommunityReply, "author" | "authorBadge" | "text" | "replyToAuthor">;
+
+/** POST /api/community/posts/{postId}/react body. */
+export interface CommunityReactRequest {
+  reaction: ReactionKey;
+  action: "add" | "remove";
+}
+export interface CommunityReactResponse {
+  postId: string;
+  reactions: Record<ReactionKey, number>;
+}
+
+/**
+ * POST /api/community/posts/{postId}/replies/{replyId}/like body (optional).
+ * With `action` the like is set or cleared; without a body the server toggles. Returns the CommunityReply.
+ */
+export interface CommunityReplyLikeRequest {
+  action?: "add" | "remove";
 }
