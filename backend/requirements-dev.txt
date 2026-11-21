@@ -1,0 +1,6 @@
+# dev_app.py: T-Feed (community.py) + Quick-Check (reports.py) + Gemini AI (ai_routes.py).
+# Member 1: merge these into the main requirements.txt.
+fastapi>=0.110
+uvicorn[standard]>=0.29
+pydantic>=2.6
+google-genai>=1.0

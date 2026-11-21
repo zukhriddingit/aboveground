@@ -14,3 +14,6 @@ venv/
 # T-Feed: backend/community.py mirrors the live feed here
 backend/community_data.json
 backend/community_data.json.tmp
+# Quick-Check: backend/reports.py mirrors 1-tap rider reports here
+backend/reports_data.json
+backend/reports_data.json.tmp
