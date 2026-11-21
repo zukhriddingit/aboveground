@@ -242,7 +242,16 @@ export default function TVerseMap(props: TVerseMapProps) {
           }
           case "station":
             if (station) p.onStationClick?.(station);
-            if (p.showInfoCards !== false) setInfo({ kind: "station", id: hit.id });
+            if (p.showInfoCards !== false) {
+              setInfo({ kind: "station", id: hit.id });
+              // The station card grows upward (alerts, closures, Quick-Check): if the stop sits in the top
+              // half of the screen, slide the camera so the whole card fits above it.
+              const h = m.getContainer().clientHeight;
+              if (e.point.y < h * 0.6) {
+                ride.gesture();
+                m.panBy([0, e.point.y - h * 0.72], { duration: 650, essential: true });
+              }
+            }
             break;
         }
       });
@@ -455,7 +464,17 @@ export default function TVerseMap(props: TVerseMapProps) {
           {showInfoCards && infoStation && (
             <MapAnchor key={`info-${infoStation.id}`} lng={infoStation.lng} lat={infoStation.lat} altitude={20}>
               <StationInfoCard station={infoStation} onClose={() => setInfo(null)}
-                onAlertClick={s => { setInfo(null); latest.current.onAlertClick?.(s); }} />
+                onAlertClick={s => { setInfo(null); latest.current.onAlertClick?.(s); }}
+                signals={props.quickCheckSignals?.get(infoStation.id)}
+                onQuickCheckPoints={(points, kind) => latest.current.onQuickCheckPoints?.(points, kind)}
+                onShowPickup={pickup => {
+                  setInfo(null);
+                  ride.gesture();
+                  mapRef.current?.flyTo({
+                    center: [pickup.lng, pickup.lat], zoom: 17.6, pitch: 62,
+                    bearing: mapRef.current.getBearing(), duration: 1600, essential: true,
+                  });
+                }} />
             </MapAnchor>
           )}
           {showInfoCards && infoTrain && (

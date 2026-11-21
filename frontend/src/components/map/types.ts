@@ -1,7 +1,8 @@
 // Public API of the 3D map (Member 2). Members 3 and 4 code against this file.
 import type { ReactNode, Ref } from "react";
 import type { Map as MapLibreMap } from "maplibre-gl";
-import type { AvatarHat, Station, StationId, TLinesGeoJson, TrainVehicle } from "@/types/tverse";
+import type { AvatarHat, QuickCheckKind, Station, StationId, TLinesGeoJson, TrainVehicle } from "@/types/tverse";
+import type { StationSignalsResult } from "@/components/quickcheck";
 
 export interface TVerseMapProps {
   ref?: Ref<TVerseMapHandle>;
@@ -19,6 +20,14 @@ export interface TVerseMapProps {
   avatarHat?: AvatarHat;
   /** Built-in station/train info cards (next arrival + crowdedness pill). Default true. */
   showInfoCards?: boolean;
+  /**
+   * Rider Quick-Check signals from `useStationSignals()` (`@/components/quickcheck`). The station card shows
+   * the stale-ETA badge from them and seeds its 1-tap bar. Branch gaps, next-usable trains and planned
+   * closures come on the stations themselves (`withTransitData` from `@/components/transit`).
+   */
+  quickCheckSignals?: StationSignalsResult | null;
+  /** A rider tapped a Quick-Check chip in the station card: award CharliePoints (+10). */
+  onQuickCheckPoints?: (points: number, kind: QuickCheckKind) => void;
   className?: string;
   /** HTML overlays, usually <MapAnchor>s (story bubbles, toasts pinned to a station...). */
   children?: ReactNode;

@@ -9,6 +9,8 @@ import type { TVerseMapHandle } from "@/components/map/types";
 import { MOCK_LINES, MOCK_STATIONS, MOCK_STORIES, MOCK_WORLD } from "@/lib/mockData";
 import { LINE_GLOW, STORY_CATEGORIES } from "@/lib/theme";
 import type { AvatarHat, StationId, WorldResponse } from "@/types/tverse";
+import { useStationSignals } from "@/components/quickcheck";
+import { useBranchGaps, withTransitData } from "@/components/transit";
 
 const sources = ["Sim", "Live MBTA", "Backend"] as const;
 type Source = typeof sources[number];
@@ -38,9 +40,12 @@ export default function MapDevPage() {
     const entry = { id: ++sequence.current, time: new Date().toLocaleTimeString(), text };
     setEvents(previous => [entry, ...previous].slice(0, 8));
   }, []);
-  const stations = useMemo(() => world.stations.map(station => ({
+  const signals = useStationSignals();
+  const gaps = useBranchGaps(world.stations);
+  const [points, setPoints] = useState(0);
+  const stations = useMemo(() => withTransitData(world.stations.map(station => ({
     ...station, hasActiveAlert: alertOverrides[station.id] ?? station.hasActiveAlert,
-  })), [world.stations, alertOverrides]);
+  })), gaps, signals.byStation), [world.stations, alertOverrides, gaps, signals.byStation]);
   const selected = stations.find(station => station.id === delayTarget) ?? stations[0];
 
   function chooseSource(next: Source) {
@@ -123,6 +128,8 @@ export default function MapDevPage() {
         touristMode={tourist} demoRideActive={riding} avatarHat={hat}
         onApproachStation={id => log(`Approaching ${stations.find(s => s.id === id)?.name ?? MOCK_STATIONS.find(s => s.id === id)?.name ?? "station"}`)}
         onStationClick={s => log(`Station · ${s.name}`)}
+        quickCheckSignals={signals}
+        onQuickCheckPoints={(n, kind) => { setPoints(p => p + n); log(`+${n} CharliePoints · ${kind}`); }}
         onAlertClick={s => log(`Delay · ${s.name}`)}
         onLandmarkClick={s => log(`${s.landmark?.title ?? "Landmark"} · ${s.name}`)}
         onTrainClick={v => log(`Train · ${v.route} · ${v.id}`)}
@@ -202,7 +209,10 @@ export default function MapDevPage() {
         </div>}
       </section>
       <section className={`${panel} bottom-2 max-h-[23dvh] w-64 max-w-[calc(100%-1rem)] overflow-y-auto p-3 sm:bottom-4`}>
-        <h2 className="mb-1 font-semibold">Event log</h2>
+        <h2 className="mb-1 flex items-center justify-between gap-3 font-semibold">
+          Event log
+          <span className="rounded-full bg-emerald-400/15 px-2 py-0.5 text-[11px] text-emerald-200">{points} CharliePoints</span>
+        </h2>
         {events.length === 0 && <p className="text-slate-400">Waiting for map events</p>}
         <ol className="space-y-1" aria-live="polite">
           {events.map(entry => <li key={entry.id} className="flex gap-2">
