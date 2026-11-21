@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Station } from "@/types/tverse";
 import { LINE_COLORS } from "@/lib/theme";
+import { AiSourceTag, useStationNarration } from "@/components/ai";
 import { landmarkFor } from "./storyData";
 import { StoryStyles } from "./StoryStyles";
 
@@ -43,6 +44,12 @@ export function TouristNarratorCard({ touristMode, station, autoHideMs = 7000, o
   const landmark = landmarkFor(station);
   /** Which approach this card is for; null = nothing to show. */
   const key = touristMode && station && landmark ? station.id : null;
+  // Gemini mini-story when it arrives within 4 s; the landmark fact otherwise (rendered right away).
+  const narration = useStationNarration(key ? station : null);
+  // Speech waits up to 1.5 s for the AI text, then reads whatever we have.
+  const [graceKey, setGraceKey] = useState<string | null>(null);
+  const readyKey = key && (!narration.pending || graceKey === key) ? key : null;
+  const spoken = useRef({ title: "", text: "" });
 
   const [hiddenKey, setHiddenKey] = useState<string | null>(null);
   const [prevKey, setPrevKey] = useState(key);
@@ -53,6 +60,14 @@ export function TouristNarratorCard({ touristMode, station, autoHideMs = 7000, o
   useEffect(() => {
     mutedRef.current = muted;
   }, [muted]);
+  useEffect(() => {
+    spoken.current = { title: narration.title, text: narration.text };
+  }, [narration.title, narration.text]);
+  useEffect(() => {
+    if (!key) return;
+    const t = window.setTimeout(() => setGraceKey(key), 1500);
+    return () => window.clearTimeout(t);
+  }, [key]);
 
   // A new approach (or Tourist Mode turned back on) shows the card again.
   if (key !== prevKey) {
@@ -80,7 +95,8 @@ export function TouristNarratorCard({ touristMode, station, autoHideMs = 7000, o
     const s = synth();
     if (!s || !landmark || !key) return;
     s.cancel();
-    const u = new SpeechSynthesisUtterance(`${landmark.title}. ${landmark.fact}`);
+    const { title, text } = spoken.current;
+    const u = new SpeechSynthesisUtterance(`${title || landmark.title}. ${text || landmark.fact}`);
     const v = pickVoice();
     if (v) u.voice = v;
     u.rate = 1.03;
@@ -102,6 +118,7 @@ export function TouristNarratorCard({ touristMode, station, autoHideMs = 7000, o
       synth()?.cancel();
       return;
     }
+    if (readyKey !== key) return;
     if (mutedRef.current || !synth()) {
       scheduleHide(key, autoHideMs + 5000);
       return;
@@ -110,7 +127,7 @@ export function TouristNarratorCard({ touristMode, station, autoHideMs = 7000, o
     const t = window.setTimeout(speak, synth()!.getVoices().length ? 250 : 600);
     return () => window.clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once per approach
-  }, [key]);
+  }, [key, readyKey]);
 
   useEffect(
     () => () => {
@@ -172,8 +189,11 @@ export function TouristNarratorCard({ touristMode, station, autoHideMs = 7000, o
                 </span>
               )}
             </div>
-            <h3 className="mt-0.5 text-base font-bold leading-tight">{landmark.title}</h3>
-            <p className="mt-1 text-[13px] leading-snug text-white/80">{landmark.fact}</p>
+            <h3 className="mt-0.5 flex items-center gap-2 text-base font-bold leading-tight">
+              {narration.title || landmark.title}
+              {narration.source === "gemini" && <AiSourceTag source="gemini" />}
+            </h3>
+            <p className="mt-1 text-[13px] leading-snug text-white/80">{narration.text || landmark.fact}</p>
             <div className="mt-3 flex items-center gap-2">
               <span className="rounded-full bg-amber-300 px-2.5 py-1 text-[11px] font-bold text-black">
                 🚶 {landmark.walkMin} min walk

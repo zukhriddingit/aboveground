@@ -1,7 +1,9 @@
 # AboveGround (T-Verse)
 
 Pokémon GO meets Snap Map for the MBTA: a live 3D transit world that shows what is happening above
-every T stop and turns delays into playable micro-games.
+every T stop, lets riders report what the countdown clock won't tell them in one tap, and opens a
+Behind-the-Scenes Disruption Visualizer when a line is held: what crews are actually fixing in the
+tunnel, why it takes that long, and the smartest way around it.
 
 MVP corridor: the Green Line from BU Central → Kenmore → Hynes → Copley → Boylston → Park St,
 plus Harvard and Kendall/MIT on the Red Line. Live MBTA trains are drawn citywide.
@@ -41,6 +43,8 @@ Integration merge at 1:00. Member 4 merges into `main` and wires `page.tsx`.
 - `GET /api/stories` → `StationStory[]`
 - `POST /api/stories` ← `{ stationId, category, author, caption, placeName, priceTag, imageUrl, walkMin }` → `StationStory`
 - `POST /api/alerts/trigger` ← `{ stationId? }` (default Boylston) → `{ alert: TranslatedAlert }`; that station's `hasActiveAlert` becomes `true` in `/api/world`
+- T-Feed `/api/community/*` (`backend/COMMUNITY.md`), Quick-Check `/api/reports` + `/api/reports/summary`, and Gemini
+  `/api/ai/translate-alert`, `/api/ai/narrate`, `/api/ai/line-vibe` (`backend/UPGRADE.md`: the `include_router` lines for `main.py`)
 
 CORS open to all origins. The frontend also proxies `/api/*` to the backend (see `frontend/next.config.ts`),
 so `fetch("/api/world")` works from a phone on the LAN.
@@ -87,10 +91,31 @@ cd backend && uvicorn main:app --reload --port 8000     # Member 1 fills in the 
 cd frontend && npm install && npm run dev               # http://localhost:3000
 ```
 
+Until `main.py` lands: `cd backend && .venv/bin/uvicorn dev_app:app --port 8000` (T-Feed + Quick-Check + Gemini;
+`GEMINI_API_KEY` optional, every AI answer falls back to templates within 4 s). Test benches: `/map-dev`, `/community-dev`, `/ops-dev`.
+
+## Upgrade P0/P1 (`docs/UPDATE_REPORT.md`)
+
+| Piece | Where |
+| --- | --- |
+| 1-tap "Waze for the T" Quick-Check, offline queue (`pending_t_reports`), +10 CharliePoints, Stale ETA badge | `frontend/src/components/quickcheck/`, `backend/reports.py` |
+| Gemini translator + Tourist narrator (google-genai, 4 s cap, deterministic fallbacks) | `backend/ai_translator.py`, `backend/ai_routes.py`, `frontend/src/components/ai/` |
+| Real 2026 disruptions (Boylston signal modernization, Blue Line wire inspection, Harvard disabled train, Chinatown shuttle bridge) | `MOCK_ALERTS` in `frontend/src/lib/mockData.ts` |
+| Branch gaps, next usable train, planned-closure shuttle wayfinder | `frontend/src/components/transit/` |
+
+Wiring for the map card and `page.tsx`: `frontend/src/components/quickcheck/README.md`.
+
 ## 90-second mentor demo
 
 1. Open the 3D map (10 s): tilted Boston, glowing T lines, live trains, the avatar standing at BU Central.
 2. Demo Ride + Tourist Mode (25 s): the avatar rides to Kenmore and Copley, the browser narrates the
    Boston Public Library, tap a Cheap Eats bubble over Kenmore, post a live Story.
-3. Simulate T Delay at Boylston (35 s): red hologram, plain-English explanation, the mentor wires the signal.
-4. Payoff (20 s): +150 CharliePoints and an iced Dunkin' cup hat pops onto the avatar on the map.
+3. Behind-the-Scenes Disruption Visualizer at Boylston (35 s): "Simulate T Delay" raises the red hologram over
+   the Green Line signal-modernization zone; tap it to see what crews are fixing (a signal relay on the track
+   circuit), Gemini's two-sentence "why it's 15 minutes + your smartest move", and do the 15-second schematic
+   repair step. The same card covers the Blue Line Airport–Wonderland overhead-wire inspection, the Harvard
+   disabled-train recovery and the Chinatown shuttle bridge.
+4. Waze for the T (10 s): one tap on "Ghost · Stale" at Park Street; with a second rider's tap the stop flips to
+   amber "Unverified · Stale ETA" and the Ashmont branch gap shows even though the trunk looks fine. Works in a
+   tunnel: the tap queues and syncs at the next stop.
+5. Payoff (10 s): +150 CharliePoints (+10 per Quick-Check) and an iced Dunkin' cup hat pops onto the avatar.

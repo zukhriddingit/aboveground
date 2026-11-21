@@ -62,6 +62,19 @@ export const MOCK_STATIONS: Station[] = [
     landmark: { title: "MIT Great Dome", walkMin: 8,
       fact: "In 1994 MIT students put a full-size campus police car on top of the Great Dome. It is now on display in the Stata Center." },
   },
+  // Added for the 2026 disruption scenarios (Orange Line shuttle bridge, Blue Line wire inspection).
+  {
+    id: "place-chncl", name: "Chinatown", line: "Orange", lat: 42.352547, lng: -71.062752,
+    nextArrivalMin: 7, crowdedness: "FEW_SEATS", hasActiveAlert: false,
+    landmark: { title: "Chinatown Gate", walkMin: 3,
+      fact: "The Chinatown Gate on Beach Street was a gift from Taiwan in 1982. Its inscription, a line from Sun Yat-sen, means everything under heaven belongs to the people." },
+  },
+  {
+    id: "place-aport", name: "Airport", line: "Blue", lat: 42.374262, lng: -71.030395,
+    nextArrivalMin: 6, crowdedness: "FEW_SEATS", hasActiveAlert: false,
+    landmark: { title: "Logan Airport", walkMin: 5,
+      fact: "Logan opened in 1923 as a small airfield on the East Boston mud flats, and much of it now sits on land filled in from Boston Harbor. Free Massport shuttles run from this station to every terminal." },
+  },
 ];
 
 /** A spread of trains on every line so the map is busy before live data arrives. */
@@ -80,16 +93,72 @@ export const MOCK_VEHICLES: TrainVehicle[] = [
   { id: "mock-b1", route: "Blue", lng: -71.0520, lat: 42.35950, bearing: 60, crowdedness: "FEW_SEATS" },
 ];
 
+/**
+ * Four real 2026 MBTA failure modes (docs/UPDATE_REPORT.md), one per line, for the
+ * Behind-the-Scenes Disruption Visualizer. Boylston stays first with its original id so the
+ * "Simulate T Delay at Boylston" demo beat is unchanged. New scenarios reuse the existing
+ * miniGameType values: signal/wire work -> WIRE_MATCH, track/switch work -> TRACK_WELD.
+ */
 export const MOCK_ALERTS: TranslatedAlert[] = [
   {
     id: "mock-alert-boyls",
     stationId: "place-boyls",
-    rawMbtaText: "Green Line: Delays of about 15 minutes due to a signal problem at Boylston.",
-    plainTitle: "Boylston Track Circuit Glitch",
+    line: "Green",
+    branch: "Green",
+    disruption: "SIGNAL_MODERNIZATION",
+    repairKind: "SIGNAL_RELAY",
+    rawMbtaText: "Green Line: Delays of about 15 minutes between Boylston and Park Street due to signal modernization work.",
+    plainTitle: "Boylston Signal Upgrade Hold",
     plainExplanation:
-      "A sensor that tells trains the track ahead is clear stopped answering, so every train has to creep past Boylston at walking speed. Crews are swapping the relay box, which takes about 15 minutes.",
+      "Crews swapping the old track circuits for new signal relays near Boylston have one relay that stopped confirming the track ahead is clear, so every train waits for a manual OK and creeps through at walking speed. Resetting and testing it takes about 15 minutes; walk 5 minutes up Tremont Street to Park Street instead of waiting.",
+    alternateMove: "Walk 5 min up Tremont Street to Park Street.",
     estimatedFixMin: 15,
     miniGameType: "WIRE_MATCH",
+  },
+  {
+    id: "mock-alert-aport",
+    stationId: "place-aport",
+    line: "Blue",
+    branch: "Blue",
+    disruption: "OVERHEAD_WIRE_INSPECTION",
+    repairKind: "CATENARY",
+    rawMbtaText: "Blue Line: Delays of about 20 minutes between Airport and Wonderland due to an overhead wire inspection.",
+    plainTitle: "Blue Line Overhead Wire Check",
+    plainExplanation:
+      "Crews are checking the tension and contact points of the overhead power wire between Airport and Wonderland, so trains are held and share one track through the work zone. Expect about 20 minutes; heading to Logan, the free Massport shuttle at Airport station and the SL1 from South Station still reach every terminal.",
+    alternateMove: "Free Massport shuttle from Airport station, or the SL1 from South Station.",
+    estimatedFixMin: 20,
+    miniGameType: "WIRE_MATCH",
+  },
+  {
+    id: "mock-alert-harsq",
+    stationId: "place-harsq",
+    line: "Red",
+    branch: "Red",
+    disruption: "SIGNAL_DELAY_DISABLED_TRAIN",
+    repairKind: "SWITCH_CLEARANCE",
+    rawMbtaText: "Red Line: Delays of about 25 minutes due to a signal problem and a disabled train near Harvard.",
+    plainTitle: "Harvard Disabled Train Recovery",
+    plainExplanation:
+      "A disabled train is stuck just outside Harvard and the signals can't route anyone around it until crews clear the switch and throw it to the other track by hand. That recovery plus the trains bunched up behind it adds about 25 minutes; the 1 bus down Mass Ave reaches Central and MIT while you wait.",
+    alternateMove: "Take the 1 bus down Mass Ave to Central and MIT.",
+    estimatedFixMin: 25,
+    miniGameType: "TRACK_WELD",
+  },
+  {
+    id: "mock-alert-chncl",
+    stationId: "place-chncl",
+    line: "Orange",
+    branch: "Orange",
+    disruption: "TRACK_PROBLEM_SHUTTLE",
+    repairKind: "RAIL_FASTENER",
+    rawMbtaText: "Orange Line: Shuttle buses replacing service between Downtown Crossing and Back Bay due to a track problem near Chinatown.",
+    plainTitle: "Chinatown Track Fix · Shuttle Bridge",
+    plainExplanation:
+      "Inspectors found loose rail fasteners, the clips that hold the rail to the ties, near Chinatown, so trains can't cross that stretch until they're replaced and the track gauge is re-checked. Shuttle buses bridge Downtown Crossing to Back Bay for about 40 minutes; the Green Line from Boylston to Copley, then a 4-minute walk, is usually faster.",
+    alternateMove: "Green Line Boylston to Copley, then walk 4 min to Back Bay.",
+    estimatedFixMin: 40,
+    miniGameType: "TRACK_WELD",
   },
 ];
 
