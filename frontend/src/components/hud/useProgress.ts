@@ -83,5 +83,11 @@ export function useProgress() {
 
   const reset = useCallback(() => update(() => EMPTY), [update]);
 
-  return { progress, awardFix, equip, reset };
+  /** Points from other actions: T-Feed posts (+25) and replies (+5), Quick-Check taps (+10). */
+  const addPoints = useCallback(
+    (n: number) => update((p) => ({ ...p, points: Math.max(0, p.points + Math.floor(n)) })),
+    [update],
+  );
+
+  return { progress, awardFix, equip, reset, addPoints };
 }

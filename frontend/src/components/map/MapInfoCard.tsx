@@ -100,7 +100,7 @@ export function StationInfoCard({ station, onClose, onAlertClick, signals, onQui
       )}
       {(station.nextUsable || station.plannedClosure) && (
         // Can get long (live short-turns + a planned closure): scroll it so the card stays on screen.
-        <div className="-mr-1.5 mt-2 max-h-[min(34vh,260px)] space-y-2 overflow-y-auto overscroll-contain pr-1.5 [scrollbar-width:thin]">
+        <div className="-mr-1.5 mt-2 max-h-[min(28vh,230px)] space-y-2 overflow-y-auto overscroll-contain pr-1.5 [scrollbar-width:thin]">
           {station.nextUsable && <NextUsableBadge next={station.nextUsable} />}
           {station.plannedClosure && <ClosureCard closure={station.plannedClosure} compact onShowPickup={onShowPickup} />}
         </div>
