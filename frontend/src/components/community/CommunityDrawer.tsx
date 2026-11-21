@@ -4,7 +4,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { StationId, TransitLine } from "@/types/tverse";
 import { CreatePostModal } from "./CreatePostModal";
 import { LINES, isNarrowScreen, lineColor, lineGlow, selectPosts, useNow, type FeedSort, type LineFilter } from "./feedMeta";
-import { stopName } from "./feedStops";
+import { QuickCheckBar, useStationSignals } from "@/components/quickcheck";
+import { FEED_STOPS, STOPS_BY_LINE, primaryLine, stopName } from "./feedStops";
 import { FeedStyles } from "./FeedStyles";
 import { FeedToaster } from "./FeedToaster";
 import { PostCard } from "./PostCard";
@@ -23,7 +24,7 @@ export interface CommunityDrawerProps {
   onStationChange?: (stationId: StationId | null) => void;
   /** A post's 📍 station tag was tapped: fly the 3D camera there (see flyToFeedStop). */
   onJumpToStation?: (stationId: StationId) => void;
-  /** +25 for a post, +5 for a reply. */
+  /** +25 for a post, +5 for a reply, +10 per Quick-Check tap. */
   onPointsAwarded?: (points: number, line: TransitLine) => void;
 }
 
@@ -44,6 +45,14 @@ export function CommunityDrawer({
   const [ownStation, setOwnStation] = useState<StationId | null>(null);
   const station = stationId !== undefined ? stationId : ownStation;
   const listRef = useRef<HTMLDivElement>(null);
+
+  // Quick-Check strip: the drawer's station filter, else a small picker (defaults to the line's first stop).
+  const [qcPick, setQcPick] = useState<StationId | null>(null);
+  const [qcOpen, setQcOpen] = useState(true);
+  const qcStation: StationId = station ?? qcPick ?? (line !== "ALL" ? STOPS_BY_LINE[line][0] : "place-pktrm");
+  const qcLine = line !== "ALL" && STOPS_BY_LINE[line].includes(qcStation) ? line : primaryLine(qcStation);
+  const qcStops = line === "ALL" ? FEED_STOPS : FEED_STOPS.filter((s) => s.lines.includes(line));
+  const signals = useStationSignals({ pollMs: open ? 15_000 : 0 });
 
   // Mount the list on first open (SSR renders an empty shell), keep it afterwards for the slide-out.
   const [mounted, setMounted] = useState(open);
@@ -182,6 +191,48 @@ export function CommunityDrawer({
             )}
           </div>
         </header>
+
+        {/* 1-tap Quick-Check for one stop (zero typing, +10 each, queues offline) */}
+        <div className="shrink-0 border-b border-white/[.08] px-4 py-2.5">
+          <div className="mb-1.5 flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setQcOpen((o) => !o)}
+              aria-expanded={qcOpen}
+              className="flex shrink-0 items-center gap-1 whitespace-nowrap text-[11px] font-bold text-white/70 transition hover:text-white"
+            >
+              <span className={`inline-block transition-transform ${qcOpen ? "rotate-90" : ""}`}>▸</span>
+              How&apos;s the T at
+            </button>
+            {station ? (
+              <span className="truncate text-[11px] font-bold text-white">{stopName(station)}</span>
+            ) : (
+              <select
+                aria-label="Quick-Check station"
+                value={qcStation}
+                onChange={(e) => setQcPick(e.target.value as StationId)}
+                className="min-w-0 max-w-[60%] truncate rounded-full bg-white/[.07] px-2 py-1 text-[11px] font-bold text-white outline-none ring-1 ring-white/15 focus:ring-white/40"
+              >
+                {qcStops.map((s) => (
+                  <option key={s.id} value={s.id} className="bg-slate-900">
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+            )}
+            <span className="ml-auto hidden whitespace-nowrap text-[10px] text-white/35 sm:inline">1 tap · no typing</span>
+          </div>
+          {qcOpen && (
+            <QuickCheckBar
+              variant="compact"
+              stationId={qcStation}
+              stationName={stopName(qcStation)}
+              line={qcLine}
+              signals={signals.get(qcStation)}
+              onPointsAwarded={(points) => onPointsAwarded?.(points, qcLine)}
+            />
+          )}
+        </div>
 
         {/* Posts */}
         <div ref={listRef} className="tf-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3">
