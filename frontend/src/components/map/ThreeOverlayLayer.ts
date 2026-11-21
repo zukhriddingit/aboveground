@@ -224,6 +224,8 @@ const SHARED_GEOMETRY = new Set<T.BufferGeometry>([tube, ringGeo, discGeo, diamo
 
 const RED = "#ff2a3d";
 const GOLD = "#ffc94a";
+const SHUTTLE_CYAN = "#45edff";
+const SHUTTLE_SIGN_Y = 35;
 const RED_COLOR = new T.Color(RED);
 
 // Triangle warning sign, 104 m a side, centred on its centroid, in the XY plane.
@@ -232,6 +234,125 @@ const TRI_H = (SIDE * Math.sqrt(3)) / 2;
 const TRI: [number, number][] = [[0, (TRI_H * 2) / 3], [-SIDE / 2, -TRI_H / 3], [SIDE / 2, -TRI_H / 3]];
 
 // ---------------------------------------------------------------- nodes
+
+/** Enamel bus-stop plate with a pictogram that also reads without its lettering. */
+function shuttleSignMaterial() {
+  const material = new T.MeshBasicMaterial({
+    color: SHUTTLE_CYAN, alphaTest: .45, toneMapped: false,
+    transparent: true, depthTest: false, depthWrite: false,
+  });
+  if (typeof document === "undefined") return material;
+  const canvas = document.createElement("canvas");
+  canvas.width = 160;
+  canvas.height = 176;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return material;
+  const panel = (x: number, y: number, w: number, h: number, r: number, color: string) => {
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.roundRect(x, y, w, h, r);
+    ctx.fill();
+  };
+  const navy = "#082237";
+  panel(0, 0, 160, 176, 19, SHUTTLE_CYAN);
+  panel(6, 6, 148, 164, 14, navy);
+  panel(45, 93, 13, 20, 5, "#efffff");
+  panel(102, 93, 13, 20, 5, "#efffff");
+  panel(39, 22, 82, 81, 14, "#efffff");
+  panel(61, 29, 38, 6, 3, navy);
+  panel(47, 41, 66, 36, 5, navy);
+  panel(48, 87, 11, 7, 3, navy);
+  panel(101, 87, 11, 7, 3, navy);
+  panel(14, 123, 132, 36, 6, SHUTTLE_CYAN);
+  ctx.fillStyle = navy;
+  ctx.font = "bold 24px sans-serif";
+  ctx.textAlign = "center";
+  ctx.fillText("SHUTTLE", 80, 150);
+  material.color.set(0xffffff);
+  material.map = new T.CanvasTexture(canvas);
+  material.map.colorSpace = T.SRGBColorSpace;
+  return material;
+}
+
+class ShuttleCurbPin extends T.Group {
+  // The marker scales about the curb. The path shares only its translation.
+  readonly marker = new T.Group();
+  readonly sign = new T.Mesh(new T.PlaneGeometry(34, 37.4), shuttleSignMaterial());
+  readonly mast = new T.Mesh(tube, new T.MeshStandardMaterial({
+    color: "#9ebdc7", metalness: .55, roughness: .38, emissive: "#247384", emissiveIntensity: .65,
+  }));
+  readonly ring = new T.Mesh(ringGeo, glow(SHUTTLE_CYAN, .8));
+  readonly halo = new T.Mesh(new T.CircleGeometry(31, 40), glow(SHUTTLE_CYAN, .4));
+  readonly path = new T.Mesh(new T.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), new T.ShaderMaterial({
+    ...ADDITIVE,
+    uniforms: { tint: { value: new T.Color(SHUTTLE_CYAN) }, repeats: { value: 1 }, phase: { value: 0 } },
+    vertexShader: `
+      varying vec2 vUv;
+      void main() {
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.);
+      }`,
+    fragmentShader: `
+      varying vec2 vUv;
+      uniform vec3 tint;
+      uniform float repeats, phase;
+      void main() {
+        float cell = vUv.y * repeats - phase;
+        float edge = clamp(fwidth(cell), .015, .22);
+        float dash = 1. - smoothstep(.28 - edge, .28 + edge, abs(fract(cell + .5) - .5));
+        float side = 1. - smoothstep(.28, .50, abs(vUv.x - .5));
+        gl_FragColor = vec4(tint, (.08 + .92 * dash) * side);
+        #include <colorspace_fragment>
+      }`,
+  }));
+  readonly targets = [this.sign, this.mast, this.ring];
+
+  constructor() {
+    super();
+    this.mast.scale.set(1.05, SHUTTLE_SIGN_Y, 1.05);
+    this.sign.renderOrder = 9;
+    this.ring.position.y = .40;
+    const foot = new T.Mesh(tube, this.mast.material);
+    foot.scale.set(2.1, 2.3, 2.1);
+    // Additive falloff from the centre vertex of the disc to its black rim.
+    const colors = new Float32Array(this.halo.geometry.attributes.position.count * 3);
+    colors.fill(1, 0, 3);
+    this.halo.geometry.setAttribute("color", new T.BufferAttribute(colors, 3));
+    this.halo.material.vertexColors = true;
+    this.halo.position.z = -.15;
+    this.sign.add(this.halo);
+    this.marker.add(this.mast, foot, this.ring, this.sign);
+    this.add(this.path, this.marker);
+  }
+
+  setEndpoints(pickup: T.Vector3, entrance: T.Vector3) {
+    this.position.copy(pickup);
+    const dx = entrance.x - pickup.x, dz = entrance.z - pickup.z;
+    const length = Math.hypot(dx, dz);
+    this.path.visible = length > .1;
+    this.path.position.set(dx / 2, .28, dz / 2);
+    this.path.rotation.y = Math.atan2(dx, dz);
+    this.path.scale.z = length;
+  }
+
+  animate(zs: number, time: number, camera: T.Camera) {
+    // Give the pictogram more of the silhouette at overview and keep its top under 78 m.
+    this.marker.scale.setScalar(Math.min(zs, 1.35));
+    this.sign.scale.setScalar(1 + .48 * T.MathUtils.smoothstep(zs, .5, 1.35));
+    const halfHeight = this.sign.geometry.parameters.height * this.sign.scale.y / 2;
+    this.sign.position.set(0, Math.min(SHUTTLE_SIGN_Y, 77 / this.marker.scale.y - halfHeight), 0);
+    this.mast.quaternion.identity();
+    this.mast.scale.y = this.sign.position.y;
+    this.sign.quaternion.copy(camera.quaternion);
+    const pulse = (time * .62) % 1;
+    this.ring.scale.setScalar(8 + 9 * pulse);
+    this.ring.material.opacity = .20 + .80 * (1 - pulse) ** 2;
+    this.halo.material.opacity = .32 + .14 * Math.cos(pulse * TAU);
+    this.path.scale.x = 5 * zs;
+    this.path.material.uniforms.repeats.value = Math.max(1, this.path.scale.z / (9 * zs));
+    this.path.material.uniforms.phase.value = pulse;
+  }
+}
 
 interface AlertHolo {
   group: T.Group;
@@ -257,6 +378,7 @@ interface StationNode {
   disc: T.Mesh<T.CircleGeometry, T.MeshBasicMaterial>;
   gem: T.Mesh<T.OctahedronGeometry, T.MeshBasicMaterial>;
   model?: StationModel;
+  shuttle?: ShuttleCurbPin;
   base: T.Color;
   alert: AlertHolo;
   alertLevel: number;
@@ -512,6 +634,7 @@ export class ThreeOverlayLayer implements CustomLayerInterface {
         this.spawnWave(node.pos, RED, 260, 1.4);
         this.spawnWave(node.pos, RED, 170, 1.0, 0.25);
       }
+      this.syncShuttle(node);
       this.syncLandmark(station);
     }
     for (const id of [...this.stations.keys()]) if (!seen.has(id)) this.removeStation(id);
@@ -526,6 +649,7 @@ export class ThreeOverlayLayer implements CustomLayerInterface {
       if (node.model.mainEntrance) {
         if (node.model.anchor) toLocal(...node.model.anchor, 0, node.group.position);
         node.group.rotation.y = 0;
+        this.syncShuttle(node);
         this.scheduleBuildingMask();
       }
       node.gem.visible = false;
@@ -561,6 +685,67 @@ export class ThreeOverlayLayer implements CustomLayerInterface {
     const node = this.stations.get(id);
     const entrance = node?.model?.mainEntrance;
     return node && entrance ? toLngLat(node.group.position.x + entrance.position.x, node.group.position.z + entrance.position.z) : null;
+  }
+
+  private syncShuttle(node: StationNode) {
+    const pickup = node.station.plannedClosure?.shuttlePickup;
+    if (!pickup || !Number.isFinite(pickup.lng) || !Number.isFinite(pickup.lat) || Math.abs(pickup.lat) >= 90) {
+      this.removeShuttle(node);
+      return;
+    }
+    if (!node.shuttle) {
+      node.shuttle = new ShuttleCurbPin();
+      this.scene.add(node.shuttle);
+    }
+    const entrance = this.entranceLngLat(node.station.id);
+    node.shuttle.setEndpoints(toLocal(pickup.lng, pickup.lat, 0, this.v3),
+      entrance ? toLocal(...entrance, 0, this.v3b) : node.pos);
+    this.updateShuttle(node, node.shuttle);
+  }
+
+  private updateShuttle(node: StationNode, pin: ShuttleCurbPin) {
+    pin.animate(this.zs, this.time + node.phase, this.camera);
+    if (!this.map) return;
+    const bubble = this.projectLocal(this.v3.set(node.pos.x, 90, node.pos.z));
+    const centre = this.projectLocal(pin.sign.getWorldPosition(this.v3));
+    if (!bubble?.visible || !centre?.visible) return;
+    const top = this.projectLocal(pin.sign.localToWorld(this.v3.set(0, pin.sign.geometry.parameters.height / 2, 0)))!;
+    const halfHeight = centre.y - top.y;
+    const halfWidth = halfHeight * pin.sign.geometry.parameters.width / pin.sign.geometry.parameters.height;
+    const gap = 40 + halfWidth;
+    if (Math.abs(centre.x - bubble.x) >= gap || top.y >= bubble.y + 3 || centre.y + halfHeight < bubble.y - 90) return;
+    // Usually a slightly shorter pin fits below the story without moving the plate off the curb.
+    const foot = this.projectLocal(pin.position)!;
+    const fit = (foot.y - bubble.y - 3) / Math.max(.01, foot.y - top.y);
+    if (fit >= .57) {
+      pin.marker.scale.multiplyScalar(Math.min(1, fit * .99));
+      return;
+    }
+    // In a near-overhead view the bubble can cover the curb itself. Lean the
+    // sign out on its post, keeping the foot, ring and walking endpoint exact.
+    const width = this.map.getCanvas().clientWidth;
+    const side = bubble.x < width - gap - 10 ? 1 : -1;
+    const world = pin.sign.getWorldPosition(this.v3).project(this.camera);
+    world.x += 2 * (bubble.x + side * gap - centre.x) / width;
+    pin.sign.position.copy(pin.marker.worldToLocal(world.unproject(this.camera)));
+    pin.mast.scale.y = pin.sign.position.length();
+    pin.mast.quaternion.setFromUnitVectors(UP, this.v3.copy(pin.sign.position).normalize());
+  }
+
+  /** Geographic position of the plate's top edge, including its camera-facing tilt. */
+  shuttleAnchor(id: StationId): [number, number, number] | null {
+    const pin = this.stations.get(id)?.shuttle;
+    if (!pin) return null;
+    const { sign } = pin;
+    const top = sign.localToWorld(this.v3.set(0, sign.geometry.parameters.height / 2 + .5, 0));
+    return [...toLngLat(top.x, top.z), top.y];
+  }
+
+  private removeShuttle(node: StationNode) {
+    if (!node.shuttle) return;
+    node.shuttle.sign.material.map?.dispose();
+    this.disposeGroup(node.shuttle);
+    node.shuttle = undefined;
   }
 
   private attachSignal(node: StationNode) {
@@ -647,6 +832,7 @@ export class ThreeOverlayLayer implements CustomLayerInterface {
     const t = this.time;
     const zs = this.zs;
     for (const node of this.stations.values()) {
+      if (node.shuttle) this.updateShuttle(node, node.shuttle);
       const target = node.station.hasActiveAlert ? 1 : 0;
       node.alertLevel += (target - node.alertLevel) * (1 - Math.exp(-dt * (target ? 3.2 : 5)));
       node.flash *= Math.exp(-dt * 2.5);
@@ -762,6 +948,7 @@ export class ThreeOverlayLayer implements CustomLayerInterface {
   private removeStation(id: StationId) {
     const node = this.stations.get(id);
     if (!node) return;
+    this.removeShuttle(node);
     node.model?.dispose();
     node.alert.signal?.dispose();
     this.disposeGroup(node.group);
@@ -1156,6 +1343,11 @@ export class ThreeOverlayLayer implements CustomLayerInterface {
       if (node.station.hasActiveAlert && node.alert.group.visible) {
         test("alert", node.station.id, node.alert.sign.getWorldPosition(this.v3), 27);
         if (node.alert.signal && hitBox(node.alert.signal.root, node.alert.signal.bounds)) candidates.push({ kind: "alert", id: node.station.id, d: 0 });
+      }
+      if (node.shuttle) {
+        const hit = this.raycaster.intersectObjects(node.shuttle.targets, false)[0];
+        if (hit) candidates.push({ kind: "station", id: node.station.id, d: -1 / (1 + hit.distance) });
+        else test("station", node.station.id, node.shuttle.sign.getWorldPosition(this.v3), 16);
       }
       if (node.model?.mainEntrance) {
         if (node.model.structures.some(s => hitBox(s.node, s.bounds))) candidates.push({ kind: "station", id: node.station.id, d: 0 });

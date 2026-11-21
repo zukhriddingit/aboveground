@@ -32,8 +32,15 @@ export function loadStationModel(kind: ModelKind) {
   return pending;
 }
 
+/** Stations with a bespoke `public/models/stations/<id>.glb` (built in Blender from photos + OSM). */
+export const BESPOKE_STATIONS: ReadonlySet<StationId> = new Set<StationId>([
+  "place-bucen", "place-kencl", "place-hymnl", "place-coecl", "place-boyls", "place-pktrm", "place-harsq", "place-knncl",
+]);
+
 export async function loadStationSite(id: StationId) {
-  return await loadStationModel(id) ?? loadStationModel(STATION_MODEL[id] ?? "headhouse_modern");
+  // Only ask for a bespoke GLB we actually ship, so other stops don't log a 404 before the generic model.
+  const bespoke = BESPOKE_STATIONS.has(id) ? await loadStationModel(id) : null;
+  return bespoke ?? loadStationModel(STATION_MODEL[id] ?? "headhouse_modern");
 }
 
 let falloff: T.DataTexture | undefined;
