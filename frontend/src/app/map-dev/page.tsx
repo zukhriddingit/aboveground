@@ -134,7 +134,7 @@ export default function MapDevPage() {
           const stories = MOCK_STORIES.filter(story => story.stationId === station.id);
           if (!stories.length) return null;
           return (
-            <MapAnchor key={station.id} lng={station.lng} lat={station.lat} altitude={70}>
+            <MapAnchor key={station.id} lng={station.lng} lat={station.lat} altitude={90}>
               <button
                 className="pointer-events-auto cursor-pointer rounded-full border border-white/25 bg-slate-950/75 px-2 py-1 text-xs font-bold text-white backdrop-blur-md hover:border-cyan-300"
                 aria-label={`${stories.length} stories at ${station.name}`}
@@ -194,7 +194,7 @@ export default function MapDevPage() {
           <fieldset>
             <legend className="mb-1 text-slate-400">Fly to station</legend>
             <div className="flex flex-wrap gap-1">{stations.map(s => (
-              <button className={`${button} inline-flex items-center gap-1.5`} key={s.id} onClick={() => map.current?.flyToStation(s.id)}>
+              <button className={`${button} inline-flex items-center gap-1.5`} key={s.id} onClick={() => map.current?.flyToStation(s.id, { zoom: s.id === "place-knncl" ? 18.35 : 17.7 })}>
                 <span className="size-1.5 rounded-full" style={{ backgroundColor: LINE_GLOW[s.line] }} />{s.name}
               </button>
             ))}</div>

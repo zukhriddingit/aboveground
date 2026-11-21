@@ -1,19 +1,20 @@
 // The T-Verse 3D layer: one Three.js scene drawn inside MapLibre's WebGL context.
 //
 // Scene units are meters around ORIGIN (x east, y up, z south; see geo.ts). Every frame the
-// camera's projection matrix becomes MapLibre's mainMatrix * MODEL_MATRIX, so objects placed
-// with toLocal(lng, lat) line up with the map. The view matrix stays identity, which means
-// lights are positioned in scene space.
+// camera reproduces MapLibre's local-to-clip transform for both rendering and picking.
 import * as T from "three";
-import type { CustomLayerInterface, CustomRenderMethodInput, Map as MapLibreMap } from "maplibre-gl";
-import type { AvatarHat, Crowdedness, Station, StationId, TrainVehicle } from "@/types/tverse";
+import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
+import type { CustomLayerInterface, CustomRenderMethodInput, FilterSpecification, Map as MapLibreMap } from "maplibre-gl";
+import type { AvatarHat, Crowdedness, Station, StationId, TLinesGeoJson, TrainVehicle } from "@/types/tverse";
 import { CROWDEDNESS, LINE_GLOW, routeLine } from "@/lib/theme";
 import { AvatarRig, AVATAR_HEIGHT } from "./avatar";
 import { angleDelta, bearingToYaw, MODEL_MATRIX, toLngLat, toLocal } from "./geo";
+import { loadStationModel, loadStationSite, StationModel, STATION_MODEL, stationYaw } from "./stationModels";
 import { landmarkPosition } from "./landmarks";
 import type { ScreenPoint } from "./types";
 
 const TAU = Math.PI * 2;
+const UP = new T.Vector3(0, 1, 0);
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 const easeOutBack = (u: number) => 1 + 2.4 * (u - 1) ** 3 + 1.4 * (u - 1) ** 2;
 const easeOutCubic = (u: number) => 1 - (1 - u) ** 3;
@@ -219,6 +220,8 @@ const podGeo = new T.CapsuleGeometry(9, 40, 4, 12).rotateX(Math.PI / 2);
 const bandGeo = new T.TorusGeometry(10.2, 2.2, 6, 20);
 const trailGeo = new T.PlaneGeometry(13, 100).rotateX(-Math.PI / 2).translate(0, 0, 74);
 
+const SHARED_GEOMETRY = new Set<T.BufferGeometry>([tube, ringGeo, discGeo, diamondGeo]);
+
 const RED = "#ff2a3d";
 const GOLD = "#ffc94a";
 const RED_COLOR = new T.Color(RED);
@@ -236,7 +239,10 @@ interface AlertHolo {
   frame: T.MeshBasicMaterial;
   fill: T.ShaderMaterial;
   bang: T.MeshBasicMaterial;
-  cage: T.Mesh<T.IcosahedronGeometry, T.MeshBasicMaterial>;
+  signal?: StationModel;
+  signalRequested: boolean;
+  signalBorn: number;
+  sparkTimer: number;
   beam: T.Mesh<T.CylinderGeometry, T.ShaderMaterial>;
   rings: T.Mesh<T.RingGeometry, T.MeshBasicMaterial>[];
   disc: T.Mesh<T.CircleGeometry, T.MeshBasicMaterial>;
@@ -250,6 +256,7 @@ interface StationNode {
   ring: T.Mesh<T.RingGeometry, T.MeshBasicMaterial>;
   disc: T.Mesh<T.CircleGeometry, T.MeshBasicMaterial>;
   gem: T.Mesh<T.OctahedronGeometry, T.MeshBasicMaterial>;
+  model?: StationModel;
   base: T.Color;
   alert: AlertHolo;
   alertLevel: number;
@@ -304,7 +311,9 @@ interface Wave {
 // Heights (meters at zoom-scale 1).
 const TRAIN_Y = 16;
 const STATION_BEAM_H = 135;
-const ALERT_Y = 215;
+const ALERT_Y = 79;
+const MODEL_SCALE = 12;
+const SIGNAL_SCALE = 15;
 const LANDMARK_H = 300;
 
 export class ThreeOverlayLayer implements CustomLayerInterface {
@@ -318,7 +327,14 @@ export class ThreeOverlayLayer implements CustomLayerInterface {
   private map?: MapLibreMap;
   private renderer?: T.WebGLRenderer;
   private readonly scene = new T.Scene();
-  private readonly camera = new T.Camera();
+  private readonly camera = new T.PerspectiveCamera();
+  private readonly localToClip = new T.Matrix4();
+  private readonly localCamera = new T.Matrix4();
+  private readonly raycaster = new T.Raycaster();
+  private readonly localRay = new T.Ray();
+  private lines?: TLinesGeoJson;
+  private maskFrame = 0;
+  private environment?: T.WebGLRenderTarget;
   private readonly sparks = new Sparks();
   private readonly avatar = new AvatarRig();
   private readonly stations = new Map<StationId, StationNode>();
@@ -372,14 +388,37 @@ export class ThreeOverlayLayer implements CustomLayerInterface {
     this.renderer = new T.WebGLRenderer({ canvas: map.getCanvas(), context: gl, antialias: true });
     this.renderer.autoClear = false;
     this.renderer.outputColorSpace = T.SRGBColorSpace;
-    const key = new T.DirectionalLight(0xffe6c8, 2.4);
+    const key = new T.DirectionalLight(0xffd7af, 1.7);
     key.position.set(-3, 5, 2);
-    const rim = new T.DirectionalLight(0x9fc6ff, 1.5);
+    const rim = new T.DirectionalLight(0xa4bcff, 1.25);
     rim.position.set(3, 2, -4);
-    this.scene.add(key, rim, new T.HemisphereLight(0xfff1e6, 0x8f93b8, 1.5));
+    this.scene.add(key, rim, new T.HemisphereLight(0xddeaff, 0x667393, 1.0));
+    if (this.renderer.extensions.has("EXT_color_buffer_float")) {
+      const room = new RoomEnvironment();
+      const pmrem = new T.PMREMGenerator(this.renderer);
+      try {
+        this.environment = pmrem.fromScene(room, .04, .1, 100, { size: 64 });
+        this.scene.environment = this.environment.texture;
+        this.scene.environmentIntensity = .36;
+      } catch {
+        // Direct dusk lighting also works on devices without float render targets.
+      } finally {
+        room.dispose();
+        pmrem.dispose();
+        this.renderer.resetState();
+      }
+    }
   }
 
   onRemove() {
+    const map = this.map;
+    this.map = undefined;
+    if (this.maskFrame) cancelAnimationFrame(this.maskFrame);
+    if (map?.isStyleLoaded()) {
+      for (const id of ["buildings", "building-edges"]) {
+        if (map.getLayer(id)) map.setFilter(id, null);
+      }
+    }
     for (const id of [...this.stations.keys()]) this.removeStation(id);
     for (const id of [...this.landmarks.keys()]) this.removeLandmark(id);
     for (const node of this.trains.values()) this.disposeTrain(node);
@@ -389,16 +428,24 @@ export class ThreeOverlayLayer implements CustomLayerInterface {
     for (const m of [...this.coreMats.values(), ...this.haloMats.values(), ...this.bandMats.values()]) m.dispose();
     for (const w of this.waves) w.mesh.material.dispose();
     this.frameListeners.clear();
+    this.scene.environment = null;
+    this.environment?.dispose();
     this.renderer?.dispose();
     this.renderer = undefined;
-    this.map = undefined;
   }
 
   render(_gl: WebGLRenderingContext | WebGL2RenderingContext, args: CustomRenderMethodInput) {
     if (!this.renderer || !this.map) return;
     const matrix = args.defaultProjectionData.mainMatrix as unknown as ArrayLike<number>;
     if (!matrix || matrix.length !== 16) return;
-    this.camera.projectionMatrix.fromArray(Array.from(matrix)).multiply(MODEL_MATRIX);
+    this.localToClip.fromArray(matrix).multiply(MODEL_MATRIX);
+    // Recover the actual eye and axes from MapLibre's projection. The pixel/metre
+    // scale belongs in the projection so PBR view vectors and billboards use metres.
+    this.camera.projectionMatrix.fromArray(args.projectionMatrix);
+    this.localCamera.copy(this.localToClip).invert().multiply(this.camera.projectionMatrix);
+    this.localCamera.decompose(this.camera.position, this.camera.quaternion, this.v3);
+    this.camera.updateMatrixWorld();
+    this.camera.projectionMatrix.multiplyMatrices(this.localToClip, this.camera.matrixWorld);
     this.camera.projectionMatrixInverse.copy(this.camera.projectionMatrix).invert();
 
     const now = performance.now() / 1000;
@@ -429,20 +476,37 @@ export class ThreeOverlayLayer implements CustomLayerInterface {
 
   // ------------------------------------------------------------ stations + alerts
 
+  setLines(lines: TLinesGeoJson) {
+    if (this.lines === lines) return;
+    this.lines = lines;
+    for (const node of this.stations.values()) {
+      if (!node.model?.mainEntrance) node.group.rotation.y = stationYaw(node.station, lines);
+    }
+  }
+
   setStations(list: Station[]) {
     const seen = new Set<StationId>();
     for (const station of list) {
       seen.add(station.id);
       let node = this.stations.get(station.id);
+      const moved = !node || node.station.lng !== station.lng || node.station.lat !== station.lat ||
+        node.station.line !== station.line;
       if (!node) {
         node = this.createStation(station);
         this.stations.set(station.id, node);
+        this.attachStationModel(node);
       }
       const wasAlert = node.station.hasActiveAlert;
       node.station = station;
       node.base.set(LINE_GLOW[station.line] ?? LINE_GLOW.Green);
-      node.pos.copy(toLocal(station.lng, station.lat));
-      node.group.position.copy(node.pos);
+      if (moved) {
+        toLocal(station.lng, station.lat, 0, node.pos);
+        if (node.model?.anchor) toLocal(...node.model.anchor, 0, node.group.position);
+        else node.group.position.copy(node.pos);
+        if (this.lines && !node.model?.mainEntrance) node.group.rotation.y = stationYaw(station, this.lines);
+        if (node.model?.mainEntrance) this.scheduleBuildingMask();
+      }
+      if (station.hasActiveAlert && !node.alert.signalRequested) this.attachSignal(node);
       if (station.hasActiveAlert && !wasAlert) {
         node.flash = 1;
         this.spawnWave(node.pos, RED, 260, 1.4);
@@ -452,6 +516,62 @@ export class ThreeOverlayLayer implements CustomLayerInterface {
     }
     for (const id of [...this.stations.keys()]) if (!seen.has(id)) this.removeStation(id);
     for (const id of [...this.landmarks.keys()]) if (!seen.has(id)) this.removeLandmark(id);
+  }
+
+  private attachStationModel(node: StationNode) {
+    void loadStationSite(node.station.id).then(template => {
+      if (!template || this.stations.get(node.station.id) !== node) return;
+      node.model = new StationModel(template);
+      node.group.add(node.model.root);
+      if (node.model.mainEntrance) {
+        if (node.model.anchor) toLocal(...node.model.anchor, 0, node.group.position);
+        node.group.rotation.y = 0;
+        this.scheduleBuildingMask();
+      }
+      node.gem.visible = false;
+      node.beam.scale.set(10, 31, 10);
+      node.ring.scale.setScalar(48);
+    });
+  }
+
+  /** Only suppress short basemap extrusions covering a loaded station building. */
+  private scheduleBuildingMask() {
+    if (!this.map || this.maskFrame) return;
+    this.maskFrame = requestAnimationFrame(() => {
+      this.maskFrame = 0;
+      const coordinates: [number, number][] = [];
+      for (const { group, model } of this.stations.values()) {
+        for (const part of model?.structures ?? []) {
+          if (part.node.userData.maskBuilding) {
+            coordinates.push(toLngLat(group.position.x + part.node.position.x, group.position.z + part.node.position.z));
+          }
+        }
+      }
+      const filter: FilterSpecification | null = coordinates.length ? ["any",
+        [">", ["to-number", ["get", "render_height"], 0], 14],
+        [">", ["distance", { type: "MultiPoint", coordinates }], .15],
+      ] : null;
+      for (const id of ["buildings", "building-edges"]) {
+        if (this.map?.getLayer(id)) this.map.setFilter(id, filter);
+      }
+    });
+  }
+
+  entranceLngLat(id: StationId) {
+    const node = this.stations.get(id);
+    const entrance = node?.model?.mainEntrance;
+    return node && entrance ? toLngLat(node.group.position.x + entrance.position.x, node.group.position.z + entrance.position.z) : null;
+  }
+
+  private attachSignal(node: StationNode) {
+    const alert = node.alert;
+    alert.signalRequested = true;
+    void loadStationModel("alert_signal").then(template => {
+      if (!template || this.stations.get(node.station.id) !== node) return;
+      alert.signal = new StationModel(template);
+      alert.signalBorn = this.time;
+      alert.group.add(alert.signal.root);
+    });
   }
 
   private createStation(station: Station): StationNode {
@@ -500,16 +620,17 @@ export class ThreeOverlayLayer implements CustomLayerInterface {
     const fill = scanMaterial(RED);
     sign.add(new T.Mesh(new T.ShapeGeometry(shape), fill));
     const bang = glow("#ffd6db", 1);
+    // This game-entry marker stays tappable even behind a nearby extrusion.
+    for (const mat of [frame, fill, bang]) mat.depthTest = false;
+    sign.renderOrder = 12;
     sign.add(new T.Mesh(new T.BoxGeometry(11, 36, 7), bang).translateY(6));
     sign.add(new T.Mesh(new T.BoxGeometry(11, 11, 7), bang).translateY(-23));
-    const cage = new T.Mesh(new T.IcosahedronGeometry(82, 1), new T.MeshBasicMaterial({
-      ...ADDITIVE, color: RED, opacity: 0.22, wireframe: true,
-    }));
-    cage.position.y = ALERT_Y;
+
     const beam = new T.Mesh(tube, beamMaterial(RED));
-    beam.scale.set(8, ALERT_Y - 60, 8);
+    beam.scale.set(3.5, ALERT_Y - 32, 3.5);
+    beam.position.y = 22;
     const rings: AlertHolo["rings"] = [];
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < 2; i++) {
       const r = new T.Mesh(ringGeo, glow(RED, 0));
       r.position.y = 3;
       rings.push(r);
@@ -517,9 +638,9 @@ export class ThreeOverlayLayer implements CustomLayerInterface {
     }
     const disc = new T.Mesh(discGeo, glow(RED, 0.3));
     disc.position.y = 2.5;
-    disc.scale.setScalar(60);
-    group.add(sign, cage, beam, disc);
-    return { group, sign, frame, fill, bang, cage, beam, rings, disc };
+    disc.scale.setScalar(20);
+    group.add(sign, beam, disc);
+    return { group, sign, frame, fill, bang, beam, rings, disc, signalRequested: false, signalBorn: 0, sparkTimer: 0 };
   }
 
   private updateStations(dt: number) {
@@ -537,46 +658,115 @@ export class ThreeOverlayLayer implements CustomLayerInterface {
       beamMat.uniforms.time.value = t + node.phase;
       const tint = beamMat.uniforms.tint.value as T.Color;
       tint.copy(node.base).lerp(RED_COLOR, a);
-      beamMat.uniforms.strength.value = 0.85 + 0.25 * pulse + node.flash;
+      const overview = 1 - T.MathUtils.smoothstep(this.zoom, 14.1, 16.6);
       node.ring.material.color.copy(tint);
-      node.ring.scale.setScalar(36 + pulse * 7);
-      node.ring.material.opacity = 0.55 + 0.3 * pulse;
       node.disc.material.color.copy(tint);
-      node.gem.material.color.copy(tint);
-      node.gem.rotation.y = t * 1.4 + node.phase;
-      node.gem.position.y = STATION_BEAM_H + 16 + Math.sin(t * 2 + node.phase) * 4;
+      if (node.model) {
+        const model = node.model;
+        if (model.mainEntrance && model.alertSocket) {
+          model.scaleSite(zs);
+          const entrance = node.group.worldToLocal(model.mainEntrance.getWorldPosition(this.v3));
+          node.beam.position.copy(entrance);
+          node.ring.position.copy(entrance).y = 2;
+          node.disc.position.copy(entrance).y = 1.5;
+          const socket = node.group.worldToLocal(model.alertSocket.getWorldPosition(this.v3b));
+          node.alert.group.position.copy(socket).addScaledVector(socket.sub(entrance).normalize(), 13);
+        } else {
+          const scale = Math.min(MODEL_SCALE, 76 / (model.height * zs));
+          model.root.scale.setScalar(scale);
+          const side = STATION_MODEL[node.station.id] === "headhouse_historic" ? -1 : 1;
+          node.alert.group.position.set(model.bounds.max.x * scale + 21, 0, side * (model.bounds.max.z * scale + 14));
+        }
+        model.lightStation(node.base, a, .5 + .5 * Math.sin(t * 5.8));
+        beamMat.uniforms.strength.value = .32 * overview;
+        node.ring.scale.setScalar(45 + pulse * 3);
+        node.ring.material.opacity = .30 * overview;
+        node.disc.material.opacity = .09 * overview;
+      } else {
+        beamMat.uniforms.strength.value = .85 + .25 * pulse + node.flash;
+        node.ring.scale.setScalar(36 + pulse * 7);
+        node.ring.material.opacity = .55 + .3 * pulse;
+        node.gem.material.color.copy(tint);
+        node.gem.rotation.y = t * 1.4 + node.phase;
+        node.gem.position.y = STATION_BEAM_H + 16 + Math.sin(t * 2 + node.phase) * 4;
+        node.alert.group.position.set(80, 0, 40);
+      }
 
       const holo = node.alert;
-      holo.group.visible = a > 0.01;
+      holo.group.visible = a > .01;
       if (!holo.group.visible) continue;
       const pop = node.station.hasActiveAlert ? easeOutBack(clamp01(a)) : a;
-      holo.sign.scale.setScalar(Math.max(0.001, pop));
-      holo.sign.rotation.y = t * 1.25;
-      holo.sign.position.y = ALERT_Y + Math.sin(t * 1.8) * 6;
-      const flicker = Math.sin(t * 37.0) > 0.93 ? 0.45 : 1;
+      // Keep the warning face square to the eye at every map bearing.
+      holo.sign.quaternion.copy(this.camera.quaternion);
+      holo.sign.rotateOnWorldAxis(UP, -node.group.rotation.y);
+      holo.sign.scale.setScalar((.36 + .26 * overview) * pop);
+      holo.sign.position.set(0, ALERT_Y + Math.sin(t * 1.8) * 2, 0);
+      if (overview > 0) this.clearStoryBubble(node, overview);
+      const beamDirection = this.v3.copy(holo.sign.position).sub(holo.beam.position);
+      holo.beam.scale.y = Math.max(1, beamDirection.length() - 10);
+      holo.beam.quaternion.setFromUnitVectors(UP, beamDirection.normalize());
+      const flicker = .88 + .12 * Math.sin(t * 7);
       holo.frame.opacity = a * flicker;
-      holo.bang.opacity = a * (0.75 + 0.25 * Math.sin(t * 9)) * flicker;
-      holo.fill.uniforms.opacity.value = a * flicker;
+      holo.bang.opacity = a;
+      holo.fill.uniforms.opacity.value = a;
       holo.fill.uniforms.time.value = t;
-      holo.cage.rotation.set(t * 0.4, -t * 0.7, 0);
-      holo.cage.scale.setScalar(Math.max(0.001, pop));
-      holo.cage.material.opacity = 0.22 * a;
-      holo.beam.material.uniforms.time.value = t * 1.6;
-      holo.beam.material.uniforms.strength.value = a * (0.9 + 0.3 * Math.sin(t * 5));
-      holo.disc.material.opacity = a * (0.22 + 0.18 * Math.sin(t * 4));
+      holo.beam.material.uniforms.time.value = t;
+      holo.beam.material.uniforms.strength.value = a * (.22 + .28 * overview);
+      holo.disc.material.opacity = a * .14;
       holo.rings.forEach((ring, i) => {
-        const u = (t * 0.6 + i / 3) % 1;
-        ring.scale.setScalar(30 + u * 170);
-        ring.material.opacity = a * (1 - u) ** 1.5 * 0.9;
+        const u = (t * .5 + i / 2) % 1;
+        ring.scale.setScalar(18 + u * 24);
+        ring.material.opacity = a * (1 - u) ** 2 * .48;
       });
+      if (holo.signal) {
+        const signal = holo.signal;
+        const arrival = easeOutBack(clamp01((t - holo.signalBorn) / .45));
+        signal.root.scale.setScalar(Math.max(.001, SIGNAL_SCALE * pop * arrival));
+        // Present the open door to the player as the map orbits the fault.
+        signal.root.rotation.y = bearingToYaw(this.map?.getBearing() ?? 0) - node.group.rotation.y + .32;
+        signal.animateSignal(t + node.phase);
+        holo.sparkTimer -= dt;
+        if (target && signal.sparkSocket && holo.sparkTimer <= 0) {
+          holo.sparkTimer = .26 + Math.random() * .55;
+          signal.sparkSocket.getWorldPosition(this.v3);
+          for (let i = 0; i < 4; i++) {
+            this.v3b.set(Math.random() * 18 - 9, 7 + Math.random() * 14, Math.random() * 18 - 9).multiplyScalar(zs);
+            this.sparks.emit(this.v3, this.v3b, i % 2 ? "#ffc251" : "#fff1c2", 3.2, .53, 42 * zs);
+          }
+        }
+      }
     }
+  }
+
+  /** Leave a tappable lane beside the 72 px HTML bubble at overview zoom.
+   * Move only the floating sign. The cabinet and the foot of its beam stay at the doorway. */
+  private clearStoryBubble(node: StationNode, overview: number) {
+    if (!this.map) return;
+    const anchor = this.projectLocal(this.v3.set(node.pos.x, 90, node.pos.z));
+    const sign = node.alert.sign;
+    const world = sign.getWorldPosition(this.v3);
+    const projected = this.projectLocal(world);
+    if (!anchor?.visible || !projected?.visible) return;
+    const dx = projected.x - anchor.x;
+    const dy = projected.y - anchor.y;
+    const horizontal = 1 - T.MathUtils.smoothstep(Math.abs(dx), 52, 76);
+    const vertical = 1 - T.MathUtils.smoothstep(Math.abs(dy + 26), 48, 75);
+    if (!horizontal || !vertical) return;
+    const width = this.map.getCanvas().clientWidth;
+    const side = anchor.x < 76 ? 1 : -1;
+    world.project(this.camera);
+    world.x += 2 * (side * 57 - dx) * horizontal * vertical * overview / width;
+    sign.position.copy(node.alert.group.worldToLocal(world.unproject(this.camera)));
   }
 
   private removeStation(id: StationId) {
     const node = this.stations.get(id);
     if (!node) return;
+    node.model?.dispose();
+    node.alert.signal?.dispose();
     this.disposeGroup(node.group);
     this.stations.delete(id);
+    if (node.model?.mainEntrance) this.scheduleBuildingMask();
   }
 
   // ------------------------------------------------------------ tourist landmarks
@@ -931,7 +1121,7 @@ export class ThreeOverlayLayer implements CustomLayerInterface {
   /** Local scene point -> CSS pixels relative to the map canvas. */
   private projectLocal(p: T.Vector3): ScreenPoint | null {
     if (!this.map) return null;
-    const v = this.v4.set(p.x, p.y, p.z, 1).applyMatrix4(this.camera.projectionMatrix);
+    const v = this.v4.set(p.x, p.y, p.z, 1).applyMatrix4(this.localToClip);
     if (v.w <= 0) return { x: -9999, y: -9999, visible: false };
     const canvas = this.map.getCanvas();
     const w = canvas.clientWidth;
@@ -955,13 +1145,27 @@ export class ThreeOverlayLayer implements CustomLayerInterface {
       const d = Math.hypot(s.x - x, s.y - y);
       if (d <= radius) candidates.push({ kind, id, d: d / radius });
     };
+    if (!this.map) return null;
+    const canvas = this.map.getCanvas();
+    this.raycaster.setFromCamera(new T.Vector2(2 * x / canvas.clientWidth - 1, 1 - 2 * y / canvas.clientHeight), this.camera);
+    const hitBox = (object: T.Object3D, bounds: T.Box3) => {
+      this.localRay.copy(this.raycaster.ray).applyMatrix4(this.localCamera.copy(object.matrixWorld).invert());
+      return this.localRay.intersectsBox(bounds);
+    };
     for (const node of this.stations.values()) {
-      if (node.alertLevel > 0.4) {
-        test("alert", node.station.id, this.v3.set(node.pos.x, ALERT_Y * zs, node.pos.z), 70);
-        test("alert", node.station.id, this.v3.set(node.pos.x, ALERT_Y * zs * 0.5, node.pos.z), 34);
+      if (node.station.hasActiveAlert && node.alert.group.visible) {
+        test("alert", node.station.id, node.alert.sign.getWorldPosition(this.v3), 27);
+        if (node.alert.signal && hitBox(node.alert.signal.root, node.alert.signal.bounds)) candidates.push({ kind: "alert", id: node.station.id, d: 0 });
       }
-      test("station", node.station.id, this.v3.set(node.pos.x, 0, node.pos.z), 26);
-      test("station", node.station.id, this.v3.set(node.pos.x, (STATION_BEAM_H + 16) * zs, node.pos.z), 24);
+      if (node.model?.mainEntrance) {
+        if (node.model.structures.some(s => hitBox(s.node, s.bounds))) candidates.push({ kind: "station", id: node.station.id, d: 0 });
+        if (this.zoom < 16) test("station", node.station.id, node.model.mainEntrance.getWorldPosition(this.v3), 17);
+      } else {
+        test("station", node.station.id, node.pos, 20);
+        if (node.model) {
+          if (hitBox(node.model.root, node.model.bounds)) candidates.push({ kind: "station", id: node.station.id, d: 0 });
+        } else test("station", node.station.id, this.v3.set(node.pos.x, (STATION_BEAM_H + 16) * zs, node.pos.z), 24);
+      }
     }
     for (const node of this.landmarks.values()) {
       if (node.level < 0.5) continue;
@@ -987,11 +1191,12 @@ export class ThreeOverlayLayer implements CustomLayerInterface {
 
   private disposeGroup(group: T.Group) {
     group.removeFromParent();
+    const materials = new Set<T.Material>();
     group.traverse(o => {
-      if (o instanceof T.Mesh && o.material instanceof T.Material) {
-        // Shared geometries (tube, rings, discs, gems) live for the whole page.
-        o.material.dispose();
-      }
+      if (!(o instanceof T.Mesh)) return;
+      if (!SHARED_GEOMETRY.has(o.geometry)) o.geometry.dispose();
+      for (const mat of Array.isArray(o.material) ? o.material : [o.material]) materials.add(mat);
     });
+    for (const mat of materials) mat.dispose();
   }
 }
