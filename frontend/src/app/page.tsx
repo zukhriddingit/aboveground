@@ -1,5 +1,6 @@
 "use client";
-// The T-Verse page (Member 4): Member 2's 3D map + Member 3's Stories and Tourist Mode + Fix the T.
+// The T-Verse page (Member 4): Member 2's 3D map + Member 3's Stories and Tourist Mode + Fix the T,
+// with live MBTA V3 data: trains, alerts (closure X, notifications), predictions and cause-driven repairs.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, LogOut } from "lucide-react";
 import type { TVerseMapHandle } from "@/components/map";
@@ -12,15 +13,23 @@ import {
   useStationStories,
 } from "@/components/stories";
 import {
+  ClosureMarkers,
   FixTheTMap,
   FixTheTModal,
   FixTheTScene,
   IncidentSim,
   IncidentTag,
+  effectLabel,
+  featuredStationFor,
+  scenarioFor,
   shortName,
+  translateForGame,
   translateLocally,
   triggerDelay,
+  useLiveMbta,
   useWorldFeed,
+  type GameKind,
+  type LiveAlert,
   type TunnelView,
 } from "@/components/game";
 import {
@@ -29,6 +38,9 @@ import {
   HAT_INFO,
   HAT_ORDER,
   IncidentBanner,
+  LiveAlertsButton,
+  LiveAlertsPanel,
+  NextTrains,
   SourceBadge,
   ToastStack,
   useProgress,
@@ -42,6 +54,15 @@ import type { AvatarHat, Station, StationId, StationStory, TranslatedAlert } fro
 
 const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
 const flagKey = (id: StationId) => `flag:${id}`;
+const liveKey = (alert: LiveAlert) => `live-${alert.id}`;
+const NOTIFY_KEY = "tverse-notify-closures";
+
+interface Staged {
+  live: LiveAlert;
+  alert: TranslatedAlert;
+  game: GameKind;
+  label: string;
+}
 
 export default function Home() {
   const map = useRef<TVerseMapHandle>(null);
@@ -57,6 +78,32 @@ export default function Home() {
   const signals = useStationSignals();
   const gaps = useBranchGaps(world.stations);
   const { toasts, push, dismiss } = useToasts();
+  const featuredIds = useMemo(() => world.stations.map((s) => s.id), [world.stations]);
+  const live = useLiveMbta(featuredIds);
+  const [alertsOpen, setAlertsOpen] = useState(false);
+  const [alertFocus, setAlertFocus] = useState<string | null>(null);
+  const [nextStation, setNextStation] = useState<StationId>("place-boyls");
+  /** A simulated repair staged from a live MBTA alert, while its card or repair is up. */
+  const [explore, setExplore] = useState<{ id: string; game: GameKind; label: string } | null>(null);
+  // Read lazily: the toggle only renders inside the alerts panel, which starts closed, so SSR never shows it.
+  const [notifySupported] = useState(() => typeof window !== "undefined" && "Notification" in window);
+  const [notifyOn, setNotifyOn] = useState(
+    () => typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted" && window.localStorage.getItem(NOTIFY_KEY) === "1",
+  );
+
+  /** Live alerts whose published cause maps to a repair at a station the alert itself names. */
+  const staged = useMemo(() => {
+    const out = new Map<string, Staged>();
+    for (const a of live.alerts) {
+      const scenario = scenarioFor(a.cause);
+      if (!scenario) continue;
+      const station = featuredStationFor(a, world.stations, live.index, false);
+      if (!station) continue;
+      const id = liveKey(a);
+      out.set(id, { live: a, alert: translateForGame(station, a.header, id, scenario.game), ...scenario });
+    }
+    return out;
+  }, [live.alerts, live.index, world.stations]);
 
   /** Alerts raised here with "Simulate T Delay" (their trains are held by the engine). */
   const [simAlerts, setSimAlerts] = useState<TranslatedAlert[]>([]);
@@ -79,8 +126,9 @@ export default function Home() {
 
   const alerts = useMemo(() => {
     const fromWorld = world.alerts.filter((a) => !cleared.has(a.id) && !simAlerts.some((s) => s.id === a.id));
-    return [...simAlerts, ...fromWorld];
-  }, [world.alerts, simAlerts, cleared]);
+    const fromLive = [...staged.values()].map((s) => s.alert).filter((a) => !simAlerts.some((s) => s.stationId === a.stationId));
+    return [...simAlerts, ...fromLive, ...fromWorld];
+  }, [world.alerts, simAlerts, cleared, staged]);
 
   const stations = useMemo(() => {
     const flagged = new Set(alerts.map((a) => a.stationId));
@@ -88,10 +136,14 @@ export default function Home() {
       const hasAlertObject = world.alerts.some((a) => a.stationId === s.id);
       if (s.hasActiveAlert && !hasAlertObject && !cleared.has(flagKey(s.id))) flagged.add(s.id);
     }
-    const base = world.stations.map((s) => ({ ...s, hasActiveAlert: flagged.has(s.id) }));
+    const base = world.stations.map((s) => ({
+      ...s,
+      hasActiveAlert: flagged.has(s.id),
+      nextArrivalMin: live.nextMinutes.get(s.id) ?? s.nextArrivalMin,
+    }));
     // Branch gaps, next usable train, planned closures (shuttle pin) and the stale-ETA flag.
     return withTransitData(base, gaps, signals.byStation);
-  }, [world.stations, world.alerts, alerts, cleared, gaps, signals.byStation]);
+  }, [world.stations, world.alerts, alerts, cleared, live.nextMinutes, gaps, signals.byStation]);
   const openStopFeed = useCallback((id: StationId) => {
     setFeedStation(id);
     setFeedOpen(true);
@@ -128,6 +180,21 @@ export default function Home() {
       viewTunnel(alert.stationId, 1400);
     },
     [repairing, viewTunnel],
+  );
+
+  const showAlertDetails = useCallback((alert: LiveAlert) => {
+    setAlertFocus(alert.id);
+    setAlertsOpen(true);
+  }, []);
+
+  const showOnMap = useCallback(
+    (alert: LiveAlert) => {
+      const where = alert.stations.map((id) => live.index?.stations.get(id)).find(Boolean);
+      if (!where) return;
+      map.current?.flyTo(where.lng, where.lat, { zoom: 15.6, pitch: 55, duration: 1600 });
+      if (window.innerWidth < 640) setAlertsOpen(false);
+    },
+    [live.index],
   );
 
   useEffect(
@@ -175,6 +242,43 @@ export default function Home() {
     [enterTunnel],
   );
 
+  /** "Explore a simulated repair" for a live alert: the tunnel opens, but the real trains keep moving. */
+  const exploreLive = useCallback(
+    (a: LiveAlert) => {
+      const scenario = scenarioFor(a.cause);
+      const station = featuredStationFor(a, stationsRef.current, live.index);
+      if (!scenario || !station || repairing) return;
+      const busy = simAlerts.find((s) => s.stationId === station.id);
+      if (busy) return openAlert(busy);
+      const id = liveKey(a);
+      setAlertsOpen(false);
+      setExplore({ id, ...scenario });
+      setFixAlert(staged.get(id)?.alert ?? translateForGame(station, a.header, id, scenario.game));
+      if (!sim.incidents.has(id)) sim.startIncident(id, station.id, { holds: false });
+      viewTunnel(station.id);
+      walkInWhenOpen(station.id);
+    },
+    [live.index, openAlert, repairing, sim, simAlerts, staged, viewTunnel, walkInWhenOpen],
+  );
+
+  const openAnyAlert = useCallback(
+    (alert: TranslatedAlert) => {
+      const stagedAlert = staged.get(alert.id);
+      if (stagedAlert) exploreLive(stagedAlert.live);
+      else openAlert(alert);
+    },
+    [exploreLive, openAlert, staged],
+  );
+
+  const closeFix = useCallback(() => {
+    if (explore && fixAlert?.id === explore.id && !repairing) {
+      sim.cancelIncident(explore.id);
+      setExplore(null);
+      void exitTunnel();
+    }
+    setFixAlert(null);
+  }, [exitTunnel, explore, fixAlert, repairing, sim]);
+
   const onReady = useCallback(() => {
     const m = map.current?.getMap();
     if (m && !scene.current) {
@@ -186,7 +290,7 @@ export default function Home() {
     const station = stationById(delayStation);
     if (!station) return;
     const existing = alerts.find((a) => a.stationId === station.id);
-    if (existing) return openAlert(existing);
+    if (existing) return openAnyAlert(existing);
     setSimulating(true);
     try {
       const { alert } = await triggerDelay(station);
@@ -205,7 +309,7 @@ export default function Home() {
     } finally {
       setSimulating(false);
     }
-  }, [alerts, delayStation, openAlert, push, riding, sim, stationById, viewTunnel, walkInWhenOpen]);
+  }, [alerts, delayStation, openAnyAlert, push, riding, sim, stationById, viewTunnel, walkInWhenOpen]);
 
   const handleWin = useCallback(
     async (alert: TranslatedAlert) => {
@@ -215,6 +319,7 @@ export default function Home() {
       if (unlockedHat) setHatHold(previousHat);
       const station = stationById(alert.stationId);
       const name = station ? shortName(station) : "the station";
+      const simulatedOnly = alert.id.startsWith("live-");
 
       const reveal = async () => {
         if (!unlockedHat) {
@@ -240,6 +345,13 @@ export default function Home() {
 
       const restore = () => {
         sim.resolveIncident(alert.id);
+        if (simulatedOnly) {
+          push("Simulated repair complete", {
+            tone: "success",
+            description: `That's roughly how crews handle it. The real MBTA alert near ${name} stays up until they clear it.`,
+          });
+          return;
+        }
         setCleared((set) => new Set(set).add(alert.id).add(flagKey(alert.stationId)));
         setSimAlerts((list) => list.filter((a) => a.id !== alert.id));
         push(`Service restored at ${name}`, {
@@ -252,6 +364,7 @@ export default function Home() {
       };
       const finish = async () => {
         setRepairing(null);
+        setExplore(null);
         await exitTunnel();
         window.setTimeout(() => void reveal(), 400);
       };
@@ -263,6 +376,52 @@ export default function Home() {
     },
     [awardFix, exitTunnel, progress.equipped, push, sim, stationById, viewTunnel],
   );
+
+  const toggleNotify = useCallback(async () => {
+    if (notifyOn) {
+      window.localStorage.removeItem(NOTIFY_KEY);
+      setNotifyOn(false);
+      return;
+    }
+    const permission = Notification.permission === "default" ? await Notification.requestPermission() : Notification.permission;
+    if (permission !== "granted") {
+      push("Notifications are blocked", { description: "Allow them for this site in your browser settings to get closure alerts." });
+      return;
+    }
+    window.localStorage.setItem(NOTIFY_KEY, "1");
+    setNotifyOn(true);
+  }, [notifyOn, push]);
+
+  /** Toast (and optionally a browser notification) for each newly reported closure; one summary on load. */
+  const seenAlerts = useRef<Set<string> | null>(null);
+  useEffect(() => {
+    if (live.status !== "live" || !live.index) return;
+    const names = (a: LiveAlert) => a.stations.map((id) => live.index?.stations.get(id)?.name).filter(Boolean).slice(0, 3).join(", ");
+    if (seenAlerts.current === null) {
+      seenAlerts.current = new Set(live.alerts.map((a) => a.id));
+      const closed = live.alerts.filter((a) => a.closure);
+      if (closed.length) {
+        push(`${closed.length} ${closed.length === 1 ? "closure" : "closures"} on the T right now`, {
+          tone: "danger",
+          description: `${closed.map(names).join(" · ")}. Tap Alerts for rider instructions.`,
+          durationMs: 6500,
+        });
+      }
+      const first = [...staged.values()][0];
+      if (first) push(first.live.shortHeader, { description: `Tap it on the map to explore a simulated ${first.label}.`, durationMs: 6500 });
+      return;
+    }
+    for (const a of live.alerts) {
+      if (seenAlerts.current.has(a.id)) continue;
+      seenAlerts.current.add(a.id);
+      if (a.closure) {
+        push(`${effectLabel(a)}: ${names(a)}`, { tone: "danger", description: a.shortHeader, durationMs: 6500 });
+        if (notifyOn && document.visibilityState !== "visible") new Notification(`MBTA · ${effectLabel(a)}`, { body: a.header, tag: a.id });
+      } else if (staged.has(liveKey(a))) {
+        push(a.shortHeader, { description: `Tap it on the map to explore a simulated ${staged.get(liveKey(a))!.label}.` });
+      }
+    }
+  }, [live.alerts, live.index, live.status, notifyOn, push, staged]);
 
   const activeSim = simAlerts.find((a) => sim.incidents.has(a.id)) ?? null;
   useTicker(500, !!activeSim || !!fixAlert);
@@ -298,9 +457,10 @@ export default function Home() {
         onDemoRideEnd={() => setRiding(false)}
         onAlertClick={(station) => {
           const alert = alertFor(station);
-          if (alert) openAlert(alert);
+          if (alert) openAnyAlert(alert);
         }}
         onStationClick={(station) => {
+          setNextStation(station.id);
           const stories = storiesByStation[station.id];
           if (stories?.length) setViewer(stories);
         }}
@@ -327,11 +487,13 @@ export default function Home() {
               alert={alert}
               sim={sim}
               repairing={repairing === alert.stationId}
+              live={staged.has(alert.id)}
               getZoom={() => map.current?.getMap()?.getZoom() ?? 14}
-              onOpen={openAlert}
+              onOpen={openAnyAlert}
             />
           );
         })}
+        <ClosureMarkers closures={live.closures} getZoom={() => map.current?.getMap()?.getZoom() ?? 14} onOpen={showAlertDetails} />
       </FixTheTMap>
 
       <div
@@ -380,12 +542,55 @@ export default function Home() {
           </div>
           <GameHUD progress={progress} onEquip={equip} />
         </div>
-        <div className="pointer-events-auto shrink-0">
+        <div className="pointer-events-auto flex shrink-0 flex-col-reverse items-end gap-2 sm:flex-row sm:items-center">
+          <LiveAlertsButton
+            count={live.alerts.length}
+            closures={live.closures.length}
+            status={live.status}
+            open={alertsOpen}
+            onClick={() => {
+              setAlertFocus(null);
+              setAlertsOpen((o) => !o);
+            }}
+          />
           <SourceBadge source={world.source} trainCount={sim.trainCount} />
         </div>
       </header>
 
-      <div className="pointer-events-none absolute inset-x-3 top-[72px] z-30 flex justify-end sm:inset-x-auto sm:top-[76px] sm:right-4">
+      <div className="pointer-events-none absolute top-[72px] right-3 z-40 flex justify-end sm:top-[76px] sm:right-4">
+        <LiveAlertsPanel
+          open={alertsOpen}
+          onClose={() => setAlertsOpen(false)}
+          alerts={live.alerts}
+          status={live.status}
+          updatedAt={live.updatedAt}
+          focusId={alertFocus}
+          stationName={(id) => live.index?.stations.get(id)?.name ?? null}
+          onShowOnMap={showOnMap}
+          exploreLabel={(a) => (scenarioFor(a.cause) && featuredStationFor(a, stations, live.index) ? scenarioFor(a.cause)!.label : null)}
+          onExplore={exploreLive}
+          notify={{ supported: notifySupported, on: notifyOn, toggle: () => void toggleNotify() }}
+        />
+      </div>
+
+      {!inside && stationById(nextStation) && (
+        <div className="pointer-events-none absolute top-[72px] left-3 z-20 lg:top-auto lg:bottom-4 lg:left-4">
+          <NextTrains
+            station={stationById(nextStation)!}
+            stations={stations}
+            onSelect={(id) => {
+              setNextStation(id);
+              map.current?.flyToStation(id, { zoom: 16 });
+            }}
+            arrivals={live.arrivals.get(nextStation)}
+            state={live.arrivalsState}
+            closures={live.closures.find((c) => c.station.id === nextStation)?.alerts ?? []}
+            onOpenAlert={showAlertDetails}
+          />
+        </div>
+      )}
+
+      <div className="pointer-events-none absolute inset-x-3 top-[124px] z-30 flex justify-end sm:inset-x-auto sm:top-[76px] sm:right-4">
         <ToastStack toasts={toasts} onDismiss={dismiss} />
       </div>
 
@@ -397,7 +602,7 @@ export default function Home() {
               stationName={shortName(stationById(activeSim.stationId)!)}
               stats={sim.stats(activeSim.id)}
               repairing={repairing === activeSim.stationId}
-              onFix={() => openAlert(activeSim)}
+              onFix={() => openAnyAlert(activeSim)}
               onEnterTunnel={
                 !inside && !repairing && openTunnel === activeSim.stationId ? () => enterTunnel(activeSim.stationId) : undefined
               }
@@ -453,7 +658,8 @@ export default function Home() {
         stats={fixAlert && sim.incidents.has(fixAlert.id) ? sim.stats(fixAlert.id) : null}
         simulated={!!fixAlert && sim.incidents.has(fixAlert.id)}
         unlockName={nextHat ? HAT_INFO[nextHat].name : null}
-        onClose={() => setFixAlert(null)}
+        explore={explore && fixAlert?.id === explore.id ? explore : null}
+        onClose={closeFix}
         onWin={handleWin}
       />
       <StoryViewerModal open={!!viewer} stories={viewer ?? []} stations={stations} onClose={() => setViewer(null)} />

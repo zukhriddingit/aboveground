@@ -84,6 +84,8 @@ export interface FixTheTModalProps {
   simulated: boolean;
   /** Name of the hat this fix unlocks, if any. */
   unlockName: string | null;
+  /** Staged from a live MBTA alert: the puzzle illustrates a repair for the published cause; real service is untouched. */
+  explore?: { game: GameKind; label: string } | null;
   onClose: () => void;
   onWin: (alert: TranslatedAlert) => void;
 }
@@ -94,12 +96,12 @@ export function FixTheTModal(props: FixTheTModalProps) {
   return <FixTheTDialog key={props.alert.id} {...props} alert={props.alert} />;
 }
 
-function FixTheTDialog({ alert, station, stats, simulated, unlockName, onClose, onWin }: FixTheTModalProps & { alert: TranslatedAlert }) {
+function FixTheTDialog({ alert, station, stats, simulated, unlockName, explore, onClose, onWin }: FixTheTModalProps & { alert: TranslatedAlert }) {
   const [step, setStep] = useState<Step>("brief");
   const [attempt, setAttempt] = useState(0);
   const titleId = useId();
   const playable = canPlay(alert);
-  const game = GAMES[gameFor(alert)];
+  const game = GAMES[explore?.game ?? gameFor(alert)];
 
   useEffect(() => {
     if (step !== "won") return;
@@ -141,11 +143,11 @@ function FixTheTDialog({ alert, station, stats, simulated, unlockName, onClose, 
             <div className="flex flex-wrap items-center gap-2 pr-8">
               <span
                 className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold tracking-wide uppercase ${
-                  simulated ? "bg-fuchsia-500/15 text-fuchsia-300" : "bg-red-500/15 text-red-300"
+                  explore ? "bg-cyan-400/15 text-cyan-200" : simulated ? "bg-fuchsia-500/15 text-fuchsia-300" : "bg-red-500/15 text-red-300"
                 }`}
               >
                 <ShieldAlert className="size-3.5" />
-                {simulated ? "Simulated delay" : "Service alert"}
+                {explore ? "Live alert · simulated repair" : simulated ? "Simulated delay" : "Service alert"}
               </span>
               {station && <span className="text-xs text-slate-400">{station.name}</span>}
             </div>
@@ -154,24 +156,31 @@ function FixTheTDialog({ alert, station, stats, simulated, unlockName, onClose, 
             </h2>
 
             <div className="rounded-xl border border-white/10 bg-black/40 p-3">
-              <p className="mb-1.5 text-[11px] font-semibold tracking-widest text-slate-500 uppercase">What the MBTA said</p>
+              <p className="mb-1.5 text-[11px] font-semibold tracking-widest text-slate-500 uppercase">{explore ? "What the MBTA is reporting now" : "What the MBTA said"}</p>
               <p className="font-mono text-[13px] leading-relaxed text-slate-300">{alert.rawMbtaText}</p>
             </div>
 
             <div className="rounded-xl border border-cyan-400/20 bg-cyan-400/5 p-3">
               <p className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold tracking-widest text-cyan-300 uppercase">
                 <Bot className="size-3.5" />
-                What actually broke
+                {explore ? `What a ${explore.label} usually involves` : "What actually broke"}
               </p>
               <p className="text-[15px] leading-relaxed text-slate-100">{alert.plainExplanation}</p>
             </div>
 
-            <div className="flex flex-wrap gap-2 text-xs">
+            {explore && (
+              <p className="rounded-xl border border-white/10 bg-white/5 p-3 text-[13px] leading-relaxed text-slate-300">
+                The puzzle shows how crews might handle a {explore.label}. Playing it doesn&apos;t change real service, and the alert stays up until the
+                MBTA clears it.
+              </p>
+            )}
+
+            <div className={`flex flex-wrap gap-2 text-xs ${explore ? "hidden" : ""}`}>
               <span className="inline-flex items-center gap-1.5 rounded-lg bg-white/5 px-2.5 py-1.5 text-slate-300">
                 <Clock3 className="size-3.5 text-amber-300" />
                 {alert.estimatedFixMin > 0 ? `Crews need ~${alert.estimatedFixMin} min` : "Scheduled work"}
               </span>
-              {stats && stats.heldTrains > 0 && (
+              {!explore && stats && stats.heldTrains > 0 && (
                 <span className="inline-flex items-center gap-1.5 rounded-lg bg-red-500/10 px-2.5 py-1.5 text-red-200 tabular-nums">
                   <Users className="size-3.5" />
                   {stats.heldTrains} {stats.heldTrains === 1 ? "train" : "trains"} holding · ~{stats.ridersWaiting.toLocaleString()} riders ·{" "}
@@ -188,7 +197,7 @@ function FixTheTDialog({ alert, station, stats, simulated, unlockName, onClose, 
                 className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-fuchsia-500 to-cyan-400 text-base font-semibold text-slate-950 transition hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
               >
                 <Zap className="size-5" />
-                {game.cta} (+{POINTS_PER_FIX} CharliePoints)
+                {explore ? `Explore a simulated ${explore.label}` : game.cta} (+{POINTS_PER_FIX} CharliePoints)
               </button>
             ) : (
               <p className="rounded-xl bg-white/5 p-3 text-sm text-slate-300">
@@ -216,9 +225,11 @@ function FixTheTDialog({ alert, station, stats, simulated, unlockName, onClose, 
               <CircleCheck className="size-9 text-emerald-300" />
             </div>
             <h2 id={titleId} className="text-2xl font-semibold text-white">
-              {game.done}
+              {explore ? "Simulated repair complete" : game.done}
             </h2>
-            <p className="text-slate-300">Watch the crew drone finish the repair on the map.</p>
+            <p className="text-slate-300">
+              {explore ? "Real crews are still on it: the MBTA alert stays up until they clear it." : "Watch the crew finish the repair down in the tunnel."}
+            </p>
             <div className="flex flex-col items-center gap-2">
               <span className="inline-flex items-center gap-2 rounded-full bg-amber-400/15 px-4 py-1.5 text-lg font-semibold text-amber-200">
                 <Sparkles className="size-5" />+{POINTS_PER_FIX} CharliePoints
@@ -233,7 +244,7 @@ function FixTheTDialog({ alert, station, stats, simulated, unlockName, onClose, 
             <h2 id={titleId} className="text-xl font-semibold text-white">
               {game.fail}
             </h2>
-            <p className="text-slate-300">{simulated ? "Trains are still holding. One more try?" : "Out of time. One more try?"}</p>
+            <p className="text-slate-300">{simulated && !explore ? "Trains are still holding. One more try?" : "Out of time. One more try?"}</p>
             <div className="flex justify-center gap-2">
               <button
                 type="button"

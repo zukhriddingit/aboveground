@@ -2,11 +2,11 @@
 // Keeps the world (stations, alerts, lines) fresh and feeds trains into the incident engine.
 // Order: backend /api/world -> live MBTA straight from the browser -> the engine's own fleet.
 import { useEffect, useState } from "react";
-import { fetchLiveVehicles } from "@/components/map";
 import { MOCK_LINES, MOCK_STATIONS } from "@/lib/mockData";
 import type { Station, TLinesGeoJson, TrainVehicle, TranslatedAlert, TriggerAlertResponse, WorldResponse } from "@/types/tverse";
 import { demoAlert } from "./alertTranslator";
 import type { FeedSource, IncidentSim } from "./incidentSim";
+import { fetchVehicles } from "./mbtaV3";
 
 const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? "").replace(/\/$/, "");
 const POLL_MS = 12000;
@@ -67,7 +67,7 @@ export function useWorldFeed(sim: IncidentSim): WorldFeed {
       } else {
         let vehicles: TrainVehicle[] | null = null;
         try {
-          vehicles = await fetchLiveVehicles(controller.signal);
+          vehicles = await fetchVehicles(controller.signal);
         } catch {
           vehicles = null;
         }

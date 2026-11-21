@@ -140,6 +140,54 @@ export function translateLocally(station: Pick<Station, "id" | "name">, rawMbtaT
   };
 }
 
+/** How each kind of repair generally works: shown with live alerts, so it explains rather than claims. */
+const HOW_IT_WORKS: Record<GameKind, { title: string; explain: string }> = {
+  WIRE_MATCH: {
+    title: "Signal problem",
+    explain:
+      "Signals keep trains apart by sensing which stretch of track each one is on. When a track circuit or relay fails, the system has to treat the track ahead as occupied, so trains creep past on manual caution while signal maintainers walk the tracks with meters to find the bad connection.",
+  },
+  TRACK_WELD: {
+    title: "Track work",
+    explain:
+      "Track problems are usually a cracked or worn rail, most often between stations. Trains slow to a crawl over the spot until crews can cut out the bad piece and weld in new rail, which needs the power off and a gap in service, often overnight.",
+  },
+  SWITCH_THROW: {
+    title: "Switch problem",
+    explain:
+      "A switch moves the rails that steer trains from one track to another, mostly at junctions just past a station. If it won't lock in place, no train can safely cross it, so crews inspect the switch machine and may crank it by hand until it's fixed.",
+  },
+  BREAKER_SEQUENCE: {
+    title: "Power problem",
+    explain:
+      "Trains run on 600 volts from a third rail or an overhead wire, fed by substations under the street. When a feeder cable or breaker trips, that section goes dark, and crews have to isolate the fault before re-energizing it safely.",
+  },
+  RESCUE_COUPLE: {
+    title: "Disabled train",
+    explain:
+      "A train with a mechanical problem blocks everyone behind it. The operator tries to reset it first; if that fails, the next train couples on and pushes or tows it clear so service can resume.",
+  },
+  ICE_THAW: {
+    title: "Frozen switch",
+    explain:
+      "Snow and ice can jam switches and third rail on outdoor track. Heaters help, but crews often have to clear the switch points by hand before trains can change tracks again.",
+  },
+};
+
+/** Card for a live MBTA alert: the agency's own words, plus how that kind of repair generally works. */
+export function translateForGame(station: Pick<Station, "id" | "name">, rawMbtaText: string, id: string, game: GameKind): TranslatedAlert {
+  const how = HOW_IT_WORKS[game];
+  return {
+    id,
+    stationId: station.id,
+    rawMbtaText,
+    plainTitle: `${how.title} near ${shortName(station)}`,
+    plainExplanation: how.explain,
+    estimatedFixMin: 0,
+    miniGameType: game === "WIRE_MATCH" || game === "BREAKER_SEQUENCE" ? "WIRE_MATCH" : "TRACK_WELD",
+  };
+}
+
 /** Problems a simulated delay cycles through, so each "Simulate T Delay" brings a different fix. */
 const PROBLEMS: Array<[Category, (line: string, name: string) => string]> = [
   ["SIGNAL", (l, n) => `${l}: Delays of about 15 minutes due to a signal problem at ${n}.`],
