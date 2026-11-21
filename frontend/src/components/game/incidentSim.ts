@@ -72,6 +72,8 @@ export interface Incident {
   startedAt: number;
   status: "active" | "restored";
   queues: Record<"1" | "-1", string[]>;
+  /** false for a simulated repair staged from a live MBTA alert: the trains are real, so nothing is held. */
+  holds: boolean;
 }
 
 export interface IncidentStats {
@@ -327,16 +329,16 @@ export class IncidentSim {
 
   // ---------- incidents ----------
 
-  startIncident(id: string, stationId: StationId, now = performance.now()) {
+  startIncident(id: string, stationId: StationId, { holds = true, now = performance.now() }: { holds?: boolean; now?: number } = {}) {
     const station = this.stations.get(stationId);
     if (!station || this.incidents.has(id)) return;
     const routes = ROUTES.filter((r) => TRACKS[r].some((t) => this.stationD(t, stationId) !== null));
-    this.incidents.set(id, { id, stationId, routes, startedAt: now, status: "active", queues: { "1": [], "-1": [] } });
+    this.incidents.set(id, { id, stationId, routes, startedAt: now, status: "active", queues: { "1": [], "-1": [] }, holds });
     this.joinQueue(this.incidents.get(id)!);
   }
 
   private joinQueue(incident: Incident) {
-    if (incident.status !== "active") return;
+    if (incident.status !== "active" || !incident.holds) return;
     const candidates: Array<{ train: SimTrain; dist: number; dS: number }> = [];
     for (const train of this.trains.values()) {
       if (train.hold || !train.track || !incident.routes.includes(train.route)) continue;
