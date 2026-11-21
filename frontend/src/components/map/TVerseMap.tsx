@@ -247,9 +247,10 @@ export default function TVerseMap(props: TVerseMapProps) {
               // The station card grows upward (alerts, closures, Quick-Check): if the stop sits in the top
               // half of the screen, slide the camera so the whole card fits above it.
               const h = m.getContainer().clientHeight;
-              if (e.point.y < h * 0.6) {
+              if (e.point.y < h * 0.62) {
                 ride.gesture();
-                m.panBy([0, e.point.y - h * 0.72], { duration: 650, essential: true });
+                // Low enough to clear a top HUD bar, high enough to stay above a bottom one.
+                m.panBy([0, e.point.y - Math.min(h * 0.8, h - 96)], { duration: 650, essential: true });
               }
             }
             break;

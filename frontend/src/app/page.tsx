@@ -35,6 +35,9 @@ import {
   useTicker,
   useToasts,
 } from "@/components/hud";
+import { CommunityDrawer, FeedStopPins, TFeedButton, flyToFeedStop, useCommunityFeed } from "@/components/community";
+import { useStationSignals } from "@/components/quickcheck";
+import { useBranchGaps, withTransitData } from "@/components/transit";
 import type { AvatarHat, Station, StationId, StationStory, TranslatedAlert } from "@/types/tverse";
 
 const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
@@ -46,7 +49,13 @@ export default function Home() {
   const [sim] = useState(() => new IncidentSim());
   const world = useWorldFeed(sim);
   const { storiesByStation, addStory } = useStationStories();
-  const { progress, awardFix, equip } = useProgress();
+  const { progress, awardFix, equip, addPoints } = useProgress();
+  // T-Feed (community feed by line) + the report's P0/P1 rider data on the station card.
+  const feed = useCommunityFeed();
+  const [feedOpen, setFeedOpen] = useState(false);
+  const [feedStation, setFeedStation] = useState<StationId | null>(null);
+  const signals = useStationSignals();
+  const gaps = useBranchGaps(world.stations);
   const { toasts, push, dismiss } = useToasts();
 
   /** Alerts raised here with "Simulate T Delay" (their trains are held by the engine). */
@@ -79,8 +88,15 @@ export default function Home() {
       const hasAlertObject = world.alerts.some((a) => a.stationId === s.id);
       if (s.hasActiveAlert && !hasAlertObject && !cleared.has(flagKey(s.id))) flagged.add(s.id);
     }
-    return world.stations.map((s) => ({ ...s, hasActiveAlert: flagged.has(s.id) }));
-  }, [world.stations, world.alerts, alerts, cleared]);
+    const base = world.stations.map((s) => ({ ...s, hasActiveAlert: flagged.has(s.id) }));
+    // Branch gaps, next usable train, planned closures (shuttle pin) and the stale-ETA flag.
+    return withTransitData(base, gaps, signals.byStation);
+  }, [world.stations, world.alerts, alerts, cleared, gaps, signals.byStation]);
+  const openStopFeed = useCallback((id: StationId) => {
+    setFeedStation(id);
+    setFeedOpen(true);
+    flyToFeedStop(map.current, id, world.stations);
+  }, [world.stations]);
 
   const stationById = useCallback((id: StationId) => stations.find((s) => s.id === id) ?? null, [stations]);
   const stationsRef = useRef(stations);
@@ -289,7 +305,10 @@ export default function Home() {
           if (stories?.length) setViewer(stories);
         }}
         onAvatarClick={() => push("That's you, Charlie.", { description: "Ride the Green Line or fix a delay to earn a 3D hat." })}
+        quickCheckSignals={signals}
+        onQuickCheckPoints={(n) => addPoints(n)}
       >
+        <FeedStopPins posts={feed.posts} stations={world.stations} onOpenStop={openStopFeed} />
         <StationStoryBubbles
           stations={stations}
           storiesByStation={storiesByStation}
@@ -405,9 +424,28 @@ export default function Home() {
             simulating={simulating}
             delayDisabledReason={repairing ? "A repair is in progress" : null}
             onOverview={() => map.current?.resetView()}
+            extra={
+              <TFeedButton
+                className="shrink-0"
+                unread={feedOpen ? 0 : feed.unread}
+                live={feed.online}
+                active={feedOpen}
+                onClick={() => setFeedOpen((o) => !o)}
+              />
+            }
           />
         </div>
       </footer>
+
+      <CommunityDrawer
+        open={feedOpen}
+        onClose={() => setFeedOpen(false)}
+        feed={feed}
+        stationId={feedStation}
+        onStationChange={setFeedStation}
+        onJumpToStation={(id) => flyToFeedStop(map.current, id, world.stations)}
+        onPointsAwarded={(n) => addPoints(n)}
+      />
 
       <FixTheTModal
         alert={fixAlert}

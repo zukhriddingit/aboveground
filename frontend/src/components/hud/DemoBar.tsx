@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { Camera, Landmark, Loader2, Map as MapIcon, Play, Square, Zap } from "lucide-react";
 import type { Station, StationId } from "@/types/tverse";
 
@@ -20,7 +21,10 @@ export function DemoBar({
   simulating,
   delayDisabledReason,
   onOverview,
+  extra,
 }: {
+  /** Extra pills right after "Post Story", e.g. the T-Feed button. */
+  extra?: ReactNode;
   stations: Station[];
   riding: boolean;
   onToggleRide: () => void;
@@ -40,6 +44,7 @@ export function DemoBar({
         <Camera className="size-4" />
         <span className="hidden md:inline">Post Story</span>
       </button>
+      {extra}
       <button
         type="button"
         onClick={onToggleTourist}
