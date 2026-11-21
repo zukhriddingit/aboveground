@@ -4,6 +4,7 @@
 import { MOCK_STATIONS } from "@/lib/mockData";
 import { routeLine } from "@/lib/theme";
 import type { Crowdedness, Station, StationId, TrainVehicle } from "@/types/tverse";
+import type { FaultKind } from "./faults";
 import {
   ROUTES,
   TRACKS,
@@ -74,6 +75,8 @@ export interface Incident {
   queues: Record<"1" | "-1", string[]>;
   /** false for a simulated repair staged from a live MBTA alert: the trains are real, so nothing is held. */
   holds: boolean;
+  /** What broke, which decides where along the line the crews work. */
+  fault: FaultKind;
 }
 
 export interface IncidentStats {
@@ -329,11 +332,15 @@ export class IncidentSim {
 
   // ---------- incidents ----------
 
-  startIncident(id: string, stationId: StationId, { holds = true, now = performance.now() }: { holds?: boolean; now?: number } = {}) {
+  startIncident(
+    id: string,
+    stationId: StationId,
+    { holds = true, fault = "signal", now = performance.now() }: { holds?: boolean; fault?: FaultKind; now?: number } = {},
+  ) {
     const station = this.stations.get(stationId);
     if (!station || this.incidents.has(id)) return;
     const routes = ROUTES.filter((r) => TRACKS[r].some((t) => this.stationD(t, stationId) !== null));
-    this.incidents.set(id, { id, stationId, routes, startedAt: now, status: "active", queues: { "1": [], "-1": [] }, holds });
+    this.incidents.set(id, { id, stationId, routes, startedAt: now, status: "active", queues: { "1": [], "-1": [] }, holds, fault });
     this.joinQueue(this.incidents.get(id)!);
   }
 
