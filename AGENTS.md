@@ -1,0 +1,16 @@
+# AboveGround (T-Verse) — rules for coding agents
+
+Read `README.md` first: it has the product, the folder ownership table and the API contract.
+
+1. Only edit files inside your member's folders (see the ownership table). Anything shared
+   (`frontend/src/types/tverse.ts`, `frontend/src/lib/mockData.ts`, `frontend/src/lib/theme.ts`,
+   `frontend/src/data/t-lines.json`, configs) changes only when the human asks.
+2. `frontend/src/types/tverse.ts` is the wire contract. Backend JSON keys are camelCase and must match it.
+3. Frontend: Next.js 16 App Router + TypeScript + Tailwind 4. This Next.js has breaking changes; read
+   `frontend/node_modules/next/dist/docs/` before using an API you are unsure about.
+   `maplibre-gl` v6 is ESM-only: `import * as maplibregl from "maplibre-gl"` (or a dynamic import in an effect).
+4. Never crash on a missing backend: fall back to `mockData.ts`. Never block the demo on an AI call:
+   use a fallback template first, upgrade with AI text only if it arrives quickly.
+5. Before pushing frontend work: `cd frontend && npx tsc --noEmit && npm run lint`.
+6. UI look: dark glassmorphic cyberpunk (`bg-slate-950/75 backdrop-blur-md border border-white/10`), keep the
+   centre of the 3D map clear.
