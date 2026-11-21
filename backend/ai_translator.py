@@ -421,10 +421,17 @@ _KIND_LABELS = {
 }
 
 
+_KIND_ONE = {
+    "PREDICTION_OK": "on-time prediction", "STALE_ETA": "ghost/stale prediction", "SEATS_OPEN": "seats-open report",
+    "PACKED": "packed train", "PASS_UP": "pass-up", "ELEVATOR_OUT": "elevator outage", "SPILL": "spill",
+    "NO_AC": "no AC/heat report", "SHUTTLE_CONFUSION": "shuttle confusion report",
+}
+
+
 def fallback_line_vibe(line: str, captions: list[str], kind_counts: dict[str, int]) -> str:
     top = sorted(((n, k) for k, n in kind_counts.items() if n), reverse=True)[:2]
     if top:
-        bits = " and ".join(f"{n} {_KIND_LABELS.get(k, k.lower())}" for n, k in top)
+        bits = " and ".join(f"{n} {(_KIND_LABELS if n != 1 else _KIND_ONE).get(k, k.lower())}" for n, k in top)
         return f"{line} Line riders are reporting {bits} in the last 20 minutes."
     if captions:
         latest = captions[0].strip()
