@@ -205,107 +205,269 @@ export function tunnelMouthTexture() {
   }, false);
 }
 
-/** One side of a Green Line Type 9 section: silver body, green band, lit windows, double doors. */
-export function lrvSideTexture() {
-  return make("lrv-side", 1024, 256, (g, w, h) => {
-    g.fillStyle = "#e4e7ea";
+/** One side of a car or LRV section. v runs from the roof (0) to the sill (1); u from the -x end (0) to +x (1). */
+export interface SidePaint {
+  key: string;
+  base: string;
+  brushed?: boolean;
+  bands?: Array<{ y0: number; y1: number; color: string }>;
+  /** Dark band the windows sit in (Type 8). */
+  windowBand?: { y0: number; y1: number; color: string };
+  windows: { y0: number; y1: number; frame: string; band?: string };
+  doors: Array<{ u: number; w: number; double: boolean }>;
+  doorColor: string;
+  /** Door leaves take this color above `doorSplit` (Type 9's green upper leaves). */
+  doorUpper?: { color: string; split: number };
+  logo?: { u: number; v: number; ring: string; letter: string; disc: string };
+  /** Colored strips at both ends (CRRC end frames wrapping onto the sides). */
+  endFrames?: string;
+}
+
+const litGlass = (g: CanvasRenderingContext2D, y0: number, y1: number) => {
+  const lit = g.createLinearGradient(0, y0, 0, y1);
+  lit.addColorStop(0, "#2a3346");
+  lit.addColorStop(0.55, "#f3d6a0");
+  lit.addColorStop(1, "#cf9a5c");
+  return lit;
+};
+
+export function carSideTexture(p: SidePaint) {
+  return make(`side-${p.key}`, 1024, 256, (g, w, h) => {
+    g.fillStyle = p.base;
     g.fillRect(0, 0, w, h);
-    g.fillStyle = "#3b3e43";
-    g.fillRect(0, h * 0.86, w, h * 0.14);
-    g.fillStyle = "#00843d";
-    g.fillRect(0, h * 0.7, w, h * 0.1);
-    g.fillStyle = "#cfd3d8";
-    g.fillRect(0, 0, w, h * 0.08);
-    const winTop = h * 0.2;
-    const winH = h * 0.42;
-    const doors = [0.27, 0.73];
-    for (let i = 0; i < 6; i++) {
-      const x = w * (0.04 + i * 0.16);
-      if (doors.some((d) => Math.abs(x / w + 0.055 - d) < 0.09)) continue;
-      const lit = g.createLinearGradient(0, winTop, 0, winTop + winH);
-      lit.addColorStop(0, "#2a3346");
-      lit.addColorStop(0.6, "#fbd9a0");
-      lit.addColorStop(1, "#d99d58");
-      g.fillStyle = lit;
-      g.fillRect(x, winTop, w * 0.11, winH);
-      g.fillStyle = "rgba(255,255,255,0.18)";
-      g.fillRect(x + 4, winTop + 4, w * 0.02, winH - 8);
+    if (p.brushed) {
+      for (let x = 0; x < w; x += 3) {
+        g.fillStyle = `rgba(255,255,255,${rand() * 0.1})`;
+        g.fillRect(x, 0, 1, h);
+      }
+    }
+    for (const b of p.bands ?? []) {
+      g.fillStyle = b.color;
+      g.fillRect(0, b.y0 * h, w, (b.y1 - b.y0) * h);
+    }
+    if (p.windowBand) {
+      g.fillStyle = p.windowBand.color;
+      g.fillRect(0, p.windowBand.y0 * h, w, (p.windowBand.y1 - p.windowBand.y0) * h);
+    }
+    // Windows fill the gaps between doors and car ends.
+    const doors = [...p.doors].sort((a, b) => a.u - b.u);
+    const edges = [0.03, ...doors.flatMap((d) => [d.u - d.w / 2 - 0.015, d.u + d.w / 2 + 0.015]), 0.97];
+    const wy0 = p.windows.y0 * h;
+    const wy1 = p.windows.y1 * h;
+    for (let i = 0; i < edges.length; i += 2) {
+      const a = edges[i] * w;
+      const b = edges[i + 1] * w;
+      if (b - a < 30) continue;
+      const n = Math.max(1, Math.round((b - a) / 110));
+      const slot = (b - a) / n;
+      for (let k = 0; k < n; k++) {
+        const x0 = a + k * slot + 5;
+        g.fillStyle = p.windows.frame;
+        g.beginPath();
+        g.roundRect(x0 - 3, wy0 - 3, slot - 4, wy1 - wy0 + 6, 7);
+        g.fill();
+        g.fillStyle = litGlass(g, wy0, wy1);
+        g.beginPath();
+        g.roundRect(x0, wy0, slot - 10, wy1 - wy0, 5);
+        g.fill();
+        g.fillStyle = "rgba(255,255,255,0.16)";
+        g.fillRect(x0 + 4, wy0 + 4, 6, wy1 - wy0 - 8);
+      }
     }
     for (const d of doors) {
-      const x = w * d - w * 0.06;
-      g.fillStyle = "#596068";
-      g.fillRect(x, h * 0.14, w * 0.12, h * 0.72);
-      g.fillStyle = "#f6cf90";
-      g.fillRect(x + 6, h * 0.2, w * 0.05, h * 0.32);
-      g.fillRect(x + w * 0.065, h * 0.2, w * 0.05, h * 0.32);
-      g.fillStyle = "#30353b";
-      g.fillRect(x + w * 0.059, h * 0.14, 3, h * 0.72);
+      const x0 = (d.u - d.w / 2) * w;
+      const dw = d.w * w;
+      const top = 0.1 * h;
+      g.fillStyle = p.doorColor;
+      g.fillRect(x0, top, dw, 0.86 * h - top);
+      if (p.doorUpper) {
+        g.fillStyle = p.doorUpper.color;
+        g.fillRect(x0, top, dw, p.doorUpper.split * h - top);
+      }
+      g.fillStyle = "#22262c";
+      g.fillRect(x0 - 2, top, 2, 0.86 * h - top);
+      g.fillRect(x0 + dw, top, 2, 0.86 * h - top);
+      const leaves = d.double ? 2 : 1;
+      for (let k = 0; k < leaves; k++) {
+        const lx = x0 + (k * dw) / leaves + 6;
+        g.fillStyle = litGlass(g, wy0, wy1);
+        g.fillRect(lx, wy0, dw / leaves - 12, wy1 - wy0);
+      }
+      if (d.double) {
+        g.fillStyle = "#1b1e23";
+        g.fillRect(x0 + dw / 2 - 1.5, top, 3, 0.86 * h - top);
+      }
     }
+    if (p.logo) {
+      const { u, v, ring, letter, disc } = p.logo;
+      g.fillStyle = ring;
+      g.beginPath();
+      g.arc(u * w, v * h, h * 0.075, 0, Math.PI * 2);
+      g.fill();
+      g.fillStyle = disc;
+      g.beginPath();
+      g.arc(u * w, v * h, h * 0.062, 0, Math.PI * 2);
+      g.fill();
+      g.fillStyle = letter;
+      g.font = `bold ${Math.round(h * 0.09)}px Helvetica, Arial, sans-serif`;
+      g.textAlign = "center";
+      g.textBaseline = "middle";
+      g.fillText("T", u * w, v * h + 1);
+    }
+    if (p.endFrames) {
+      g.fillStyle = p.endFrames;
+      g.fillRect(0, 0, w * 0.012, h);
+      g.fillRect(w * 0.988, 0, w * 0.012, h);
+    }
+    g.fillStyle = "rgba(0,0,0,0.35)";
+    g.fillRect(0, h * 0.94, w, h * 0.06);
+  });
+}
+
+/** The cab end of a car. x and y run 0..1 across the face from the top left. */
+export interface FrontPaint {
+  key: string;
+  base: string;
+  lower?: { y: number; color: string; trapezoid?: boolean };
+  mask?: { x0: number; x1: number; y0: number; y1: number; color: string; frame?: string };
+  windshield: { x0: number; x1: number; y0: number; y1: number; panes: 1 | 2 | 3; color: string };
+  strip?: { y: number; color: string };
+  sign: { text: string; letter?: string; fg: string; bg: string; y0: number; y1: number };
+  lamps: Array<{ x: number; y: number; r: number; color: string }>;
+  number?: { text: string; y: number; color: string };
+  logo?: { y: number; ring: string };
+}
+
+export function carFrontTexture(p: FrontPaint) {
+  return make(`front-${p.key}-${p.sign.letter ?? ""}${p.sign.text}`, 256, 256, (g, w, h) => {
+    g.fillStyle = p.base;
+    g.fillRect(0, 0, w, h);
+    if (p.lower) {
+      g.fillStyle = p.lower.color;
+      g.beginPath();
+      if (p.lower.trapezoid) {
+        g.moveTo(w * 0.2, p.lower.y * h);
+        g.lineTo(w * 0.8, p.lower.y * h);
+        g.lineTo(w * 0.92, h);
+        g.lineTo(w * 0.08, h);
+      } else {
+        g.rect(0, p.lower.y * h, w, h);
+      }
+      g.fill();
+    }
+    if (p.mask) {
+      const m = p.mask;
+      if (m.frame) {
+        g.fillStyle = m.frame;
+        g.beginPath();
+        g.roundRect(m.x0 * w - 6, m.y0 * h - 6, (m.x1 - m.x0) * w + 12, (m.y1 - m.y0) * h + 12, 18);
+        g.fill();
+      }
+      g.fillStyle = m.color;
+      g.beginPath();
+      g.roundRect(m.x0 * w, m.y0 * h, (m.x1 - m.x0) * w, (m.y1 - m.y0) * h, 14);
+      g.fill();
+    }
+    const ws = p.windshield;
+    const paneW = (ws.x1 - ws.x0) / ws.panes;
+    for (let i = 0; i < ws.panes; i++) {
+      const grad = g.createLinearGradient(0, ws.y0 * h, 0, ws.y1 * h);
+      grad.addColorStop(0, ws.color);
+      grad.addColorStop(1, "#2d3a4f");
+      g.fillStyle = grad;
+      g.beginPath();
+      g.roundRect((ws.x0 + i * paneW) * w + (i ? 4 : 0), ws.y0 * h, paneW * w - (ws.panes > 1 ? 4 : 0), (ws.y1 - ws.y0) * h, 8);
+      g.fill();
+    }
+    if (p.strip) {
+      g.fillStyle = p.strip.color;
+      g.fillRect(ws.x0 * w, p.strip.y * h, (ws.x1 - ws.x0) * w, h * 0.022);
+    }
+    const sg = p.sign;
+    g.fillStyle = "#050505";
+    g.fillRect(w * 0.18, sg.y0 * h, w * 0.64, (sg.y1 - sg.y0) * h);
+    const mid = ((sg.y0 + sg.y1) / 2) * h;
+    const size = Math.round((sg.y1 - sg.y0) * h * 0.62);
+    g.font = `bold ${size}px Helvetica, Arial, sans-serif`;
+    g.textBaseline = "middle";
+    let x = w * 0.21;
+    if (sg.letter) {
+      g.fillStyle = sg.fg;
+      g.fillRect(x, mid - size * 0.6, size * 1.05, size * 1.2);
+      g.fillStyle = sg.bg;
+      g.textAlign = "center";
+      g.fillText(sg.letter, x + size * 0.52, mid + 1);
+      x += size * 1.35;
+    }
+    g.fillStyle = sg.fg;
+    g.textAlign = "left";
+    g.fillText(sg.text, x, mid + 1, w * 0.79 - x);
+    for (const l of p.lamps) {
+      g.fillStyle = l.color;
+      g.beginPath();
+      g.arc(l.x * w, l.y * h, l.r * w, 0, Math.PI * 2);
+      g.fill();
+    }
+    if (p.number) {
+      g.fillStyle = p.number.color;
+      g.font = `bold ${Math.round(h * 0.055)}px Helvetica, Arial, sans-serif`;
+      g.textAlign = "center";
+      g.fillText(p.number.text, w / 2, p.number.y * h);
+    }
+    if (p.logo) {
+      g.strokeStyle = p.logo.ring;
+      g.lineWidth = 4;
+      g.beginPath();
+      g.arc(w / 2, p.logo.y * h, w * 0.06, 0, Math.PI * 2);
+      g.stroke();
+      g.fillStyle = p.logo.ring;
+      g.font = `bold ${Math.round(h * 0.07)}px Helvetica, Arial, sans-serif`;
+      g.textAlign = "center";
+      g.fillText("T", w / 2, p.logo.y * h + 1);
+    }
+  }, false);
+}
+
+/** Black-on-white pentagon speed warning sign, posted ahead of a work zone. */
+export function speedSignTexture(text: string) {
+  return make(`speed-${text}`, 128, 160, (g, w, h) => {
+    g.clearRect(0, 0, w, h);
+    const pent = (inset: number) => {
+      g.beginPath();
+      g.moveTo(w / 2, inset);
+      g.lineTo(w - inset, h * 0.32);
+      g.lineTo(w - inset, h - inset);
+      g.lineTo(inset, h - inset);
+      g.lineTo(inset, h * 0.32);
+      g.closePath();
+    };
     g.fillStyle = "#111";
-    g.beginPath();
-    g.arc(w * 0.5, h * 0.75, h * 0.07, 0, Math.PI * 2);
+    pent(2);
     g.fill();
-    g.fillStyle = "#fff";
-    g.font = `bold ${Math.round(h * 0.11)}px Helvetica, Arial, sans-serif`;
+    g.fillStyle = "#f4f4f0";
+    pent(9);
+    g.fill();
+    g.fillStyle = "#111";
+    g.font = `bold ${Math.round(h * 0.42)}px Helvetica, Arial, sans-serif`;
     g.textAlign = "center";
     g.textBaseline = "middle";
-    g.fillText("T", w * 0.5, h * 0.755);
-  });
+    g.fillText(text, w / 2, h * 0.64);
+  }, false);
 }
 
-/** Heavy-rail car side: brushed stainless, a stripe in the line color, three door pairs. */
-export function railcarSideTexture(lineColor: string) {
-  return make(`railcar-${lineColor}`, 1024, 256, (g, w, h) => {
-    g.fillStyle = "#c6cbd1";
+export function resumeSpeedTexture() {
+  return make("resume-speed", 256, 128, (g, w, h) => {
+    g.fillStyle = "#0a6b3a";
     g.fillRect(0, 0, w, h);
-    for (let x = 0; x < w; x += 3) {
-      g.fillStyle = `rgba(255,255,255,${rand() * 0.12})`;
-      g.fillRect(x, 0, 1, h);
-    }
-    g.fillStyle = lineColor;
-    g.fillRect(0, h * 0.62, w, h * 0.07);
-    g.fillRect(0, h * 0.14, w, h * 0.03);
-    g.fillStyle = "#43474d";
-    g.fillRect(0, h * 0.88, w, h * 0.12);
-    for (let i = 0; i < 3; i++) {
-      const x = w * (0.13 + i * 0.32);
-      g.fillStyle = "#5c636b";
-      g.fillRect(x, h * 0.18, w * 0.09, h * 0.7);
-      g.fillStyle = "#f3cc8d";
-      g.fillRect(x + 5, h * 0.24, w * 0.035, h * 0.3);
-      g.fillRect(x + w * 0.05, h * 0.24, w * 0.035, h * 0.3);
-      const wx = x + w * 0.12;
-      const lit = g.createLinearGradient(0, h * 0.22, 0, h * 0.56);
-      lit.addColorStop(0, "#27303f");
-      lit.addColorStop(1, "#f6cf90");
-      g.fillStyle = lit;
-      g.fillRect(wx, h * 0.24, w * 0.15, h * 0.32);
-    }
-  });
-}
-
-export function trainFrontTexture(bodyColor: string, stripe: string, destination: string) {
-  return make(`front-${bodyColor}-${destination}`, 256, 256, (g, w, h) => {
-    g.fillStyle = bodyColor;
-    g.fillRect(0, 0, w, h);
-    g.fillStyle = "#16202c";
-    g.fillRect(w * 0.08, h * 0.2, w * 0.84, h * 0.4);
-    g.fillStyle = "#0a0a0a";
-    g.fillRect(w * 0.18, h * 0.08, w * 0.64, h * 0.1);
-    g.fillStyle = "#ffb347";
-    g.font = `bold ${Math.round(h * 0.07)}px Helvetica, Arial, sans-serif`;
+    g.strokeStyle = "#f4f4f0";
+    g.lineWidth = 6;
+    g.strokeRect(6, 6, w - 12, h - 12);
+    g.fillStyle = "#f4f4f0";
+    g.font = `bold ${Math.round(h * 0.3)}px Helvetica, Arial, sans-serif`;
     g.textAlign = "center";
     g.textBaseline = "middle";
-    g.fillText(destination, w / 2, h * 0.13);
-    g.fillStyle = stripe;
-    g.fillRect(0, h * 0.68, w, h * 0.08);
-    g.fillStyle = "#fffbe6";
-    g.beginPath();
-    g.roundRect(w * 0.1, h * 0.8, w * 0.16, h * 0.07, 6);
-    g.roundRect(w * 0.74, h * 0.8, w * 0.16, h * 0.07, 6);
-    g.fill();
-    g.fillStyle = "#3b3e43";
-    g.fillRect(0, h * 0.9, w, h * 0.1);
+    g.fillText("RESUME", w / 2, h * 0.36);
+    g.fillText("SPEED", w / 2, h * 0.7);
   }, false);
 }
 
