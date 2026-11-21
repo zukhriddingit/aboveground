@@ -176,6 +176,7 @@ const labels: LayerSpecification[] = [
       "text-letter-spacing": 0.12, "text-offset": [1.4, 0.4], "text-anchor": "left", "text-max-width": 16,
       "text-allow-overlap": true },
     paint: { "text-color": ["case", ["get", "alert"], "#ffb4bc", "#e3ebf7"],
+      "text-opacity": ["interpolate", ["linear"], ["zoom"], 16.1, 1, 17.8, .16, 18.35, 0],
       "text-halo-color": "#070b1a", "text-halo-width": 1.8 } },
 ];
 

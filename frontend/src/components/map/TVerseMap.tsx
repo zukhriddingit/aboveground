@@ -9,7 +9,7 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import type { FeatureCollection, LineString, Point } from "geojson";
 import { MOCK_LINES } from "@/lib/mockData";
 import { BOSTON_CENTER } from "@/lib/theme";
-import type { Station } from "@/types/tverse";
+import type { Station, StationId } from "@/types/tverse";
 import { toLngLat } from "./geo";
 import MapAnchor from "./MapAnchor";
 import { MapOverlayContext, OverlayHub } from "./mapContext";
@@ -20,6 +20,17 @@ import { ThreeOverlayLayer } from "./ThreeOverlayLayer";
 import type { FlyOptions, TVerseMapHandle, TVerseMapProps } from "./types";
 
 const OVERVIEW = { center: BOSTON_CENTER, zoom: 14, pitch: 60, bearing: -15 };
+// Approach along the median, square, Common, or street facing the entrance.
+const ENTRANCE_VIEWS: Partial<Record<StationId, FlyOptions>> = {
+  "place-bucen": { bearing: 14, pitch: 51 },
+  "place-boyls": { bearing: 133, pitch: 49 },
+  "place-pktrm": { bearing: 104, pitch: 45 },
+  "place-kencl": { bearing: 22, pitch: 42 },
+  "place-hymnl": { bearing: 35, pitch: 27 },
+  "place-coecl": { bearing: 131, pitch: 38 },
+  "place-harsq": { bearing: 52, pitch: 35 },
+  "place-knncl": { bearing: 208, pitch: 30 },
+};
 /** Zoom 14 on a ~1500 px wide screen; a bit further out on smaller ones so BU Central -> Park St fits. */
 const overviewZoom = (width: number) => Math.min(14.4, Math.max(13.3, 14 + Math.log2(Math.max(320, width) / 1500)));
 const RIDE_CAMERA = { zoom: 15.85, pitch: 64, bearingOffset: -38 };
@@ -177,6 +188,7 @@ export default function TVerseMap(props: TVerseMapProps) {
         hub.connect((lng, lat, alt) => layer.project(lng, lat, alt));
         const lines = p.linesGeoJson?.features?.length ? p.linesGeoJson : MOCK_LINES;
         m.getSource<maplibregl.GeoJSONSource>("lines")?.setData(lines);
+        layer.setLines(lines);
         const rideLine: FeatureCollection<LineString> = {
           type: "FeatureCollection",
           features: [{ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: RIDE_COORDS } }],
@@ -275,6 +287,7 @@ export default function TVerseMap(props: TVerseMapProps) {
   useEffect(() => {
     const lines = linesGeoJson?.features?.length ? linesGeoJson : MOCK_LINES;
     mapRef.current?.getSource<maplibregl.GeoJSONSource>("lines")?.setData(lines);
+    layerRef.current?.setLines(lines);
   }, [linesGeoJson, ready]);
 
   useEffect(() => {
@@ -388,7 +401,10 @@ export default function TVerseMap(props: TVerseMapProps) {
       flyTo: fly,
       flyToStation(id, o) {
         const s = latest.current.stations.find(st => st.id === id);
-        if (s) fly(s.lng, s.lat, o);
+        if (s) {
+          const [lng, lat] = layerRef.current?.entranceLngLat(id) ?? [s.lng, s.lat];
+          fly(lng, lat, { ...ENTRANCE_VIEWS[id], ...o });
+        }
       },
       resetView() {
         const m = mapRef.current;
