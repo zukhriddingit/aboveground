@@ -1,0 +1,4 @@
+# T-Feed (backend/community.py). Member 1's main requirements.txt should already cover these.
+fastapi>=0.110
+uvicorn[standard]>=0.29
+pydantic>=2.6

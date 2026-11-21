@@ -11,3 +11,6 @@ venv/
 .vscode/
 .idea/
 .claude/settings.local.json
+# T-Feed: backend/community.py mirrors the live feed here
+backend/community_data.json
+backend/community_data.json.tmp
