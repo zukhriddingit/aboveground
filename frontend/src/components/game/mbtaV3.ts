@@ -1,0 +1,362 @@
+// Live data straight from the MBTA V3 API (https://api-v3.mbta.com, JSON:API), read in the browser:
+// vehicles, service alerts, predictions and the station list. No key is needed (about 20 requests a
+// minute per IP); NEXT_PUBLIC_MBTA_API_KEY raises that to 1,000. Polling here stays under 10 a minute.
+import { occupancyToCrowdedness } from "@/components/map";
+import { routeLine } from "@/lib/theme";
+import type { Station, StationId, TrainVehicle } from "@/types/tverse";
+import type { GameKind } from "./alertTranslator";
+
+const BASE = "https://api-v3.mbta.com";
+const KEY = process.env.NEXT_PUBLIC_MBTA_API_KEY;
+/** Routes drawn on the map. */
+export const MAP_ROUTES = ["Red", "Orange", "Blue", "Green-B", "Green-C", "Green-D", "Green-E"];
+/** Routes whose alerts we show (Mattapan has stations even though the map has no line for it). */
+export const ALERT_ROUTES = [...MAP_ROUTES, "Mattapan"];
+/** A vehicle that hasn't reported in this long is a ghost; drop it. */
+const STALE_VEHICLE_MS = 3 * 60_000;
+const STATIONS_CACHE = "tverse-mbta-stations-v1";
+const DAY_MS = 24 * 60 * 60_000;
+
+let rateLimitedUntil = 0;
+
+interface Resource<A> {
+  id: string;
+  type: string;
+  attributes: A;
+  relationships?: Record<string, { data?: { id: string; type: string } | null }>;
+}
+interface Doc<A, I = unknown> {
+  data: Array<Resource<A>>;
+  included?: Array<Resource<I>>;
+}
+
+async function v3<A, I = unknown>(path: string, signal?: AbortSignal): Promise<Doc<A, I>> {
+  if (Date.now() < rateLimitedUntil) throw new Error("Waiting out the MBTA API rate limit");
+  const res = await fetch(`${BASE}${path}`, { signal, cache: "no-store", headers: KEY ? { "x-api-key": KEY } : undefined });
+  if (res.status === 429) {
+    rateLimitedUntil = Date.now() + 60_000;
+    throw new Error("MBTA API rate limit");
+  }
+  if (!res.ok) throw new Error(`MBTA API ${path.split("?")[0]} answered HTTP ${res.status}`);
+  const doc = (await res.json()) as Doc<A, I>;
+  if (!Array.isArray(doc?.data)) throw new Error("MBTA API returned no data");
+  return doc;
+}
+
+const time = (iso: string | null | undefined) => (iso ? Date.parse(iso) : NaN);
+
+// ---------------------------------------------------------------- vehicles
+
+/** Live trains on every map route, with ghosts (no update for 3 minutes) filtered out. */
+export async function fetchVehicles(signal?: AbortSignal, now = Date.now()): Promise<TrainVehicle[]> {
+  const doc = await v3<{
+    latitude: number | null;
+    longitude: number | null;
+    bearing: number | null;
+    occupancy_status: string | null;
+    updated_at: string | null;
+  }>(`/vehicles?filter[route]=${MAP_ROUTES.join(",")}&fields[vehicle]=latitude,longitude,bearing,occupancy_status,updated_at`, signal);
+  const out: TrainVehicle[] = [];
+  for (const r of doc.data) {
+    const route = r.relationships?.route?.data?.id;
+    const { latitude: lat, longitude: lng, bearing, occupancy_status, updated_at } = r.attributes;
+    if (!route || typeof lat !== "number" || typeof lng !== "number") continue;
+    const updated = time(updated_at);
+    if (Number.isFinite(updated) && now - updated > STALE_VEHICLE_MS) continue;
+    out.push({
+      id: r.id,
+      route,
+      lat,
+      lng,
+      bearing: typeof bearing === "number" ? bearing : 0,
+      crowdedness: occupancyToCrowdedness(occupancy_status, r.id),
+    });
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------- stations (GTFS stops)
+
+export interface MbtaStation {
+  id: string;
+  name: string;
+  lng: number;
+  lat: number;
+}
+
+export interface StationIndex {
+  stations: Map<string, MbtaStation>;
+  /** Platform stop id (e.g. "70158") -> parent station id ("place-boyls"). */
+  parentOf: Map<string, string>;
+}
+
+function readCachedStations(): StationIndex | null {
+  try {
+    const raw = window.localStorage.getItem(STATIONS_CACHE);
+    if (!raw) return null;
+    const cached = JSON.parse(raw) as { at: number; stations: MbtaStation[]; parentOf: Array<[string, string]> };
+    if (Date.now() - cached.at > DAY_MS || !cached.stations?.length) return null;
+    return { stations: new Map(cached.stations.map((s) => [s.id, s])), parentOf: new Map(cached.parentOf) };
+  } catch {
+    return null;
+  }
+}
+
+/** Every subway and light-rail station with its platforms. Static, so it's cached for a day. */
+export async function fetchStations(signal?: AbortSignal): Promise<StationIndex> {
+  const cached = readCachedStations();
+  if (cached) return cached;
+  type StopAttrs = { name: string; latitude: number; longitude: number };
+  const doc = await v3<StopAttrs, StopAttrs>(
+    "/stops?filter[route_type]=0,1&include=parent_station&fields[stop]=name,latitude,longitude",
+    signal,
+  );
+  const stations = new Map<string, MbtaStation>();
+  const parentOf = new Map<string, string>();
+  const add = (r: Resource<StopAttrs>) =>
+    stations.set(r.id, { id: r.id, name: r.attributes.name, lat: r.attributes.latitude, lng: r.attributes.longitude });
+  for (const p of doc.included ?? []) add(p);
+  for (const stop of doc.data) {
+    const parent = stop.relationships?.parent_station?.data?.id;
+    if (parent) parentOf.set(stop.id, parent);
+    else add(stop);
+  }
+  try {
+    window.localStorage.setItem(
+      STATIONS_CACHE,
+      JSON.stringify({ at: Date.now(), stations: [...stations.values()], parentOf: [...parentOf] }),
+    );
+  } catch {
+    // storage full or blocked; we'll just fetch again next time
+  }
+  return { stations, parentOf };
+}
+
+// ---------------------------------------------------------------- alerts
+
+export interface LiveAlert {
+  id: string;
+  effect: string;
+  cause: string;
+  header: string;
+  shortHeader: string;
+  /** Rider instructions and details, if the MBTA published them. */
+  description: string | null;
+  severity: number;
+  lifecycle: string;
+  /** The MBTA's own short wording for when it applies, e.g. "through December 10". */
+  timeframe: string | null;
+  url: string | null;
+  updatedAt: number;
+  periods: Array<{ start: number; end: number | null }>;
+  routes: string[];
+  /** Parent station ids it names. */
+  stations: string[];
+  /** Closes or suspends service at its stations (the map's red X). A delay alone never does. */
+  closure: boolean;
+}
+
+export const CLOSURE_EFFECTS = new Set(["SUSPENSION", "SHUTTLE", "STATION_CLOSURE", "STOP_CLOSURE"]);
+
+export function isActive(alert: LiveAlert, now = Date.now()) {
+  return alert.periods.some((p) => p.start <= now && (p.end === null || now < p.end));
+}
+
+interface AlertAttrs {
+  effect: string;
+  cause: string;
+  header: string;
+  short_header: string | null;
+  description: string | null;
+  severity: number;
+  lifecycle: string;
+  timeframe: string | null;
+  url: string | null;
+  updated_at: string;
+  active_period: Array<{ start: string; end: string | null }>;
+  informed_entity: Array<{ route?: string; stop?: string; activities?: string[] }>;
+}
+
+/** Alerts in effect right now on the subway and light rail. */
+export async function fetchAlerts(index: StationIndex | null, signal?: AbortSignal, now = Date.now()): Promise<LiveAlert[]> {
+  const doc = await v3<AlertAttrs>(
+    `/alerts?filter[route]=${ALERT_ROUTES.join(",")}&filter[datetime]=NOW&fields[alert]=effect,cause,header,short_header,description,severity,lifecycle,timeframe,url,updated_at,active_period,informed_entity`,
+    signal,
+  );
+  const alerts: LiveAlert[] = [];
+  for (const r of doc.data) {
+    const a = r.attributes;
+    const routes = new Set<string>();
+    const stations = new Set<string>();
+    for (const e of a.informed_entity ?? []) {
+      if (e.route) routes.add(e.route);
+      if (e.stop) stations.add(index?.parentOf.get(e.stop) ?? e.stop);
+    }
+    const periods = (a.active_period ?? []).map((p) => ({ start: time(p.start), end: p.end ? time(p.end) : null }));
+    const alert: LiveAlert = {
+      id: r.id,
+      effect: a.effect,
+      cause: a.cause,
+      header: a.header,
+      shortHeader: a.short_header || a.header,
+      description: a.description,
+      severity: a.severity,
+      lifecycle: a.lifecycle,
+      timeframe: a.timeframe,
+      url: a.url,
+      updatedAt: time(a.updated_at),
+      periods,
+      routes: [...routes],
+      stations: [...stations].filter((id) => !index || index.stations.has(id)),
+      closure: false,
+    };
+    alert.closure = CLOSURE_EFFECTS.has(alert.effect) && alert.stations.length > 0;
+    if (periods.length === 0 || isActive(alert, now)) alerts.push(alert);
+  }
+  return alerts.sort((x, y) => Number(y.closure) - Number(x.closure) || y.severity - x.severity || y.updatedAt - x.updatedAt);
+}
+
+const humanize = (s: string) => s.charAt(0) + s.slice(1).toLowerCase().replace(/_/g, " ");
+
+export function effectLabel(alert: Pick<LiveAlert, "effect" | "header">) {
+  switch (alert.effect) {
+    case "STATION_CLOSURE":
+      return /not stopping|bypass/i.test(alert.header) ? "Trains skip" : "Station closed";
+    case "STOP_CLOSURE":
+      return "Stop closed";
+    case "SHUTTLE":
+      return "Shuttle buses";
+    case "SUSPENSION":
+      return "No train service";
+    default:
+      return humanize(alert.effect);
+  }
+}
+
+export function causeLabel(cause: string) {
+  return cause === "UNKNOWN_CAUSE" || cause === "OTHER_CAUSE" ? null : humanize(cause);
+}
+
+/** When it applies, in the MBTA's words if they gave any. */
+export function whenLabel(alert: LiveAlert, now = Date.now()) {
+  if (alert.timeframe) return alert.timeframe.charAt(0).toUpperCase() + alert.timeframe.slice(1);
+  const current = alert.periods.find((p) => p.start <= now && (p.end === null || now < p.end)) ?? alert.periods[0];
+  if (!current) return null;
+  if (current.end === null) return "Until further notice";
+  const end = new Date(current.end);
+  const sameDay = end.toDateString() === new Date(now).toDateString();
+  return `Until ${end.toLocaleString(undefined, sameDay ? { hour: "numeric", minute: "2-digit" } : { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}`;
+}
+
+// ---------------------------------------------------------------- the tunnel game, from the published cause
+
+const SCENARIOS: Array<[RegExp, GameKind, string]> = [
+  [/SIGNAL/, "WIRE_MATCH", "signal repair"],
+  [/SWITCH/, "SWITCH_THROW", "switch repair"],
+  [/POWER|ELECTRICAL/, "BREAKER_SEQUENCE", "power repair"],
+  [/DISABLED_TRAIN|MECHANICAL|BRAKE/, "RESCUE_COUPLE", "disabled-train rescue"],
+  [/SNOW|SLIPPERY|FREEZ/, "ICE_THAW", "frozen-switch thaw"],
+  [/TRACK|RAIL_DEFECT|TIE_REPLACEMENT|MAINTENANCE|SPEED_RESTRICTION/, "TRACK_WELD", "track repair"],
+];
+
+/** The simulated repair that illustrates the MBTA's published cause, or null when there's nothing to fix by hand. */
+export function scenarioFor(cause: string): { game: GameKind; label: string } | null {
+  for (const [re, game, label] of SCENARIOS) if (re.test(cause)) return { game, label };
+  return null;
+}
+
+const NEAREST_MAX_METERS = 1500;
+
+const ALIASES: Partial<Record<StationId, string[]>> = {
+  "place-pktrm": ["Park St"],
+  "place-hymnl": ["Hynes"],
+  "place-knncl": ["Kendall"],
+  "place-bucen": ["BU Central", "Boston University Central"],
+};
+
+/**
+ * Which of the map's featured stations to stage a simulated repair at: one the alert names as an
+ * entity, then one named in its text ("at Copley"), then (if allowed) the featured station on the
+ * same line nearest to where the alert is.
+ */
+export function featuredStationFor(alert: LiveAlert, featured: Station[], index: StationIndex | null, allowNearest = true): Station | null {
+  const lines = new Set(alert.routes.map(routeLine));
+  const onLine = featured.filter((s) => lines.has(s.line));
+  const direct = featured.find((s) => alert.stations.includes(s.id));
+  if (direct) return direct;
+  const text = alert.header.toLowerCase();
+  const named = onLine.find((s) => [s.name, ...(ALIASES[s.id] ?? [])].some((n) => text.includes(n.toLowerCase())));
+  if (named || !allowNearest) return named ?? null;
+  const where = alert.stations.map((id) => index?.stations.get(id)).find(Boolean);
+  if (!where || !onLine.length) return null;
+  const meters = (s: Station) => Math.hypot((s.lng - where.lng) * 82_000, (s.lat - where.lat) * 111_000);
+  const nearest = onLine.reduce((best, s) => (meters(s) < meters(best) ? s : best));
+  // Further than this and staging it there would put the repair somewhere the MBTA didn't report.
+  return meters(nearest) <= NEAREST_MAX_METERS ? nearest : null;
+}
+
+// ---------------------------------------------------------------- predictions
+
+export interface Arrival {
+  id: string;
+  route: string;
+  directionId: number;
+  headsign: string;
+  /** When to count down to: departure, else arrival (ms). */
+  at: number;
+  arrival: number | null;
+  departure: number | null;
+  status: string | null;
+}
+
+/** Upcoming trains at a set of stations, in one request; keyed by parent station id. */
+export async function fetchArrivals(stationIds: string[], index: StationIndex | null, signal?: AbortSignal, now = Date.now()) {
+  type PredAttrs = {
+    arrival_time: string | null;
+    departure_time: string | null;
+    direction_id: number;
+    schedule_relationship: string | null;
+    status: string | null;
+    trip_headsign?: string | null;
+  };
+  const doc = await v3<PredAttrs, { headsign: string }>(
+    `/predictions?filter[stop]=${stationIds.join(",")}&include=trip&fields[prediction]=arrival_time,departure_time,direction_id,schedule_relationship,status,trip_headsign&fields[trip]=headsign`,
+    signal,
+  );
+  const headsigns = new Map((doc.included ?? []).filter((i) => i.type === "trip").map((t) => [t.id, t.attributes.headsign]));
+  const byStation = new Map<string, Arrival[]>(stationIds.map((id) => [id, []]));
+  for (const p of doc.data) {
+    const a = p.attributes;
+    if (a.schedule_relationship === "SKIPPED" || a.schedule_relationship === "CANCELLED") continue;
+    const arrival = time(a.arrival_time);
+    const departure = time(a.departure_time);
+    const at = Number.isFinite(departure) ? departure : arrival;
+    // Departure-only predictions at a terminal count; arrival-only ones are trains ending here.
+    if (!Number.isFinite(at) || !Number.isFinite(departure) || at < now - 30_000) continue;
+    const stop = p.relationships?.stop?.data?.id ?? "";
+    const station = index?.parentOf.get(stop) ?? (byStation.has(stop) ? stop : null);
+    if (!station || !byStation.has(station)) continue;
+    const trip = p.relationships?.trip?.data?.id ?? "";
+    byStation.get(station)!.push({
+      id: p.id,
+      route: p.relationships?.route?.data?.id ?? "",
+      directionId: a.direction_id,
+      headsign: a.trip_headsign || headsigns.get(trip) || "",
+      at,
+      arrival: Number.isFinite(arrival) ? arrival : null,
+      departure: Number.isFinite(departure) ? departure : null,
+      status: a.status,
+    });
+  }
+  for (const list of byStation.values()) list.sort((x, y) => x.at - y.at);
+  return byStation;
+}
+
+/** MBTA countdown wording: Boarding, Arriving, Approaching, then minutes. */
+export function countdownLabel(a: Arrival, now = Date.now()) {
+  if (a.arrival !== null && a.arrival <= now && (a.departure ?? 0) > now) return "Boarding";
+  const secs = Math.round((a.at - now) / 1000);
+  if (secs <= 30) return "Arriving";
+  if (secs <= 60) return "Approaching";
+  return `${Math.round(secs / 60)} min`;
+}

@@ -19,11 +19,14 @@ export function IncidentTag({
   repairing,
   getZoom,
   onOpen,
+  live = false,
 }: {
   station: Station;
   alert: TranslatedAlert;
   sim: IncidentSim;
   repairing: boolean;
+  /** A live MBTA alert (the repair it offers is a simulation). */
+  live?: boolean;
   getZoom: () => number;
   onOpen: (alert: TranslatedAlert) => void;
 }) {
@@ -55,7 +58,9 @@ export function IncidentTag({
             ? "· repairing"
             : stats
               ? `· ${stats.heldTrains} holding · ${formatElapsed(stats.elapsedMs)}`
-              : "· tap to fix"}
+              : live
+                ? "· live alert"
+                : "· tap to fix"}
         </span>
       </button>
     </MapAnchor>
