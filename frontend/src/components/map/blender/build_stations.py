@@ -182,11 +182,7 @@ class Asset:
         bpy.ops.export_scene.gltf(filepath=str(directory / f"{self.name}.glb"), export_format='GLB',
                                   use_selection=True, export_yup=True, export_apply=True, export_extras=True,
                                   export_cameras=False, export_lights=False, export_animations=False,
-                                  export_image_format="WEBP", export_image_quality=80,
                                   export_texcoords=True, export_draco_mesh_compression_enable=False)
-
-        from station_pack import compact_geometry
-        compact_geometry(directory / f"{self.name}.glb")
 
     def finish(self):
         self.build_meshes()
@@ -601,8 +597,6 @@ def main():
         if scene != current and scene.get("tverseLibrary"):
             bpy.data.scenes.remove(scene)
     palette()
-    from station_surfaces import apply_surfaces
-    apply_surfaces(MATERIALS)
     assets = []
     for name, build in [("headhouse_historic", historic_station), ("headhouse_modern", modern_station),
                         ("surface_platform", surface_station), ("alert_signal", signal_box)]:
@@ -627,7 +621,7 @@ if __name__ == "__main__":
         if added_directory:
             sys.path.insert(0, directory)
         sys.modules["build_stations"] = sys.modules[__name__]
-        for helper in ("station_sites", "station_studio", "station_surfaces", "station_pack"):
+        for helper in ("station_sites", "station_studio"):
             sys.modules.pop(helper, None)
         main()
     finally:

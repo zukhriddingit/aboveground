@@ -137,9 +137,9 @@ def studio_scene(site, gallery):
     cam = linked(name + " reference camera", bpy.data.cameras.new(name), stage)
     scene.camera = cam
     for label, pos, color, energy, angle in [
-        ("Evening sun", (-5, -6, 5), (1, 0.86, 0.72), 2.9, 0.29),
-        ("Sky fill", (3, -1, 4), (0.67, 0.81, 1), 0.95, 0.6),
-        ("Roof rim", (2, 5, 3), (0.80, 0.91, 1), 2.4, 0.36),
+        ("Evening sun", (-4, -5, 7), (1, 0.82, 0.65), 3.4, 0.29),
+        ("Sky fill", (3, -1, 4), (0.65, 0.79, 1), 1.45, 0.6),
+        ("Roof rim", (1, 5, 4), (0.80, 0.91, 1), 2.1, 0.36),
     ]:
         light = bpy.data.lights.new(label, "SUN")
         light.energy = energy
