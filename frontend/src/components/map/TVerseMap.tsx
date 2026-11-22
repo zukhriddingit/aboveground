@@ -17,6 +17,7 @@ import { POCKET_CITIES } from "./pocketCities";
 import { pickFlat, registerTransitIcons, setFlatStations, setFlatTrains } from "./flatTransit";
 import { getMapEngine, loadMapLibrary, standardMap, switchMapEngine } from "./mapEngine";
 import { useMapLighting } from "./mapTheme";
+import { applyMapWeather, cycleWeatherOverride, useMapWeather, type WeatherOverride } from "./mapWeather";
 import { addStandardTransit, createMapStyle, setBasemapMode, setTransitVisibility } from "./mapStyle";
 import { DemoRide, RIDE_COORDS, RIDE_STOPS } from "./rideRoute";
 import { ThreeOverlayLayer } from "./ThreeOverlayLayer";
@@ -166,6 +167,8 @@ export default function TVerseMap(props: TVerseMapProps) {
   const overlay = useMemo(() => ({ project: hub.project, subscribe: hub.subscribe, visibleLayers: layers, viewMode }), [hub, layers, viewMode]);
   const [ride] = useState(() => new RideState());
   const [ready, setReady] = useState(false);
+  const weather = useMapWeather();
+  const [weatherNote, setWeatherNote] = useState<string | null>(null);
   const [info, setInfo] = useState<Info>(null);
   /** Station whose Pocket City "Street view" is open over the map. */
   const [streetView, setStreetView] = useState<StationId | null>(null);
@@ -520,6 +523,40 @@ export default function TVerseMap(props: TVerseMapProps) {
 
   // ------------------------------------------------------------ imperative handle
 
+  // Live Boston weather over the Mapbox map (rain or snow; the MapLibre fallback has none). Off in 2D.
+  useEffect(() => {
+    const m = mapRef.current, standard = m && standardMap(m);
+    if (!standard || !ready) return;
+    applyMapWeather(standard, viewMode === "2d" ? null : weather.kind, theme === "dark");
+  }, [weather.kind, ready, theme, viewMode]);
+
+  // Shift+W cycles a demo override (Live → Rain → Snow → Clear), for a dry night on stage.
+  const liveWeather = useRef(weather.live);
+  useEffect(() => {
+    liveWeather.current = weather.live;
+  }, [weather.live]);
+  useEffect(() => {
+    let hide: number | undefined;
+    const label = (o: WeatherOverride) => {
+      const live = liveWeather.current;
+      const base = o ? `Weather: ${o} (demo) · Shift+W to cycle` : `Weather: live${live ? ` · ${live.tempF != null ? `${live.tempF}°F, ` : ""}${live.text.toLowerCase()}` : ""}`;
+      return mapRef.current && standardMap(mapRef.current) ? base : `${base} · shows in Street view (the Mapbox map draws it too)`;
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (!event.shiftKey || event.key.toLowerCase() !== "w" || event.repeat || event.ctrlKey || event.metaKey || event.altKey) return;
+      if (event.target instanceof HTMLElement && (event.target.isContentEditable || event.target.closest("input, textarea, select"))) return;
+      event.preventDefault();
+      setWeatherNote(label(cycleWeatherOverride()));
+      window.clearTimeout(hide);
+      hide = window.setTimeout(() => setWeatherNote(null), 2600);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.clearTimeout(hide);
+    };
+  }, []);
+
   useImperativeHandle(ref, (): TVerseMapHandle => {
     const fly = (lng: number, lat: number, o: FlyOptions = {}) => {
       const m = mapRef.current;
@@ -622,6 +659,11 @@ export default function TVerseMap(props: TVerseMapProps) {
           )}
         </div>
       </MapOverlayContext.Provider>
+      {weatherNote && (
+        <div className="pointer-events-none fixed inset-x-0 top-20 z-[60] flex justify-center px-4" aria-live="polite">
+          <span className="rounded-full border border-white/12 bg-zinc-950/88 px-3.5 py-1.5 text-xs text-zinc-100 backdrop-blur-xl">{weatherNote}</span>
+        </div>
+      )}
       {streetView && (
         <PocketCityOverlay stationId={streetView} onClose={() => {
           setStreetView(null);

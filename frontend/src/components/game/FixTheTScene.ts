@@ -689,25 +689,31 @@ export class FixTheTScene {
     this.lastSync = t;
     const incidents = [...this.sim.incidents.values()];
     const sig = incidents.map((i) => `${i.id}:${i.status}`).join("|");
-    if (sig !== this.signature) {
-      this.signature = sig;
-      const features = incidents.flatMap((incident) =>
-        incident.routes.flatMap((route) =>
-          (TRACKS[route] ?? []).flatMap((track) => {
-            const d = this.sim.stationD(track, incident.stationId);
-            if (d === null) return [];
-            return [{
-              type: "Feature" as const,
-              properties: { status: incident.status },
-              geometry: { type: "LineString" as const, coordinates: sliceTrack(track, d - 700, d + 700) },
-            }];
-          }),
-        ),
-      );
-      this.map.getSource<GeoJSONSource>(TRACK_SOURCE)?.setData({ type: "FeatureCollection", features });
-    }
-    if (this.signature && this.map.getLayer(TRACK_LAYER)) {
-      this.map.setPaintProperty(TRACK_LAYER, "line-opacity", 0.55 + 0.4 * Math.sin(t / 180));
+    // Mapbox throws (MapLibre returns undefined) when asked for a layer while its style is between loads or gone:
+    // skip this sync and try again on the next frame.
+    try {
+      if (sig !== this.signature) {
+        const features = incidents.flatMap((incident) =>
+          incident.routes.flatMap((route) =>
+            (TRACKS[route] ?? []).flatMap((track) => {
+              const d = this.sim.stationD(track, incident.stationId);
+              if (d === null) return [];
+              return [{
+                type: "Feature" as const,
+                properties: { status: incident.status },
+                geometry: { type: "LineString" as const, coordinates: sliceTrack(track, d - 700, d + 700) },
+              }];
+            }),
+          ),
+        );
+        this.map.getSource<GeoJSONSource>(TRACK_SOURCE)?.setData({ type: "FeatureCollection", features });
+        this.signature = sig;
+      }
+      if (this.signature && this.map.getLayer(TRACK_LAYER)) {
+        this.map.setPaintProperty(TRACK_LAYER, "line-opacity", 0.55 + 0.4 * Math.sin(t / 180));
+      }
+    } catch {
+      this.lastSync = 0;
     }
   }
 
