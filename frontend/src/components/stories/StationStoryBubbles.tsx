@@ -5,7 +5,7 @@ import type { Station, StationId, StationStory, StoryCategory } from "@/types/tv
 import { MapAnchor } from "@/components/map";
 import { MapOverlayContext } from "@/components/map/mapContext";
 import { LINE_COLORS } from "@/lib/theme";
-import { CATEGORY_META } from "./storyData";
+import { CATEGORY_ICON } from "./storyData";
 import { StoryStyles } from "./StoryStyles";
 
 type StoriesByStation = Partial<Record<StationId, StationStory[]>>;
@@ -154,7 +154,7 @@ function StoryBubble({
   onClick: () => void;
 }) {
   const latest = stories[0];
-  const meta = CATEGORY_META[dominantCategory(stories)];
+  const CatIcon = CATEGORY_ICON[dominantCategory(stories)];
   const [failedSrc, setFailedSrc] = useState<string | null>(null);
   const size = compact ? 56 : 52;
   const showImg = !!latest.imageUrl && failedSrc !== latest.imageUrl;
@@ -179,8 +179,8 @@ function StoryBubble({
               onError={() => setFailedSrc(latest.imageUrl)}
             />
           ) : (
-            <div className="flex h-full w-full items-center justify-center bg-zinc-800 text-2xl">
-              {meta.emoji}
+            <div className="flex h-full w-full items-center justify-center bg-zinc-800 text-white/70">
+              <CatIcon size={22} aria-hidden />
             </div>
           )}
         </div>
@@ -189,7 +189,6 @@ function StoryBubble({
         >
           {stories.length}
         </span>
-        <span className="absolute -bottom-0.5 -left-0.5 text-base drop-shadow">{meta.emoji}</span>
       </div>
       <span
         className="flex max-w-[96px] items-center gap-1 rounded-md border border-white/12 bg-zinc-950/88 px-1.5 py-0.5 text-[10px] font-semibold text-white backdrop-blur-xl"

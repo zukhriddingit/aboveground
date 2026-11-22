@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Station, StationStory } from "@/types/tverse";
-import { CATEGORY_META, stationName, timeAgo } from "./storyData";
+import { ChevronLeft, ChevronRight, Footprints, MapPin, TrainFront, X } from "lucide-react";
+import { CATEGORY_ICON, CATEGORY_META, stationName, timeAgo } from "./storyData";
 import { StoryStyles } from "./StoryStyles";
 
 export interface StoryViewerModalProps {
@@ -111,6 +112,7 @@ function StoryViewer({
   }, [next, prev, onClose]);
 
   const cat = CATEGORY_META[story.category];
+  const CatIcon = CATEGORY_ICON[story.category];
   const imageFailed = !story.imageUrl || failedIds[story.id];
   const handle = story.author.replace(/^@/, "");
 
@@ -158,14 +160,14 @@ function StoryViewer({
         disabled={index === 0}
         className="absolute left-[calc(50%-min(25vh,230px)-64px)] hidden h-11 w-11 cursor-pointer items-center justify-center rounded-full bg-white/10 text-2xl text-white transition hover:bg-white/20 disabled:opacity-0 sm:flex"
       >
-        ‹
+        <ChevronLeft size={22} aria-hidden />
       </button>
       <button
         aria-label="Next story"
         onClick={next}
         className="absolute right-[calc(50%-min(25vh,230px)-64px)] hidden h-11 w-11 cursor-pointer items-center justify-center rounded-full bg-white/10 text-2xl text-white transition hover:bg-white/20 sm:flex"
       >
-        ›
+        <ChevronRight size={22} aria-hidden />
       </button>
 
       <div
@@ -173,8 +175,8 @@ function StoryViewer({
         style={{ animation: "tv-pop-in .3s cubic-bezier(.16,1,.3,1)" }}
       >
         {imageFailed ? (
-          <div className="absolute inset-0 flex items-center justify-center bg-zinc-900">
-            <span className="text-8xl">{cat.emoji}</span>
+          <div className="absolute inset-0 flex items-center justify-center bg-zinc-900 text-white/40">
+            <CatIcon size={72} strokeWidth={1.25} aria-hidden />
           </div>
         ) : (
           // eslint-disable-next-line @next/next/no-img-element -- data URLs + remote seeds
@@ -225,17 +227,18 @@ function StoryViewer({
             </div>
             <div className="min-w-0 flex-1 leading-tight">
               <div className="truncate text-sm font-semibold">{/\s/.test(handle) ? handle : `@${handle}`}</div>
-              <div className="truncate text-xs text-white/70">
-                🚇 {stationName(story.stationId, stations)} · {timeAgo(story.createdAt)}
+              <div className="flex items-center gap-1 truncate text-xs text-white/75">
+                <TrainFront size={12} aria-hidden className="shrink-0" />
+                {stationName(story.stationId, stations)} · {timeAgo(story.createdAt)}
                 {held && " · paused"}
               </div>
             </div>
             <button
               aria-label="Close story"
               onClick={onClose}
-              className="pointer-events-auto flex h-9 w-9 cursor-pointer items-center justify-center rounded-full bg-black/30 text-xl text-white backdrop-blur transition hover:bg-black/50"
+              className="pointer-events-auto flex h-9 w-9 cursor-pointer items-center justify-center rounded-full bg-black/30 text-white backdrop-blur transition hover:bg-black/50"
             >
-              ✕
+              <X size={18} aria-hidden />
             </button>
           </div>
         </div>
@@ -243,11 +246,11 @@ function StoryViewer({
         {/* Story details */}
         <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 space-y-3 p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
           <div className="flex flex-wrap items-center gap-2 text-xs font-semibold">
-            <span className="rounded-md border border-white/20 bg-black/55 px-2.5 py-1 text-white backdrop-blur-xl">
-              {cat.emoji} {cat.label}
+            <span className="flex items-center gap-1.5 rounded-md border border-white/20 bg-black/55 px-2.5 py-1 text-white backdrop-blur-xl">
+              <CatIcon size={13} aria-hidden /> {cat.label}
             </span>
             {story.priceTag && <span className="rounded-md bg-white px-2.5 py-1 text-zinc-950">{story.priceTag}</span>}
-            <span className="rounded-md border border-white/20 bg-black/55 px-2.5 py-1 backdrop-blur-xl">🚶 {story.walkMin} min from T exit</span>
+            <span className="flex items-center gap-1.5 rounded-md border border-white/20 bg-black/55 px-2.5 py-1 backdrop-blur-xl"><Footprints size={13} aria-hidden /> {story.walkMin} min from T exit</span>
           </div>
           <div>
             <h2 className="text-2xl font-bold leading-tight">{story.placeName}</h2>
@@ -257,7 +260,7 @@ function StoryViewer({
             onClick={walk}
             className="pointer-events-auto flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg bg-white py-3.5 text-base font-semibold text-zinc-950 transition hover:bg-zinc-200 active:scale-[.98] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
           >
-            📍 Walk Here · {story.walkMin} min
+            <MapPin size={17} aria-hidden /> Walk here · {story.walkMin} min
           </button>
         </div>
       </div>

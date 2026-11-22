@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { NewStationStory, StationId, StationStory } from "@/types/tverse";
 import { MOCK_STORIES } from "@/lib/mockData";
-import { API_URL } from "./storyData";
+import { API_URL, withSeedPhoto } from "./storyData";
 
 /** Fail fast (dead venue Wi-Fi, a tunnel): the demo keeps the stories it already has. */
 const FETCH_TIMEOUT_MS = 4000;
@@ -30,7 +30,7 @@ export function useStationStories({ apiUrl = API_URL, pollMs = 8000, fallback = 
   const apply = useCallback(
     (data: StationStory[] | null) => {
       setOnline(data !== null);
-      setServerStories((prev) => data ?? prev ?? fallback);
+      setServerStories((prev) => (data ? data.map(withSeedPhoto) : prev ?? fallback.map(withSeedPhoto)));
     },
     [fallback],
   );
