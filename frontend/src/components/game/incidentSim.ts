@@ -118,7 +118,10 @@ export class IncidentSim {
       if (!prev || prev.lng !== s.lng || prev.lat !== s.lat) moved = true;
       this.stations.set(s.id, s);
     }
-    if (moved) this.stationDCache.clear();
+    if (moved) {
+      this.stationDCache.clear();
+      this.stopsByTrack.clear();
+    }
   }
 
   stationXZ(id: StationId): XZ | null {
@@ -140,10 +143,16 @@ export class IncidentSim {
     return d;
   }
 
+  private readonly stopsByTrack = new Map<Track, Array<{ id: StationId; d: number }>>();
+
   private stopsOn(track: Track) {
-    return [...this.stations.keys()]
+    const cached = this.stopsByTrack.get(track);
+    if (cached) return cached;
+    const stops = [...this.stations.keys()]
       .map((id) => ({ id, d: this.stationD(track, id) }))
       .filter((s): s is { id: StationId; d: number } => s.d !== null);
+    this.stopsByTrack.set(track, stops);
+    return stops;
   }
 
   // ---------- train feed ----------
@@ -267,12 +276,14 @@ export class IncidentSim {
 
   // ---------- per-frame ----------
 
+  private readonly trackPoint = { x: 0, z: 0, angle: 0 };
+
   tick(now = performance.now()) {
     const dt = this.lastTick ? Math.min(1000, now - this.lastTick) : 16;
     this.lastTick = now;
     for (const incident of this.incidents.values()) this.joinQueue(incident);
 
-    for (const train of [...this.trains.values()]) {
+    for (const train of this.trains.values()) {
       if (train.mock) {
         this.advanceMock(train, dt, now);
       } else if (train.track) {
@@ -292,15 +303,19 @@ export class IncidentSim {
       if (train.stale && !train.hold) this.trains.delete(train.id);
     }
 
-    for (const incident of [...this.incidents.values()]) {
+    for (const incident of this.incidents.values()) {
       if (incident.status !== "restored") continue;
-      if (![...this.trains.values()].some((t) => t.hold?.incidentId === incident.id)) this.incidents.delete(incident.id);
+      let clearing = true;
+      for (const train of this.trains.values()) {
+        if (train.hold?.incidentId === incident.id) { clearing = false; break; }
+      }
+      if (clearing) this.incidents.delete(incident.id);
     }
   }
 
   private place(train: SimTrain) {
     if (!train.track) return;
-    const p = pointAt(train.track, train.dShown);
+    const p = pointAt(train.track, train.dShown, this.trackPoint);
     train.x = p.x;
     train.z = p.z;
     train.angle = train.sign > 0 ? p.angle : p.angle + Math.PI;
@@ -346,14 +361,15 @@ export class IncidentSim {
 
   private joinQueue(incident: Incident) {
     if (incident.status !== "active" || !incident.holds) return;
-    const candidates: Array<{ train: SimTrain; dist: number; dS: number }> = [];
+    let candidates: Array<{ train: SimTrain; dist: number; dS: number }> | undefined;
     for (const train of this.trains.values()) {
       if (train.hold || !train.track || !incident.routes.includes(train.route)) continue;
       const dS = this.stationD(train.track, incident.stationId);
       if (dS === null) continue;
       const dist = train.sign * (dS - train.dRaw);
-      if (dist > -40 && dist < QUEUE_WINDOW) candidates.push({ train, dist, dS });
+      if (dist > -40 && dist < QUEUE_WINDOW) (candidates ??= []).push({ train, dist, dS });
     }
+    if (!candidates) return;
     candidates.sort((a, b) => a.dist - b.dist);
     for (const { train, dist, dS } of candidates) {
       const queue = incident.queues[train.sign === 1 ? "1" : "-1"];
@@ -412,15 +428,22 @@ export class IncidentSim {
   }
 
   /** Held trains (amber rings) and just-released ones (green flashes), for the 3D effects layer. */
-  markers(now = performance.now()) {
-    const held: XZ[] = [];
-    const released: Array<XZ & { age: number }> = [];
+  markers(now = performance.now(), out: { held: XZ[]; released: Array<XZ & { age: number }> } = { held: [], released: [] }) {
+    const { held, released } = out;
+    let n = 0, m = 0;
     for (const t of this.trains.values()) {
       if (this.hidden.has(t.id)) continue;
-      if (t.held) held.push({ x: t.x, z: t.z });
-      else if (t.releasedAt !== null && now - t.releasedAt < 1400) released.push({ x: t.x, z: t.z, age: now - t.releasedAt });
+      if (t.held) {
+        const mark = held[n++] ??= { x: 0, z: 0 };
+        mark.x = t.x; mark.z = t.z;
+      } else if (t.releasedAt !== null && now - t.releasedAt < 1400) {
+        const mark = released[m++] ??= { x: 0, z: 0, age: 0 };
+        mark.x = t.x; mark.z = t.z; mark.age = now - t.releasedAt;
+      }
     }
-    return { held, released };
+    held.length = n;
+    released.length = m;
+    return out;
   }
 
   get trainCount() {

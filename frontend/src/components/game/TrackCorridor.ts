@@ -27,9 +27,24 @@ export class TrackCorridor {
       const p = pointAt(track, dS + s);
       this.samples.push({ s, x: p.x, z: p.z, tx: Math.cos(p.angle), tz: Math.sin(p.angle), angle: p.angle });
     }
+    // Ease lateral offsets and the walk camera around polyline corners. Four samples
+    // span a car length, avoiding a sudden change of heading at a survey vertex.
+    const last = this.samples.length - 1;
+    for (let i = 0; i <= last; i++) {
+      const a = this.samples[Math.max(0, i - 2)], b = this.samples[Math.min(last, i + 2)];
+      const len = Math.hypot(b.x - a.x, b.z - a.z);
+      if (len < .01) continue;
+      const p = this.samples[i];
+      p.tx = (b.x - a.x) / len;
+      p.tz = (b.z - a.z) / len;
+      p.angle = Math.atan2(p.tz, p.tx);
+    }
   }
 
-  protected sampleAt(s: number): Sample {
+  protected readonly frameSample: Sample = { s: 0, x: 0, z: 0, tx: 1, tz: 0, angle: 0 };
+  private readonly hit = { s: 0, lat: 0 };
+
+  protected sampleAt(s: number, out: Sample = { s: 0, x: 0, z: 0, tx: 1, tz: 0, angle: 0 }): Sample {
     const f = (s + this.half) / STEP;
     const i = clamp(Math.floor(f), 0, this.samples.length - 2);
     const a = this.samples[i];
@@ -38,7 +53,13 @@ export class TrackCorridor {
     const tx = a.tx + (b.tx - a.tx) * u;
     const tz = a.tz + (b.tz - a.tz) * u;
     const len = Math.hypot(tx, tz) || 1;
-    return { s, x: a.x + (b.x - a.x) * u, z: a.z + (b.z - a.z) * u, tx: tx / len, tz: tz / len, angle: Math.atan2(tz, tx) };
+    out.s = s;
+    out.x = a.x + (b.x - a.x) * u;
+    out.z = a.z + (b.z - a.z) * u;
+    out.tx = tx / len;
+    out.tz = tz / len;
+    out.angle = Math.atan2(tz, tx);
+    return out;
   }
 
   /** Point `lat` meters to the left of the track direction (x east, z south). */
@@ -73,14 +94,14 @@ export class TrackCorridor {
     return this.finish(pos, uv, idx);
   }
 
-  protected ribbon(lat0: number, lat1: number, y: number, s0: number, s1: number, uLen: number, vLen: number) {
+  protected ribbon(lat0: number, lat1: number, y: number, s0: number, s1: number, uLen: number, vLen: number, endY = y) {
     const pts = this.span(s0, s1);
     const pos: number[] = [];
     const uv: number[] = [];
     const idx: number[] = [];
     pts.forEach((p, i) => {
       for (const lat of [lat0, lat1]) {
-        const q = this.at(p, lat, y, this.v);
+        const q = this.at(p, lat, T.MathUtils.lerp(y, endY, (p.s - s0) / (s1 - s0)), this.v);
         pos.push(q.x, q.y, q.z);
         uv.push(p.s / uLen, lat / vLen);
       }
@@ -90,6 +111,16 @@ export class TrackCorridor {
       }
     });
     return this.finish(pos, uv, idx);
+  }
+
+  /** Vertical end face normal to the track, exactly meeting its longitudinal strips. */
+  protected endFace(s: number, l0: number, l1: number, bottom: number, top: number) {
+    const p = this.sampleAt(s);
+    const xyz: number[] = [];
+    for (const lat of [l0, l1]) {
+      for (const y of [bottom, top]) this.at(p, lat, y, this.v).toArray(xyz, xyz.length);
+    }
+    return this.finish(xyz, [0, 0, 0, (top - bottom) / 4, (l1 - l0) / 4, 0, (l1 - l0) / 4, (top - bottom) / 4], [0, 1, 2, 1, 3, 2]);
   }
 
   private finish(pos: number[], uv: number[], idx: number[]) {
@@ -138,7 +169,7 @@ export class TrackCorridor {
 
   /** Track-aligned coordinates of a scene point: distance along the corridor and lateral offset. */
   protected project(x: number, z: number): { s: number; lat: number } | null {
-    let best: { s: number; lat: number; d: number } | null = null;
+    let bestDistance = Infinity;
     for (let i = 0; i < this.samples.length - 1; i++) {
       const a = this.samples[i];
       const b = this.samples[i + 1];
@@ -150,18 +181,20 @@ export class TrackCorridor {
       const px = a.x + dx * u;
       const pz = a.z + dz * u;
       const d = Math.hypot(x - px, z - pz);
-      if (!best || d < best.d) {
+      if (d < bestDistance) {
         const lat = (x - px) * a.tz - (z - pz) * a.tx;
-        best = { s: a.s + (b.s - a.s) * u, lat, d };
+        bestDistance = d;
+        this.hit.s = a.s + (b.s - a.s) * u;
+        this.hit.lat = lat;
       }
     }
-    return best;
+    return bestDistance < Infinity ? this.hit : null;
   }
 
   /** Lay a train on its track car by car, so it bends with the curve. Trains run on the right. */
   protected placeTrain(model: TrainModel, s: number, forward: boolean, railY: number, trackOffset: number) {
     for (const car of model.cars) {
-      const p = this.sampleAt(clamp(s + (forward ? car.offset : -car.offset), -this.half, this.half));
+      const p = this.sampleAt(clamp(s + (forward ? car.offset : -car.offset), -this.half, this.half), this.frameSample);
       this.at(p, forward ? -trackOffset : trackOffset, railY, car.group.position);
       car.group.rotation.y = -(forward ? p.angle : p.angle + Math.PI);
     }

@@ -10,6 +10,7 @@ import * as T from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { TrackCorridor, type Sample } from "./TrackCorridor";
 import type { TLine } from "@/types/tverse";
+import { buildCrewTool } from "./crewModels";
 import { RepairCrew, stageCrew, WORK_AT } from "./repairCrew";
 import type { FaultKind } from "./faults";
 import type { Puffs, Sparks } from "./fx";
@@ -25,6 +26,7 @@ import {
   buildTrain,
   buildAirLine,
   consistFor,
+  disposeModel,
   seedOf,
   trainSign,
   type CabinetModel,
@@ -36,6 +38,7 @@ import {
   WALL_DEPTH,
   asphaltTexture,
   barricadeTexture,
+  ballastTexture,
   concreteTexture,
   floorTexture,
   platformTexture,
@@ -53,7 +56,8 @@ const FLOOR = -WALL_DEPTH;
 const RAIL = -18.6;
 const TRACK = 6;
 const ROOF = -6.6;
-const SEG = 10;
+const WIRE_HEIGHT = 14.1;
+const PANEL_LENGTH = 10;
 const PANEL_T = 2.4;
 const CRACK_TIME = 0.6;
 const SPREAD_TIME = 1.0;
@@ -67,6 +71,7 @@ const PLATFORM_LAT = 16.5;
 
 const HOT = [new T.Color("#ffffff"), new T.Color("#ffd36b"), new T.Color("#ff9a2b"), new T.Color("#9fe7ff")];
 const ARC = [new T.Color("#ffffff"), new T.Color("#bfe6ff"), new T.Color("#7fc7ff")];
+const STEEL = new T.Color("#aab1b9");
 const SMOKE = new T.Color("#77736d");
 const DUST = new T.Color("#8d7b66");
 const WARM = new T.Color("#fff0c8");
@@ -109,12 +114,14 @@ export class TunnelCutaway extends TrackCorridor {
   readonly faultS: number;
   readonly cutFrom: number;
   readonly cutTo: number;
+  private readonly segment: number;
   private readonly dir: 1 | -1;
   private readonly platHalf: number;
   private readonly interior = new T.Group();
   private readonly surface = new T.Group();
   private readonly mask: T.Mesh;
-  private maskKey = "";
+  private readonly covers: T.Mesh[] = [];
+  private readonly coverEnds: number[] = [0];
   private readonly panels: Array<{ sc: number; p: Sample; left: T.Group; right: T.Group }> = [];
   private readonly props: Array<{ obj: T.Object3D; delay: number; s?: number; end?: { sign: 1 | -1; lat: number } }> = [];
   /** Part of the cut that is open street (no building over the tunnel); null = all of it. */
@@ -131,11 +138,15 @@ export class TunnelCutaway extends TrackCorridor {
   private readonly cabinet: CabinetModel;
   private readonly crew: RepairCrew;
   private airLine?: ReturnType<typeof buildAirLine>;
+  private readonly inside = new Set<string>();
+  private readonly drawn = new Set<string>();
   private readonly trains = new Map<string, TrainModel>();
   /** Trains standing by at the platform: one per direction, they pull out after the fix. */
   private readonly platformTrains: Array<{ dir: 1 | -1; s0: number; delay: number; model: TrainModel }> = [];
   private readonly platformY: number;
   private readonly heavy: boolean;
+  private readonly walkSurfaces: T.Mesh[] = [];
+  readonly walkRange: [number, number];
   private readonly name: string;
   private readonly lineColor: string;
   private readonly westward: boolean;
@@ -144,10 +155,11 @@ export class TunnelCutaway extends TrackCorridor {
   private readonly crackMeshMat = new T.MeshBasicMaterial({ color: "#ff7a1a", toneMapped: false });
   private readonly hazardMat = new T.MeshBasicMaterial({ color: "#ffb020", toneMapped: false });
   private readonly arcLight: T.PointLight | null = null;
+  private repairedWire?: T.Mesh;
   private readonly brokenWire: T.Object3D | null = null;
   private readonly ice: T.Mesh[] = [];
   private readonly hazards: T.Mesh[] = [];
-  private readonly heaterMat = new T.MeshBasicMaterial({ color: "#ff6a1a", transparent: true, opacity: 0, toneMapped: false });
+  private readonly heaterMat = new T.MeshBasicMaterial({ color: "#ff6a1a", transparent: true, opacity: 0, depthWrite: false, toneMapped: false });
   private openAt: number | null = null;
   private closeAt: number | null = null;
   private repairAt: number | null = null;
@@ -162,6 +174,8 @@ export class TunnelCutaway extends TrackCorridor {
     super(opts.track, opts.dS, Math.max(-from, to) + EXT);
     this.cutFrom = from;
     this.cutTo = to;
+    this.segment = (to - from) / Math.ceil((to - from) / PANEL_LENGTH);
+    this.extent = [from - EXT, to + EXT];
     this.stationId = opts.stationId;
     this.line = opts.line;
     this.name = opts.name;
@@ -172,6 +186,9 @@ export class TunnelCutaway extends TrackCorridor {
     this.heavy = opts.line !== "Green";
     this.platHalf = this.heavy ? 95 : 50;
     this.platformY = this.heavy ? RAIL + 3.3 : RAIL + 1.0;
+    const [lo, hi] = this.extent;
+    this.walkRange = [Math.max(lo + 10, Math.min(-this.platHalf + 4, this.faultS - 26)),
+    Math.min(hi - 10, Math.max(this.platHalf - 4, this.faultS + 26))];
     this.westward = this.sampleAt(0).tx < 0;
 
     this.crackMat = new T.MeshBasicMaterial({
@@ -184,20 +201,19 @@ export class TunnelCutaway extends TrackCorridor {
     this.buildInterior();
     for (const [dir, s0, delay] of [[1, 6, 0.5], [-1, -6, 1.1]] as const) {
       const westbound = (dir > 0) === this.westward;
-      const model = buildTrain(consistFor(this.line, seedOf(`${opts.stationId}-${dir}`)), trainSign(opts.track.route, westbound));
+      const model = buildTrain(consistFor(this.line, seedOf(`${opts.stationId}-${dir}`)), trainSign(opts.track.route, westbound), WIRE_HEIGHT);
       this.interior.add(model.group);
       this.placeTrain(model, s0, dir > 0, RAIL, TRACK);
       this.platformTrains.push({ dir, s0, delay, model });
     }
+    this.crew = new RepairCrew(this.interior, this.fault);
     this.cabinet = this.buildCabinetAndSignals();
     const extras = this.buildFaultSite();
     this.arcLight = extras.arcLight;
     this.brokenWire = extras.brokenWire;
-    this.crew = new RepairCrew(this.interior, this.fault);
     this.buildWorkZone();
     this.buildSurface();
-    const [lo, hi] = this.extent;
-    for (let s = lo + 25; s < hi - 10; s += 36) {
+    for (const s of [-this.platHalf * .55, this.platHalf * .55]) {
       const light = new T.PointLight("#ffd9a0", 700, 80, 2);
       this.at(this.sampleAt(s), 0, -9.5, light.position);
       this.interior.add(light);
@@ -209,7 +225,8 @@ export class TunnelCutaway extends TrackCorridor {
 
     this.interior.visible = false;
     this.group.add(this.mask, this.interior, this.surface);
-    this.group.traverse((o) => (o.frustumCulled = false));
+    this.group.traverse((o) => { if (o !== this.mask) o.frustumCulled = true; });
+    this.buildMask();
     this.updateMask(0, 0);
   }
 
@@ -226,9 +243,7 @@ export class TunnelCutaway extends TrackCorridor {
   }
 
   /** Built stretch of tunnel: the opening plus some depth past each end. */
-  private get extent(): [number, number] {
-    return [this.cutFrom - EXT, this.cutTo + EXT];
-  }
+  private readonly extent: [number, number];
 
   private onPlatform(s: number) {
     return Math.abs(s) < this.platHalf - 1;
@@ -251,28 +266,47 @@ export class TunnelCutaway extends TrackCorridor {
     const wallMat = this.surfaceMat({ map: wallTexture(this.lineColor) });
     this.mesh([this.wall(W, 0, FLOOR, lo, hi, 24), this.wall(-W, 0, FLOOR, lo, hi, 24)], wallMat);
     this.mesh([this.ribbon(-W, W, FLOOR, lo, hi, 12, 12)], this.surfaceMat({ map: floorTexture() }));
-    const roofMat = this.surfaceMat({ color: "#34332f" });
-    this.mesh([this.ribbon(-W, W, ROOF, lo, this.cutFrom, 12, 12), this.ribbon(-W, W, ROOF, this.cutTo, hi, 12, 12)], roofMat);
+    const soffit = this.heavy ? ROOF : -2.7;
+    const roofMat = this.surfaceMat({ color: "#77736b", map: concreteTexture() });
+    this.mesh([this.ribbon(-W, W, soffit, lo, this.cutFrom, 12, 12), this.ribbon(-W, W, soffit, this.cutTo, hi, 12, 12)], roofMat);
 
     const P = this.platformY;
     const platMat = this.surfaceMat({ map: platformTexture() });
     const edgeMat = this.surfaceMat({ map: concreteTexture() });
     const tactileMat = this.surfaceMat({ map: tactileTexture() });
-    this.mesh([this.ribbon(10.5, W, P, -H, H, 9, 9), this.ribbon(-W, -10.5, P, -H, H, 9, 9)], platMat);
-    this.mesh([this.ribbon(10.5, 12.3, P + 0.04, -H, H, 3, 1.8), this.ribbon(-12.3, -10.5, P + 0.04, -H, H, 3, 1.8)], tactileMat);
-    const walk: T.BufferGeometry[] = [this.wall(10.5, P, FLOOR, -H, H, 6), this.wall(-10.5, P, FLOOR, -H, H, 6)];
-    for (const [a, b] of [[lo, -H], [H, hi]] as const) {
-      if (b - a < 1) continue;
-      walk.push(this.ribbon(19.5, W, WALK_Y, a, b, 6, 6), this.ribbon(-W, -19.5, WALK_Y, a, b, 6, 6));
-      walk.push(this.wall(19.5, WALK_Y, FLOOR, a, b, 6), this.wall(-19.5, WALK_Y, FLOOR, a, b, 6));
+    const faces: T.BufferGeometry[] = [];
+    for (const side of [-1, 1]) {
+      const platform = this.mesh([this.ribbon(side * 10.5, side * W, P, -H, H, 9, 9)], platMat);
+      const tactile = this.mesh([this.ribbon(side * 10.5, side * 12.3, P + .035, -H, H, 3, 1.8)], tactileMat);
+      if (side < 0) this.walkSurfaces.push(platform, tactile);
+      faces.push(this.wall(side * 10.5, P, FLOOR, -H, H, 6));
+      for (const sign of [-1, 1]) {
+        const end = sign * H;
+        const limit = sign < 0 ? lo : hi;
+        const rampEnd = sign * Math.min(H + 6, Math.abs(limit));
+        if ((limit - end) * sign <= 0) continue;
+        const a = Math.min(end, rampEnd), b = Math.max(end, rampEnd);
+        const top = sign > 0 ? P : WALK_Y, bottom = sign > 0 ? WALK_Y : P;
+        const ramp = this.ribbon(side * 19.5, side * W, top, a, b, 4, 4, bottom);
+        const c = Math.min(limit, rampEnd), e = Math.max(limit, rampEnd);
+        const tops = [ramp];
+        if (e > c) tops.push(this.ribbon(side * 19.5, side * W, WALK_Y, c, e, 6, 6));
+        const walkway = this.mesh(tops, edgeMat);
+        if (side < 0) this.walkSurfaces.push(walkway);
+        faces.push(this.endFace(end, side * 10.5, side * 19.5, FLOOR, P));
+        if (e > c) faces.push(this.wall(side * 19.5, WALK_Y, FLOOR, c, e, 6));
+        const cheek = this.wall(side * 19.5, top, FLOOR, a, b, 6);
+        const pos = cheek.getAttribute("position");
+        const stations = this.span(a, b);
+        stations.forEach((p, i) => pos.setY(i * 2, T.MathUtils.lerp(top, bottom, (p.s - a) / (b - a))));
+        cheek.computeVertexNormals();
+        faces.push(cheek);
+      }
     }
-    this.mesh(walk, edgeMat);
-    for (const s of [-H, H]) {
-      for (const lat of [16.5, -16.5]) this.mesh([this.boxAt(s, lat, (P + FLOOR) / 2, 0.6, P - FLOOR, 12)], edgeMat);
-    }
+    this.mesh(faces, edgeMat);
     // Railings along the safety walk.
     const rail: T.BufferGeometry[] = [];
-    for (const [a, b] of [[lo, -H], [H, hi]] as const) {
+    for (const [a, b] of [[lo, -H - 6], [H + 6, hi]] as const) {
       if (b - a < 1) continue;
       for (const side of [1, -1]) {
         rail.push(...this.run(side * 19.7, WALK_Y + 3.2, 0.18, 0.18, a, b));
@@ -281,22 +315,43 @@ export class TunnelCutaway extends TrackCorridor {
     }
     this.mesh(rail, this.surfaceMat({ color: "#c9a227" }));
 
+    // Keep the roof shoulders over the pedestrian walks when the middle is cut away.
+    const shoulders: T.BufferGeometry[] = [], conduits: T.BufferGeometry[] = [];
+    for (const side of [-1, 1]) {
+      shoulders.push(this.ribbon(side * (W - 4), side * W, soffit, this.cutFrom, this.cutTo, 7, 7),
+        this.ribbon(side * (W - 4), side * W, soffit + .55, this.cutFrom, this.cutTo, 7, 7),
+        this.wall(side * (W - 4), soffit + .55, soffit, this.cutFrom, this.cutTo, 7));
+      for (const y of [-12.93, -13.26]) conduits.push(...this.run(side * (W - .14), y, .13, .15, lo, hi));
+      for (let s = lo + 4; s < hi; s += 6) conduits.push(this.boxAt(s, side * (W - .20), -13.1, .13, .62, .16));
+    }
+    this.mesh(shoulders, roofMat);
+    this.mesh(conduits, this.surfaceMat({ color: "#575550" }));
+
     // Tremont Street Subway style steel: cross beams under the roof, columns between the tracks.
     const steel: T.BufferGeometry[] = [];
     for (let s = lo + 6; s <= hi; s += 12) {
-      steel.push(this.boxAt(s, 0, ROOF - 0.7, 1.1, 1.4, W * 2));
-      steel.push(this.boxAt(s, 0, (ROOF + FLOOR) / 2, 1.0, ROOF - FLOOR, 1.0));
+      steel.push(this.boxAt(s, 0, soffit - 0.7, 1.1, 1.4, W * 2));
+      steel.push(this.boxAt(s, 0, (soffit + FLOOR) / 2, 1.0, soffit - FLOOR, 1.0));
     }
+    // The roof is cut through at each end of the opening. Close its exposed section.
+    this.mesh([this.endFace(this.cutFrom, -W, W, soffit, 0), this.endFace(this.cutTo, -W, W, soffit, 0)], edgeMat);
     this.mesh(steel, this.surfaceMat({ color: "#24302b" }));
 
+    const webs: T.BufferGeometry[] = [];
     const ties: T.BufferGeometry[] = [];
     const rails: T.BufferGeometry[] = [];
     for (const lat of [TRACK, -TRACK]) {
-      for (let s = lo; s <= hi; s += 2.2) ties.push(this.boxAt(s, lat, RAIL - 0.95, 0.9, 0.5, 9.5));
-      rails.push(...this.run(lat + 2.15, RAIL - 0.35, 0.7, 0.45, lo, hi), ...this.run(lat - 2.15, RAIL - 0.35, 0.7, 0.45, lo, hi));
+      for (let s = lo; s <= hi; s += 2.2) ties.push(this.boxAt(s, lat, RAIL - 0.70, 0.9, 0.50, 9.5));
+      for (const gauge of [lat - 2.15, lat + 2.15]) {
+        webs.push(...this.run(gauge, RAIL - .45, .10, .64, lo, hi), ...this.run(gauge, RAIL - .28, .31, .21, lo, hi));
+        rails.push(...this.run(gauge, RAIL - .085, .17, .47, lo, hi));
+      }
     }
-    this.mesh(ties, this.surfaceMat({ color: "#5b5650" }));
-    this.mesh(rails, new T.MeshLambertMaterial({ color: "#aab1b9", emissive: "#1c1f23" }));
+    this.mesh([this.ribbon(-TRACK - 4.95, -TRACK + 4.95, FLOOR + .045, lo, hi, 4, 4),
+    this.ribbon(TRACK - 4.95, TRACK + 4.95, FLOOR + .045, lo, hi, 4, 4)], this.surfaceMat({ map: ballastTexture() }));
+    this.mesh(ties, this.surfaceMat({ color: "#50453b", map: concreteTexture() }));
+    this.mesh(webs, this.surfaceMat({ color: "#67564b" }));
+    this.mesh(rails, new T.MeshLambertMaterial({ color: "#979a98" }));
 
     if (this.heavy) {
       // Bare 600 V third rail on insulators: the MBTA doesn't fit permanent cover boards.
@@ -311,10 +366,15 @@ export class TunnelCutaway extends TrackCorridor {
     } else {
       const wire: T.BufferGeometry[] = [];
       for (const lat of [TRACK, -TRACK]) {
-        wire.push(...this.run(lat, RAIL + 17, 0.18, 0.18, lo, hi));
+        if (lat < 0 && this.fault === "power") {
+          const start = Math.min(this.faultS, this.faultS + 5 * this.dir), end = Math.max(this.faultS, this.faultS + 5 * this.dir);
+          wire.push(...this.run(lat, RAIL + WIRE_HEIGHT, .18, .18, lo, start), ...this.run(lat, RAIL + WIRE_HEIGHT, .18, .18, end, hi));
+          this.repairedWire = this.mesh(this.run(lat, RAIL + WIRE_HEIGHT, .18, .18, start, end), lambert({ color: "#26292d" }));
+          this.repairedWire.visible = false;
+        } else wire.push(...this.run(lat, RAIL + WIRE_HEIGHT, 0.18, 0.18, lo, hi));
         for (let s = lo + 6; s <= hi; s += 12) {
-          const top = ROOF - 1.4;
-          wire.push(this.boxAt(s, lat, (top + RAIL + 17) / 2, 0.12, top - (RAIL + 17), 0.12));
+          const top = soffit - 1.4;
+          wire.push(this.boxAt(s, lat, (top + RAIL + WIRE_HEIGHT) / 2, 0.12, top - (RAIL + WIRE_HEIGHT), 0.12));
         }
       }
       this.mesh(wire, new T.MeshLambertMaterial({ color: "#26292d" }));
@@ -340,9 +400,9 @@ export class TunnelCutaway extends TrackCorridor {
     const mouthMat = new T.MeshBasicMaterial({ map: tunnelMouthTexture(), side: T.DoubleSide });
     for (const s of [lo, hi]) {
       const p = this.sampleAt(s);
-      const cap = new T.Mesh(new T.PlaneGeometry(W * 2, ROOF - FLOOR), mouthMat);
-      cap.position.copy(this.at(p, 0, (ROOF + FLOOR) / 2));
-      cap.lookAt(this.at(this.sampleAt((lo + hi) / 2), 0, (ROOF + FLOOR) / 2));
+      const cap = new T.Mesh(new T.PlaneGeometry(W * 2, soffit - FLOOR), mouthMat);
+      cap.position.copy(this.at(p, 0, (soffit + FLOOR) / 2));
+      cap.rotation.y = Math.PI / 2 - p.angle;
       this.interior.add(cap);
     }
   }
@@ -360,11 +420,11 @@ export class TunnelCutaway extends TrackCorridor {
     this.interior.add(sig.group);
     this.signals.push(sig);
 
-    const cabinet = buildCabinet();
-    const cs = f + 4 * d;
+    const cabinet = buildCabinet(this.fault === "power");
+    const cs = f + (this.fault === "power" ? 15 : 4) * d;
     const cp = this.sampleAt(cs);
     cabinet.group.position.copy(this.at(cp, -15.1, FLOOR));
-    cabinet.group.lookAt(this.at(this.sampleAt(cs-5*d), -17, FLOOR));
+    cabinet.group.lookAt(this.at(this.sampleAt(cs - 5 * d), -14.65, FLOOR));
     cabinet.group.visible = this.fault === "signal" || this.fault === "power";
     this.interior.add(cabinet.group);
     return cabinet;
@@ -407,19 +467,23 @@ export class TunnelCutaway extends TrackCorridor {
         const m = buildSwitchMachine();
         const p = this.sampleAt(s);
         m.group.position.copy(this.at(p, lat, FLOOR));
-        m.group.rotation.y = -p.angle + (lat < 0 ? 0 : Math.PI);
+        m.group.rotation.y = -p.angle + (lat < 0 ? Math.PI : 0);
+        this.crew.switchRods.push(m.rod);
         this.interior.add(m.group);
       }
       if (this.fault === "frozen") {
-        const iceMat = new T.MeshLambertMaterial({ color: "#e6f6ff", emissive: "#2a4a66", transparent: true, opacity: 0.85 });
+        const iceMat = new T.MeshLambertMaterial({ color: "#b3c7ce", emissive: "#17242a", transparent: true, opacity: 0.85 });
         for (let i = 0; i < 6; i++) {
-          const blob = new T.Mesh(new T.SphereGeometry(0.9 + (i % 3) * 0.3, 10, 8), iceMat);
-          blob.position.copy(this.at(this.sampleAt(s0 + d * (1 + i * 1.6)), -TRACK + (i % 2 ? 2.15 : -2.15), RAIL - 0.2));
-          blob.scale.y = 0.55;
+          const blob = new T.Mesh(new T.IcosahedronGeometry(1, 1), iceMat);
+          const p = this.sampleAt(s0 + d * (4.4 + i * .88));
+          this.at(p, -TRACK - 1.95, RAIL - .16, blob.position);
+          blob.rotation.set(i * .18, -p.angle + i * .13, i * .095);
+          blob.scale.set(1.1 + (i % 3) * .17, .38, .55);
+          blob.userData.baseScale = blob.scale.clone();
           this.interior.add(blob);
           this.ice.push(blob);
         }
-        const heater = new T.Mesh(this.boxAt(s0 + 5 * d, -TRACK, RAIL - 0.6, 10, 0.15, 6), this.heaterMat);
+        const heater = new T.Mesh(this.boxAt(s0 + 7 * d, -TRACK - 1.84, RAIL - .27, 9, .14, .16), this.heaterMat);
         this.interior.add(heater);
       }
     }
@@ -427,11 +491,11 @@ export class TunnelCutaway extends TrackCorridor {
       if (this.heavy) {
         // An arcing third-rail insulator.
         arcLight = new T.PointLight("#9fd8ff", 0, 40, 2);
-        arcLight.position.copy(this.at(this.sampleAt(f), -2.6, RAIL + 1.2));
+        arcLight.position.copy(this.at(this.sampleAt(f), -2.6, RAIL + .58));
         this.interior.add(arcLight);
       } else {
         // A contact wire that's come down.
-        const top = this.at(this.sampleAt(f), -TRACK, RAIL + 17);
+        const top = this.at(this.sampleAt(f), -TRACK, RAIL + WIRE_HEIGHT);
         const end = this.at(this.sampleAt(f + 5 * d), -TRACK - 1.5, RAIL + 4);
         const len = top.distanceTo(end);
         const wire = new T.Mesh(new T.CylinderGeometry(0.12, 0.12, len, 6), new T.MeshLambertMaterial({ color: "#26292d" }));
@@ -460,28 +524,29 @@ export class TunnelCutaway extends TrackCorridor {
     const d = this.dir;
     const train = this.fault === "train";
     const p = this.sampleAt(f);
-    const axis = new T.Vector3(p.tx*d,0,p.tz*d);
-    const side = new T.Vector3(-p.tz,0,p.tx);
+    const axis = new T.Vector3(p.tx * d, 0, p.tz * d);
+    const side = new T.Vector3(-p.tz, 0, p.tx);
     let floor = FLOOR;
     if (train) {
       this.airLine = buildAirLine(this.platformTrains[0].model);
       this.airLine.joint.getWorldPosition(this.focus);
-      this.focus.addScaledVector(side,.2);
+      this.focus.addScaledVector(side, .2);
       floor = this.platformY;
     } else if (this.fault === "signal") {
-      this.cabinet.group.localToWorld(this.focus.set(.55,1.98,1.6));
+      this.cabinet.group.localToWorld(this.focus.set(1.2, 1.98, 1.6));
     } else if (this.fault === "power") {
       this.focus.copy(this.arcLight!.position);
     } else {
-      const s = this.fault === "track" ? f : f - (this.fault === "frozen" ? 15 : 16)*d;
+      const s = this.fault === "track" ? f : f - (this.fault === "frozen" ? 8.6 : 16) * d;
       const machine = this.fault === "switch";
-      this.at(this.sampleAt(s), -TRACK - (machine ? 4.4 : 2.15), machine ? FLOOR+1.78 : RAIL+.04, this.focus);
+      this.at(this.sampleAt(s), -TRACK - (machine ? 4.4 : 2.15), machine ? FLOOR + 1.78 : RAIL + .04, this.focus);
     }
-    stageCrew(this.crew,this.fault,this.focus,this.cabinet.group,axis,side,floor,FLOOR);
+    if (this.fault === "track" || this.fault === "frozen") floor = RAIL - .45;
+    stageCrew(this.crew, this.fault, this.focus, this.cabinet.group, axis, side, floor, FLOOR);
     if (!train) {
-      const ls = f-30*d;
-      const pos = this.at(this.sampleAt(ls),this.sideLat(ls),this.floorAt(ls));
-      this.crew.add("lookout",pos,pos,this.at(this.sampleAt(ls-25*d),this.sideLat(ls),pos.y));
+      const ls = f - 30 * d;
+      const pos = this.at(this.sampleAt(ls), this.onPlatform(ls) ? -13.8 : -17.4, this.onPlatform(ls) ? this.platformY : FLOOR);
+      this.crew.add("lookout", pos, pos, this.at(this.sampleAt(ls - 25 * d), this.sideLat(ls), pos.y));
 
       for (const [s, color] of [[f - 24 * d, "#ffb020"], [f + 45 * d, "#3dff7a"]] as const) {
         const lantern = buildLantern(color);
@@ -493,39 +558,60 @@ export class TunnelCutaway extends TrackCorridor {
       for (const [s, kind] of [[f - 62 * d, "speed"], [f + 52 * d, "resume"]] as const) {
         const sign = buildTrackSign(kind);
         const p = this.sampleAt(s);
-        sign.position.copy(this.at(p, -(W - 1.2), this.floorAt(s)));
+        sign.position.copy(this.at(p, this.onPlatform(s) ? -13.5 : -17.4, this.onPlatform(s) ? this.platformY : FLOOR));
         sign.rotation.y = -(p.angle + (d > 0 ? Math.PI / 2 : -Math.PI / 2));
         this.interior.add(sign);
       }
     }
-    for (const s of train ? [10, 34] : [f - 8 * d, f + 12 * d]) {
+    const site = this.project(this.focus.x, this.focus.z)!.s;
+    const kit = site + 5 * d;
+    const bag = buildCrewTool("bag");
+    const kitLat = train ? -18.4 : -15.3;
+    const kitY = train ? this.platformY : FLOOR;
+    this.at(this.sampleAt(kit), kitLat, kitY, bag.position);
+    bag.rotation.y = -this.angleAt(kit);
+    this.interior.add(bag);
+    const cable: T.Vector3[] = [];
+    for (let i = 0; i <= 18; i++) {
+      const s = site + (-12 + i * 26 / 18) * d;
+      cable.push(this.at(this.sampleAt(s), kitLat - .44 + .24 * Math.sin(i * .85), kitY + .078));
+    }
+    this.mesh([new T.TubeGeometry(new T.CatmullRomCurve3(cable), 42, .079, 6, false)], lambert({ color: "#332e26" }));
+    for (const s of [site - 12 * d, site + 14 * d]) {
       const tower = buildLightTower();
       const p = this.sampleAt(s);
-      tower.group.position.copy(this.at(p, this.sideLat(s) - (this.onPlatform(s) ? -2 : 0.5), this.floorAt(s)));
+      tower.group.position.copy(this.at(p, kitLat, kitY));
+      tower.group.lookAt(this.v.copy(this.focus).setY(kitY));
       this.interior.add(tower.group);
     }
   }
 
   private buildSurface() {
-    const asphalt = new T.MeshLambertMaterial({ map: asphaltTexture() });
-    const concrete = new T.MeshLambertMaterial({ map: concreteTexture() });
+    const asphalt = lambert({ map: asphaltTexture() });
+    const concrete = lambert({ map: concreteTexture() });
     const paint = new T.MeshBasicMaterial({ color: "#e8e4d6", toneMapped: false });
-    const half = W / 2;
-    const count = Math.round((this.cutTo - this.cutFrom) / SEG);
+    const count = Math.round((this.cutTo - this.cutFrom) / this.segment);
     for (let i = 0; i < count; i++) {
-      const sc = this.cutFrom + SEG * (i + 0.5);
+      const sc = this.cutFrom + this.segment * (i + 0.5);
       const p = this.sampleAt(sc);
       const mk = (side: 1 | -1) => {
         const pivot = new T.Group();
         pivot.position.copy(this.at(p, side * W, 0));
         pivot.rotation.y = -p.angle;
-        // Overlap neighbours so the street has no gaps where the tunnel curves.
-        const slab = new T.Mesh(new T.BoxGeometry(SEG + 3, PANEL_T, half * 2), [concrete, concrete, asphalt, concrete, concrete, concrete]);
-        // In pivot space +z is to the right of travel; the slab reaches from the hinge to the centerline.
-        slab.position.set(0, -PANEL_T / 2 + 0.06, side * half);
-        pivot.add(slab);
+        // Cut both halves from the actual curved road. Their edges share the same
+        // survey stations as the depth mask so closed slabs meet without overlap.
+        const a = sc - this.segment / 2, b = sc + this.segment / 2;
+        pivot.updateMatrix();
+        const local = pivot.matrix.clone().invert();
+        this.mesh([this.ribbon(0, side * W, .06, a, b, 10, 10).applyMatrix4(local)], asphalt, pivot);
+        const shell = [
+          this.ribbon(0, side * W, -PANEL_T, a, b, 6, 6),
+          this.wall(0, .06, -PANEL_T, a, b, 6), this.wall(side * W, .06, -PANEL_T, a, b, 6),
+          this.endFace(a, 0, side * W, -PANEL_T, .06), this.endFace(b, 0, side * W, -PANEL_T, .06),
+        ];
+        this.mesh(shell.map(g => g.applyMatrix4(local)), concrete, pivot);
         if (i % 2 === 0) {
-          const dash = new T.Mesh(new T.BoxGeometry(SEG * 0.55, 0.04, 0.5), paint);
+          const dash = new T.Mesh(new T.BoxGeometry(this.segment * 0.55, 0.04, 0.5), paint);
           dash.position.set(0, 0.09, side * (W - 0.7));
           pivot.add(dash);
         }
@@ -616,7 +702,7 @@ export class TunnelCutaway extends TrackCorridor {
     };
     const blocked = this.panels.map(({ sc }) => {
       for (const du of [-0.35, 0, 0.35]) {
-        const p = this.sampleAt(sc + du * SEG);
+        const p = this.sampleAt(sc + du * this.segment);
         for (const f of [-0.85, -0.45, 0, 0.45, 0.85]) {
           const q = this.at(p, f * W, 0, this.v);
           if (buildings.some((ring) => inside(q.x, q.z, ring))) return true;
@@ -639,7 +725,7 @@ export class TunnelCutaway extends TrackCorridor {
     while (lo > 0 && !blocked[lo - 1]) lo--;
     while (hi < blocked.length - 1 && !blocked[hi + 1]) hi++;
     if (hi - lo < 1) return false;
-    this.allowed = [this.panels[lo].sc - SEG / 2, this.panels[hi].sc + SEG / 2];
+    this.allowed = [this.panels[lo].sc - this.segment / 2, this.panels[hi].sc + this.segment / 2];
     const [a, b] = this.allowed;
     const old = this.lip.geometry;
     this.lip.geometry = mergeGeometries([this.wall(W + 0.05, 0.7, -0.4, a, b, 6), this.wall(-W - 0.05, 0.7, -0.4, a, b, 6)], false);
@@ -713,26 +799,39 @@ export class TunnelCutaway extends TrackCorridor {
 
   /** Scene point at distance `s` along the cut, `lat` meters left of the track, height `y`. */
   worldAt(s: number, lat: number, y: number, out = new T.Vector3()) {
-    return this.at(this.sampleAt(s), lat, y, out);
+    return this.at(this.sampleAt(s, this.frameSample), lat, y, out);
   }
 
   /** Heading of the track at `s` (radians, atan2(dz, dx)). */
   angleAt(s: number) {
-    return this.sampleAt(s).angle;
+    return this.sampleAt(s, this.frameSample).angle;
   }
 
-  /** How far you can walk: along the platform and on along the safety walk to the work zone. */
-  get walkRange(): [number, number] {
-    const [lo, hi] = this.extent;
-    const H = this.platHalf;
-    return [Math.max(lo + 10, Math.min(-H + 4, this.faultS - 26)), Math.min(hi - 10, Math.max(H - 4, this.faultS + 26))];
+  /** Ray-pick the rider-side platform, including the sloping concrete transition. */
+  walkHit(ray: T.Raycaster) {
+    const hit = ray.intersectObjects(this.walkSurfaces, false)[0];
+    if (!hit) return null;
+    // Ignore hidden rolling stock and translucent effects, but respect solid objects
+    // between the rider and the floor (a click on a train must not walk through it).
+    const solids: T.Mesh[] = [];
+    this.interior.traverseVisible(o => {
+      if (o instanceof T.Mesh && !this.walkSurfaces.includes(o) &&
+        (Array.isArray(o.material) || !o.material.transparent)) solids.push(o);
+    });
+    const blocker = ray.intersectObjects(solids, false)[0];
+    if (blocker && blocker.distance < hit.distance - .08) return null;
+    return this.project(hit.point.x, hit.point.z)?.s ?? null;
   }
 
-  /** Where you stand at `s`: on the platform, then down the steps onto the safety walk. */
-  walkAt(s: number) {
-    const t = clamp((Math.abs(s) - (this.platHalf - 3)) / 6, 0, 1);
-    const k = easeInOut(t);
-    return { lat: -PLATFORM_LAT + (PLATFORM_LAT - WALK_LAT) * k, y: this.platformY + (WALK_Y - this.platformY) * k };
+  stationAt(point: T.Vector3) {
+    return this.project(point.x, point.z)?.s ?? this.walkStart.s;
+  }
+
+  walkAt(s: number, out = { lat: 0, y: 0 }) {
+    const end = Math.abs(s) - this.platHalf;
+    out.lat = T.MathUtils.lerp(-PLATFORM_LAT, -WALK_LAT, easeInOut((end + 8) / 8));
+    out.y = T.MathUtils.lerp(this.platformY, WALK_Y, clamp(end / 6, 0, 1));
+    return out;
   }
 
   /** Arrive at the platform end nearest the fault, facing it. */
@@ -746,7 +845,7 @@ export class TunnelCutaway extends TrackCorridor {
     return this.interior.visible;
   }
 
-  private readonly streetMat = new T.MeshLambertMaterial({ color: "#1b1d25" });
+  private readonly streetMat = new T.MeshLambertMaterial({ color: "#1b1d25", side: T.DoubleSide });
   private maskMat: T.Material | null = null;
 
   /** The walk-in view has no basemap, so it paints the ground mask as street instead of leaving it invisible. */
@@ -754,8 +853,10 @@ export class TunnelCutaway extends TrackCorridor {
     if (on && !this.maskMat) {
       this.maskMat = this.mask.material as T.Material;
       this.mask.material = this.streetMat;
+      for (const cover of this.covers) cover.material = this.streetMat;
     } else if (!on && this.maskMat) {
       this.mask.material = this.maskMat;
+      for (const cover of this.covers) cover.material = this.maskMat;
       this.maskMat = null;
     }
   }
@@ -773,10 +874,9 @@ export class TunnelCutaway extends TrackCorridor {
     return clamp(o, 0, 1);
   }
 
-  private updateMask(sMin: number, sMax: number) {
-    const key = sMax > sMin ? `${sMin}:${sMax}` : "none";
-    if (key === this.maskKey) return;
-    this.maskKey = key;
+  // The ground outside the full cut never changes. Two indexed strips cover the
+  // closed panels at either end. Opening the street only changes their draw ranges.
+  private buildMask() {
     const c = this.sampleAt((this.cutFrom + this.cutTo) / 2);
     const R = 800;
     const shape = new T.Shape([
@@ -785,8 +885,8 @@ export class TunnelCutaway extends TrackCorridor {
       new T.Vector2(c.x + R, -(c.z + R)),
       new T.Vector2(c.x - R, -(c.z + R)),
     ]);
-    if (sMax > sMin) {
-      const pts = this.span(sMin, sMax);
+    {
+      const pts = this.span(this.cutFrom, this.cutTo);
       const ring: T.Vector2[] = [];
       for (const p of pts) {
         const q = this.at(p, W, 0, this.v);
@@ -802,6 +902,28 @@ export class TunnelCutaway extends TrackCorridor {
     geo.rotateX(-Math.PI / 2);
     this.mask.geometry.dispose();
     this.mask.geometry = geo;
+    const strips = this.panels.map(({ sc }) => {
+      const strip = this.ribbon(W, -W, 0, sc - this.segment / 2, sc + this.segment / 2, 12, 12);
+      this.coverEnds.push(this.coverEnds[this.coverEnds.length - 1] + strip.index!.count);
+      return strip;
+    });
+    const combined = mergeGeometries(strips, false);
+    for (const geometry of [combined, combined.clone()]) {
+      const cover = new T.Mesh(geometry, this.mask.material);
+      cover.renderOrder = this.mask.renderOrder;
+      this.covers.push(cover);
+      this.group.add(cover);
+    }
+  }
+
+  private updateMask(min: number, max: number) {
+    const count = this.panels.length;
+    const first = max > min ? clamp(Math.round((min - this.cutFrom) / this.segment), 0, count) : count;
+    const last = max > min ? clamp(Math.round((max - this.cutFrom) / this.segment), 0, count) : count;
+    this.covers[0].geometry.setDrawRange(0, this.coverEnds[first]);
+    this.covers[1].geometry.setDrawRange(this.coverEnds[last], this.coverEnds[count] - this.coverEnds[last]);
+    this.covers[0].visible = first > 0;
+    this.covers[1].visible = last < count;
   }
 
   // ------------------------------------------------------------ frame
@@ -824,11 +946,11 @@ export class TunnelCutaway extends TrackCorridor {
       this.at(panel.p, W + slide, shake - sink, panel.left.position);
       this.at(panel.p, -(W + slide), -shake - sink, panel.right.position);
       if (o > 0.02) {
-        sMin = Math.min(sMin, panel.sc - SEG / 2);
-        sMax = Math.max(sMax, panel.sc + SEG / 2);
+        sMin = Math.min(sMin, panel.sc - this.segment / 2);
+        sMax = Math.max(sMax, panel.sc + this.segment / 2);
       }
       if (o > 0.05 && o < 0.9 && Math.random() < dt * 6) {
-        const p = this.sampleAt(panel.sc + (Math.random() - 0.5) * SEG);
+        const p = this.sampleAt(panel.sc + (Math.random() - 0.5) * this.segment, this.frameSample);
         const q = this.at(p, (Math.random() - 0.5) * W * 1.6, 0.5, this.v);
         fx.puffs.emit(q.x, q.y, q.z, DUST, 46, Math.random() < 0.5 ? 6 : -9, 3, 1.8);
       }
@@ -870,7 +992,7 @@ export class TunnelCutaway extends TrackCorridor {
       else if (this.fault === "signal") sig.set("red", Math.sin(time * 5) > 0.3 ? 1 : 0);
       else sig.set("red", 0.9);
     }
-    this.cabinet.set(fixed ? "ok" : "fault", flicker, time);
+    this.cabinet.set(fixed ? "ok" : "fault", flicker, time, this.repairAt === null ? -1 : (now - this.repairAt) / 1000 - WORK_AT);
 
     this.cabinet.group.updateMatrixWorld();
     this.cabinetWorld.set(0, 7.6, 0).applyMatrix4(this.cabinet.group.matrixWorld);
@@ -892,31 +1014,35 @@ export class TunnelCutaway extends TrackCorridor {
       }
     }
     if (this.brokenWire) this.brokenWire.visible = !fixed;
+    if (this.repairedWire) this.repairedWire.visible = fixed;
     // The crack glows until it's welded, then cools to plain steel.
     const cool = this.restoredAt === null ? 0 : clamp((now - this.restoredAt) / 1500, 0, 1);
-    this.crackMeshMat.color.set("#ff7a1a").lerp(new T.Color("#aab1b9"), cool).multiplyScalar(cool > 0 ? 1 : 0.7 + 0.3 * Math.sin(time * 6));
+    this.crackMeshMat.color.set("#ff7a1a").lerp(STEEL, cool).multiplyScalar(cool > 0 ? 1 : 0.7 + 0.3 * Math.sin(time * 6));
     if (this.ice.length) {
       const melt = this.repairAt === null ? 0 : clamp(((now - this.repairAt) / 1000 - WORK_AT) / 5.6, 0, 1);
-      for (const blob of this.ice) blob.scale.setScalar(Math.max(0.01, 1 - melt)).setY(Math.max(0.01, 0.55 * (1 - melt)));
+      for (const blob of this.ice) blob.scale.copy(blob.userData.baseScale).multiplyScalar(Math.max(.01, 1 - melt));
       this.heaterMat.opacity = repairing ? 0.55 + 0.25 * Math.sin(time * 10) : 0;
     }
 
-    this.crew.update(now, this.repairAt, this.restoredAt, fx.sparks);
-    if (this.airLine) this.airLine.hose.visible = fixed;
-    return this.updateTrains(trains, open, now, time);
+    if (open) this.crew.update(now, this.repairAt, this.restoredAt, fx.sparks);
+    const hidden = this.updateTrains(trains, open, now, time);
+    this.airLine?.connect(fixed);
+    return hidden;
   }
 
   private updateTrains(list: CutawayTrain[], open: boolean, now: number, time: number): Set<string> {
-    const inside = new Set<string>();
-    const drawn = new Set<string>();
-    const occupied = new Set<number>();
+    const { inside, drawn } = this;
+    inside.clear();
+    drawn.clear();
+    let forwardOccupied = false, reverseOccupied = false;
     const [lo, hi] = this.extent;
     for (const pt of this.platformTrains) {
       const go = this.restoredAt === null ? -1 : (now - this.restoredAt) / 1000 - pt.delay;
       const s = pt.s0 + (go > 0 ? pt.dir * 0.5 * 14 * go * go : 0);
       pt.model.group.visible = s > lo - 40 && s < hi + 40;
       if (!pt.model.group.visible) continue;
-      occupied.add(pt.dir);
+      if (pt.dir > 0) forwardOccupied = true;
+      else reverseOccupied = true;
       this.placeTrain(pt.model, s, pt.dir > 0, RAIL, TRACK);
     }
     if (this.hazards.length) {
@@ -926,12 +1052,13 @@ export class TunnelCutaway extends TrackCorridor {
       const a = -head.group.rotation.y;
       const lit = this.restoredAt === null && Math.sin(time * 7) > 0;
       this.hazardMat.color.set(lit ? "#ffb020" : "#3a2400");
-      this.hazards.forEach((lamp, i) => {
+      for (let i = 0; i < this.hazards.length; i++) {
+        const lamp = this.hazards[i];
         const x = head.length / 2 + 0.4;
         const z = (i ? 1 : -1) * 3.2;
         lamp.position.set(head.group.position.x + x * Math.cos(a) - z * Math.sin(a), RAIL + 9.4, head.group.position.z + x * Math.sin(a) + z * Math.cos(a));
         lamp.visible = front.model.group.visible && this.restoredAt === null;
-      });
+      }
     }
     if (open) {
       for (const tr of list) {
@@ -939,13 +1066,13 @@ export class TunnelCutaway extends TrackCorridor {
         const hit = this.project(tr.x, tr.z);
         if (!hit || Math.abs(hit.lat) > 30 || hit.s < lo + 15 || hit.s > hi - 15) continue;
         inside.add(tr.id);
-        const p = this.sampleAt(hit.s);
+        const p = this.sampleAt(hit.s, this.frameSample);
         const forward = Math.cos(tr.angle - p.angle) >= 0;
         // A held train on a track that still has its platform train is that train; don't draw it twice.
-        if (occupied.has(forward ? 1 : -1) && this.onPlatform(hit.s)) continue;
+        if ((forward ? forwardOccupied : reverseOccupied) && this.onPlatform(hit.s)) continue;
         let model = this.trains.get(tr.id);
         if (!model) {
-          model = buildTrain(consistFor(this.line, seedOf(tr.id)), trainSign(tr.route, forward === this.westward));
+          model = buildTrain(consistFor(this.line, seedOf(tr.id)), trainSign(tr.route, forward === this.westward), WIRE_HEIGHT);
           this.trains.set(tr.id, model);
           this.interior.add(model.group);
         }
@@ -955,16 +1082,14 @@ export class TunnelCutaway extends TrackCorridor {
     }
     for (const [id, model] of this.trains) {
       if (drawn.has(id)) continue;
-      model.group.removeFromParent();
+      disposeModel(model.group);
       this.trains.delete(id);
     }
     return inside;
   }
 
   dispose() {
-    this.group.removeFromParent();
-    this.group.traverse((o) => {
-      if (o instanceof T.Mesh && !o.geometry.userData.sharedCrewPart) o.geometry.dispose();
-    });
+    disposeModel(this.group);
+    this.streetMat.dispose();
   }
 }

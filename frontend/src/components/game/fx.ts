@@ -3,6 +3,13 @@ import * as T from "three";
 import { puffTexture } from "./tunnelTextures";
 
 /** Additive sparks with gravity that bounce to rest on their own floor (street or tunnel). */
+function setXYZ(buffer: Float32Array, index: number, x: number, y: number, z: number) {
+  const k = index * 3;
+  buffer[k] = x;
+  buffer[k + 1] = y;
+  buffer[k + 2] = z;
+}
+
 export class Sparks {
   readonly points: T.Points;
   private pos: Float32Array;
@@ -47,10 +54,10 @@ export class Sparks {
       const a = Math.random() * Math.PI * 2;
       const up = 0.35 + Math.random() * 0.9;
       const v = speed * (0.4 + Math.random() * 0.8);
-      this.pos.set([x, y, z], i * 3);
-      this.vel.set([Math.cos(a) * v * spread, up * v, Math.sin(a) * v * spread], i * 3);
+      setXYZ(this.pos, i, x, y, z);
+      setXYZ(this.vel, i, Math.cos(a) * v * spread, up * v, Math.sin(a) * v * spread);
       const c = palette[Math.floor(Math.random() * palette.length)];
-      this.col.set([c.r, c.g, c.b], i * 3);
+      c.toArray(this.col, i * 3);
       this.life[i] = 0.5 + Math.random() * 0.7;
       this.floor[i] = floor;
     }
@@ -161,10 +168,10 @@ export class Puffs {
   emit(x: number, y: number, z: number, color: T.Color, sizePx: number, rise: number, spread: number, life = 2.4) {
     const i = this.next;
     this.next = (this.next + 1) % this.max;
-    this.pos.set([x, y, z], i * 3);
+    setXYZ(this.pos, i, x, y, z);
     const a = Math.random() * Math.PI * 2;
-    this.vel.set([Math.cos(a) * spread, rise * (0.6 + Math.random() * 0.6), Math.sin(a) * spread], i * 3);
-    this.col.set([color.r, color.g, color.b], i * 3);
+    setXYZ(this.vel, i, Math.cos(a) * spread, rise * (.6 + Math.random() * .6), Math.sin(a) * spread);
+    color.toArray(this.col, i * 3);
     this.life[i] = this.maxLife[i] = life * (0.7 + Math.random() * 0.6);
     this.baseSize[i] = sizePx * (0.7 + Math.random() * 0.6);
     this.alive++;

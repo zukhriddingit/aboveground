@@ -105,7 +105,7 @@ export interface TrackPoint extends XZ {
   angle: number;
 }
 
-export function pointAt(track: Track, d: number): TrackPoint {
+export function pointAt(track: Track, d: number, out: TrackPoint = { x: 0, z: 0, angle: 0 }): TrackPoint {
   const { pts, cum, length } = track;
   const dd = Math.max(0, Math.min(length, d));
   let lo = 0;
@@ -119,7 +119,10 @@ export function pointAt(track: Track, d: number): TrackPoint {
   const b = pts[hi];
   const seg = cum[hi] - cum[lo];
   const t = seg === 0 ? 0 : (dd - cum[lo]) / seg;
-  return { x: a.x + (b.x - a.x) * t, z: a.z + (b.z - a.z) * t, angle: Math.atan2(b.z - a.z, b.x - a.x) };
+  out.x = a.x + (b.x - a.x) * t;
+  out.z = a.z + (b.z - a.z) * t;
+  out.angle = Math.atan2(b.z - a.z, b.x - a.x);
+  return out;
 }
 
 export function sliceTrack(track: Track, d0: number, d1: number, steps = 24): [number, number][] {

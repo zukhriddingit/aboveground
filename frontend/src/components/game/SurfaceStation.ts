@@ -22,6 +22,7 @@ import {
   buildTrain,
   buildAirLine,
   consistFor,
+  disposeModel,
   seedOf,
   trainSign,
   type CabinetModel,
@@ -43,6 +44,7 @@ const WAIT_S = -58;
 
 const HOT = [new T.Color("#ffffff"), new T.Color("#ffd36b"), new T.Color("#ff9a2b"), new T.Color("#9fe7ff")];
 const ARC = [new T.Color("#ffffff"), new T.Color("#bfe6ff"), new T.Color("#7fc7ff")];
+const STEEL = new T.Color("#aab1b9");
 const SMOKE = new T.Color("#8a8780");
 
 const lambert = (params: T.MeshLambertMaterialParameters) => new T.MeshLambertMaterial({ side: T.DoubleSide, ...params });
@@ -102,6 +104,8 @@ export class SurfaceStation extends TrackCorridor {
   private readonly cabinet: CabinetModel;
   private readonly crew: RepairCrew;
   private airLine?: ReturnType<typeof buildAirLine>;
+  private readonly inside = new Set<string>();
+  private readonly drawn = new Set<string>();
   private readonly trains = new Map<string, TrainModel>();
   private readonly waiting: TrainModel;
   private readonly westward: boolean;
@@ -127,11 +131,11 @@ export class SurfaceStation extends TrackCorridor {
     this.westward = this.sampleAt(0).tx < 0;
     this.buildGround();
     this.buildOverhead();
+    this.crew = new RepairCrew(this.group, this.fault);
     this.cabinet = this.buildFault();
     this.waiting = buildTrain(consistFor(this.line, seedOf(`${opts.stationId}-wait`)), trainSign(opts.track.route, this.westward));
     this.group.add(this.waiting.group);
     this.placeTrain(this.waiting, WAIT_S, true, RAIL_Y, TRACK);
-    this.crew = new RepairCrew(this.group, this.fault);
     this.buildWorkZone();
     this.group.visible = false;
     this.group.traverse((o) => (o.frustumCulled = false));
@@ -201,7 +205,7 @@ export class SurfaceStation extends TrackCorridor {
     this.group.add(sig.group);
     this.signals.push(sig);
 
-    const cabinet = buildCabinet();
+    const cabinet = buildCabinet(this.fault === "power");
     const cp = this.sampleAt(4);
     this.at(cp, -(MEDIAN - 3), 0.3, cabinet.group.position);
     cabinet.group.lookAt(this.at(cp, 0, 0.3));
@@ -234,7 +238,8 @@ export class SurfaceStation extends TrackCorridor {
         const m = buildSwitchMachine();
         const p = this.sampleAt(s);
         this.at(p, lat, BED_Y, m.group.position);
-        m.group.rotation.y = -p.angle + (lat < 0 ? 0 : Math.PI);
+        m.group.rotation.y = -p.angle + (lat < 0 ? Math.PI : 0);
+        this.crew.switchRods.push(m.rod);
         this.group.add(m.group);
       }
       this.at(this.sampleAt(-16), -TRACK - 4.4, BED_Y + 1.8, this.focus);
@@ -267,19 +272,19 @@ export class SurfaceStation extends TrackCorridor {
 
   private buildWorkZone() {
     const p = this.sampleAt(0);
-    const axis = new T.Vector3(p.tx,0,p.tz);
-    const side = new T.Vector3(-p.tz,0,p.tx);
-    if (this.fault === "signal") this.cabinet.group.localToWorld(this.focus.set(.55,1.98,1.6));
+    const axis = new T.Vector3(p.tx, 0, p.tz);
+    const side = new T.Vector3(-p.tz, 0, p.tx);
+    if (this.fault === "signal") this.cabinet.group.localToWorld(this.focus.set(1.2, 1.98, 1.6));
     if (this.fault === "power") this.focus.copy(this.arcLight!.position);
     if (this.fault === "train") {
-      this.airLine = buildAirLine(this.waiting);
+      this.airLine = buildAirLine(this.waiting, 2.1);
       this.airLine.joint.getWorldPosition(this.focus);
-      this.focus.addScaledVector(side,.2);
+      this.focus.addScaledVector(side, .2);
     }
-    if (this.fault === "frozen") this.at(this.sampleAt(-15),-TRACK-2.15,RAIL_Y,this.focus);
-    stageCrew(this.crew,this.fault,this.focus,this.cabinet.group,axis,side,BED_Y,.3);
-    const lp = this.at(this.sampleAt(-32),-14,.3);
-    this.crew.add("lookout",lp,lp,this.at(this.sampleAt(-80),-14,.3));
+    if (this.fault === "frozen") this.at(this.sampleAt(-8.6), -TRACK - 2.15, RAIL_Y, this.focus);
+    stageCrew(this.crew, this.fault, this.focus, this.cabinet.group, axis, side, BED_Y, .3);
+    const lp = this.at(this.sampleAt(-32), -14, .3);
+    this.crew.add("lookout", lp, lp, this.at(this.sampleAt(-80), -14, .3));
     for (const [s, color] of [[-24, "#ffb020"], [45, "#3dff7a"]] as const) {
       const lantern = buildLantern(color);
       this.at(this.sampleAt(s), -TRACK - 3.4, BED_Y, lantern.group.position);
@@ -389,7 +394,7 @@ export class SurfaceStation extends TrackCorridor {
 
     const fault = live && !fixed;
     for (const sig of this.signals) sig.set(fault ? "red" : "green", fault ? (this.fault === "signal" ? (Math.sin(time * 5) > 0.3 ? 1 : 0) : 0.9) : 1);
-    this.cabinet.set(fault ? "fault" : "ok", 1, time);
+    this.cabinet.set(fault ? "fault" : "ok", 1, time, this.repairAt === null ? -1 : (now - this.repairAt) / 1000 - WORK_AT);
     this.cabinet.group.updateMatrixWorld();
     this.cabinetTop.set(0, 7.6, 0).applyMatrix4(this.cabinet.group.matrixWorld);
     this.mouthWorld.copy(this.cabinet.mouth).applyMatrix4(this.cabinet.group.matrixWorld);
@@ -411,20 +416,22 @@ export class SurfaceStation extends TrackCorridor {
     }
     if (this.brokenWire) this.brokenWire.visible = !fixed;
     const cool = this.restoredAt === null ? 0 : clamp((now - this.restoredAt) / 1500, 0, 1);
-    this.crackMat.color.set("#ff7a1a").lerp(new T.Color("#aab1b9"), cool);
+    this.crackMat.color.set("#ff7a1a").lerp(STEEL, cool);
     if (this.ice.length) {
       const melt = this.repairAt === null ? 0 : clamp(((now - this.repairAt) / 1000 - WORK_AT) / 5.6, 0, 1);
       for (const blob of this.ice) blob.scale.set(Math.max(0.01, 1 - melt), Math.max(0.01, 0.55 * (1 - melt)), Math.max(0.01, 1 - melt));
     }
 
     this.crew.update(now, this.repairAt, this.restoredAt, fx.sparks);
-    if (this.airLine) this.airLine.hose.visible = fixed;
-    return this.updateTrains(trains, now, live);
+    const hidden = this.updateTrains(trains, now, live);
+    this.airLine?.connect(fixed);
+    return hidden;
   }
 
   private updateTrains(list: CutawayTrain[], now: number, live: boolean): Set<string> {
-    const inside = new Set<string>();
-    const drawn = new Set<string>();
+    const { inside, drawn } = this;
+    inside.clear();
+    drawn.clear();
     // The next train waits short of the zone, then rolls through once the line's clear.
     const go = this.restoredAt === null ? -1 : (now - this.restoredAt) / 1000 - 0.6;
     const s = WAIT_S + (go > 0 ? 0.5 * 9 * go * go : 0);
@@ -436,7 +443,7 @@ export class SurfaceStation extends TrackCorridor {
         const hit = this.project(tr.x, tr.z);
         if (!hit || Math.abs(hit.lat) > 30 || Math.abs(hit.s) > HALF - 34) continue;
         inside.add(tr.id);
-        const p = this.sampleAt(hit.s);
+        const p = this.sampleAt(hit.s, this.frameSample);
         const forward = Math.cos(tr.angle - p.angle) >= 0;
         if (forward && this.waiting.group.visible) continue;
         let model = this.trains.get(tr.id);
@@ -451,16 +458,13 @@ export class SurfaceStation extends TrackCorridor {
     }
     for (const [id, model] of this.trains) {
       if (drawn.has(id)) continue;
-      model.group.removeFromParent();
+      disposeModel(model.group);
       this.trains.delete(id);
     }
     return inside;
   }
 
   dispose() {
-    this.group.removeFromParent();
-    this.group.traverse((o) => {
-      if (o instanceof T.Mesh && !o.geometry.userData.sharedCrewPart) o.geometry.dispose();
-    });
+    disposeModel(this.group);
   }
 }

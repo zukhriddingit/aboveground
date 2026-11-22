@@ -42,6 +42,7 @@ export interface TrainModel {
   /** Sections front to back; `offset` is each one's center ahead of the train's center, `length` its length. */
   cars: Array<{ group: T.Group; offset: number; length: number }>;
   length: number;
+  width: number;
 }
 
 /** A consist that's actually in service on the line, picked from a stable seed. */
@@ -266,7 +267,7 @@ function truck(x: number, body: Body) {
   return g;
 }
 
-function pantograph(x: number, top: number) {
+function pantograph(x: number, top: number, wireHeight: number) {
   const g = new T.Group();
   const steel = lambert("#4a4f57");
   const base = new T.Mesh(new T.BoxGeometry(3.4, 0.5, 2.6), steel);
@@ -277,11 +278,12 @@ function pantograph(x: number, top: number) {
   const upper = new T.Mesh(new T.BoxGeometry(0.26, 4.2, 0.26), steel);
   upper.position.set(-0.6, top + 4.9, 0);
   upper.rotation.z = 0.6;
-  // The shoe rides the contact wire, 17 m above the rail in the cutaway's 3x section.
+  // Model at the outdoor wire height, then compress the linkage for a low subway roof.
   const shoe = new T.Mesh(new T.BoxGeometry(0.45, 0.25, 3.4), lambert("#8a9099"));
   shoe.position.set(-0.1, 17 - 0.13, 0);
   g.add(base, lower, upper, shoe);
-  g.position.x = x;
+  g.scale.y = (wireHeight - top) / (17 - top);
+  g.position.set(x, top * (1 - g.scale.y), 0);
   return g;
 }
 
@@ -307,7 +309,7 @@ function roofKit(kind: SectionSpec["roof"], len: number, body: Body) {
  * on itself, so the train can be laid along a curve section by section; `offset` is its distance ahead
  * of the train's center.
  */
-export function buildTrain(consist: Consist, sign: TrainSign): TrainModel {
+export function buildTrain(consist: Consist, sign: TrainSign, wireHeight = 17): TrainModel {
   const group = new T.Group();
   const cars: TrainModel["cars"] = [];
   const lrv = consist.kind === "lrv";
@@ -357,7 +359,7 @@ export function buildTrain(consist: Consist, sign: TrainSign): TrainModel {
     inner.add(box);
     for (const f of part.spec.trucks) inner.add(truck(f * len, body));
     inner.add(roofKit(part.spec.roof, len, body));
-    if (part.spec.panto) inner.add(pantograph(-len * 0.28, body.top + (part.spec.roof ? 1.1 : 0)));
+    if (part.spec.panto) inner.add(pantograph(-len * 0.28, body.top + (part.spec.roof ? 1.1 : 0), wireHeight));
     if (part.spec.skirt) {
       for (const z of [-1, 1]) {
         const skirt = new T.Mesh(new T.BoxGeometry(len * 0.92, body.bottom + 0.4, 0.2), lambert("#b8bcc0"));
@@ -390,12 +392,6 @@ export function buildTrain(consist: Consist, sign: TrainSign): TrainModel {
           car.add(marker);
         }
       }
-      if (first) {
-        const beam = new T.Mesh(new T.CylinderGeometry(0.6, 7, 26, 18, 1, true), glow("#fff6d6", 0.1));
-        beam.rotation.z = -Math.PI / 2;
-        beam.position.set(x + 13, body.bottom + height * 0.2, 0);
-        car.add(beam);
-      }
     }
     group.add(car);
     cars.push({ group: car, offset: cursor - len / 2, length: len });
@@ -403,26 +399,31 @@ export function buildTrain(consist: Consist, sign: TrainSign): TrainModel {
   });
 
   group.traverse((o) => (o.frustumCulled = false));
-  return { group, cars, length: total };
+  return { group, cars, length: total, width: body.width };
 }
 
 /** Air connections on the outside of the central inter-car gap, reachable from the platform. */
-export function buildAirLine(model: TrainModel) {
-  const car = model.cars[Math.floor(model.cars.length / 2) - 1];
-  const joint = new T.Group();
-  joint.position.set(-car.length / 2 - .28, 4.36, 3.96);
+export function buildAirLine(model: TrainModel, height = 4.36) {
+  const mid = Math.floor(model.cars.length / 2);
+  const car = model.cars[mid - 1], next = model.cars[mid];
+  const joint = buildCrewTool("socket"), socket = buildCrewTool("socket");
+  const side = model.width / 2 + .08;
+  joint.position.set(-car.length / 2 + .12, height, side);
+  socket.position.set(next.length / 2 - .12, height, side);
   car.group.add(joint);
-  for (const x of [0, -.74]) {
-    const port = buildCrewTool("socket");
-    port.position.x = x;
-    joint.add(port);
-  }
+  next.group.add(socket);
   const hose = buildCrewTool("hose");
-  hose.position.set(-.05,0,.48);
-  hose.rotation.y = Math.PI;
+  const end = new T.Vector3();
+  hose.position.z = .48;
   joint.add(hose);
   hose.visible = false;
-  return { joint, hose };
+  return {     joint, hose, connect(on: boolean) {
+      hose.visible = on;
+      if (!on) return;
+      joint.worldToLocal(socket.getWorldPosition(end));
+      hose.scale.x = Math.hypot(end.x, end.z) / .61;
+      hose.rotation.y = Math.atan2(-end.z, end.x);
+    }   };
 }
 
 /** What a train's destination sign reads, by route and whether it's heading west (outbound on the Green Line). */
@@ -450,7 +451,23 @@ export function trainSign(route: string, westbound: boolean): TrainSign {
 
 // ---------------------------------------------------------------- crew
 
-export { buildWorker } from "./crewModels";
+export { buildWorker, type Worker } from "./crewModels";
+
+/** The textures and crew parts live across incidents. Each scene owns its other GPU resources. */
+export function disposeModel(group: T.Object3D) {
+  const geometries = new Set<T.BufferGeometry>(), materials = new Set<T.Material>();
+  group.traverse(o => {
+    if (!(o instanceof T.Mesh)) return;
+    if (o instanceof T.InstancedMesh) o.dispose();
+    if (!o.geometry.userData.sharedCrewPart) geometries.add(o.geometry);
+    for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
+      if (!m.userData.sharedCrewPart) materials.add(m);
+    }
+  });
+  for (const g of geometries) g.dispose();
+  for (const m of materials) m.dispose();
+  group.removeFromParent();
+}
 
 // ---------------------------------------------------------------- work zone
 
@@ -463,7 +480,7 @@ export function buildLantern(color: string) {
   const lamp = new T.Mesh(new T.CylinderGeometry(0.4, 0.4, 0.8, 12), mat);
   lamp.position.y = 2.6;
   const haloMat = glow(color, 0.4);
-  const halo = new T.Mesh(new T.SphereGeometry(1.6, 14, 10), haloMat);
+  const halo = new T.Mesh(new T.SphereGeometry(.53, 12, 8), haloMat);
   halo.position.y = 2.6;
   g.add(stand, lamp, halo);
   g.traverse((o) => (o.frustumCulled = false));
@@ -492,8 +509,8 @@ export function buildLightTower() {
   for (let i = 0; i < 3; i++) {
     const leg = new T.Mesh(new T.BoxGeometry(0.18, 4.4, 0.18), steel);
     const a = (i / 3) * Math.PI * 2;
-    leg.position.set(Math.cos(a) * 1.1, 2, Math.sin(a) * 1.1);
-    leg.rotation.set(Math.sin(a) * 0.28, 0, -Math.cos(a) * 0.28);
+    leg.position.set(Math.cos(a) * .83, 2.03, Math.sin(a) * .83);
+    leg.rotation.set(-Math.sin(a) * 0.40, 0, Math.cos(a) * 0.40);
     g.add(leg);
   }
   const mast = new T.Mesh(new T.BoxGeometry(0.22, 8, 0.22), steel);
@@ -501,7 +518,12 @@ export function buildLightTower() {
   g.add(mast);
   const lampMat = new T.MeshBasicMaterial({ color: "#fffaf0", toneMapped: false });
   for (const dx of [-0.8, 0.8]) {
-    const head = new T.Mesh(new T.BoxGeometry(1.2, 0.9, 0.5), lampMat);
+    const housing = new T.Mesh(new T.BoxGeometry(1.42, 1.06, .54), lambert("#3c4445"));
+    housing.position.set(dx, 10.12, .07);
+    housing.rotation.x = .38;
+    g.add(housing);
+    const head = new T.Mesh(new T.BoxGeometry(1.2, 0.87, 0.13), lampMat);
+    head.rotation.x = .38;
     head.position.set(dx, 10.1, 0.3);
     g.add(head);
   }
@@ -586,7 +608,7 @@ export function buildSignal(): SignalModel {
     disc.rotation.y = Math.PI / 2;
     disc.position.set(0.56, 11.9 - i * 1.25, 0);
     const halo = glow(colors[c], 0);
-    const haloMesh = new T.Mesh(new T.CircleGeometry(2.2, 20), halo);
+    const haloMesh = new T.Mesh(new T.CircleGeometry(.68, 16), halo);
     haloMesh.rotation.y = Math.PI / 2;
     haloMesh.position.set(0.6, disc.position.y, 0);
     const hood = new T.Mesh(new T.BoxGeometry(0.6, 0.12, 1.0), lambert("#111214"));
@@ -611,10 +633,10 @@ export interface CabinetModel {
   group: T.Group;
   /** Front face, where sparks and smoke come out (cabinet-local). */
   mouth: T.Vector3;
-  set(state: "fault" | "ok", flicker: number, time: number): void;
+  set(state: "fault" | "ok", flicker: number, time: number, work?: number): void;
 }
 
-export function buildCabinet(): CabinetModel {
+export function buildCabinet(power = false): CabinetModel {
   const g = new T.Group();
   const body = new T.Mesh(new T.BoxGeometry(4.6, 7, 2.4), lambert("#5f6b63"));
   body.position.y = 3.5;
@@ -643,6 +665,9 @@ export function buildCabinet(): CabinetModel {
   g.add(beacon);
   // Projecting relay modules, plug bases and a terminal strip inside the open case.
   const housing = lambert("#46504e"), label = lambert("#d8d2bf");
+  const handles: T.Group[] = [];
+  let plug: T.Mesh | undefined;
+  let plugLabel: T.Mesh | undefined;
   for (const y of [1.9, 3.35, 4.8]) {
     for (const x of [-1.2, 0, 1.2]) {
       const relay = new T.Mesh(new T.BoxGeometry(.89, .88, .36), housing);
@@ -650,17 +675,33 @@ export function buildCabinet(): CabinetModel {
       const tag = new T.Mesh(new T.BoxGeometry(.56, .16, .04), label);
       tag.position.set(x, y + .19, 1.57);
       g.add(relay, tag);
+      if (!power && x === 1.2 && y === 1.9) { plug = relay; plugLabel = tag; }
+      if (power && y === 3.35) {
+        const lever = new T.Group();
+        lever.position.set(x, 3.65, 1.61);
+        const handle = new T.Mesh(new T.BoxGeometry(.28, .64, .16), label);
+        handle.position.y = .28;
+        lever.add(handle);
+        g.add(lever);
+        handles.push(lever);
+      }
     }
   }
   g.traverse((o) => (o.frustumCulled = false));
   return {
     group: g,
     mouth: new T.Vector3(0, 4.2, 1.6),
-    set(state, flicker, time) {
-      leds.forEach((m, i) => {
+    set(state, flicker, time, work = -1) {
+      if (plug && plugLabel) plug.visible = plugLabel.visible = work < 2.85 || work >= 4.4;
+      for (let i = 0; i < handles.length; i++) {
+        const u = state === "ok" ? 1 : T.MathUtils.smoothstep(work - i * 1.96, .27, 1.04);
+        handles[i].rotation.x = .25 + 2.04 * u;
+      }
+      for (let i = 0; i < leds.length; i++) {
+        const m = leds[i];
         if (state === "ok") m.color.set(i % 3 === 0 ? "#2bff8a" : "#0f5a32");
         else m.color.set(Math.sin(time * 9 + i * 1.7) > 0.2 ? "#ff3b1f" : "#3a0c06").multiplyScalar(flicker);
-      });
+      }
       beaconMat.color.set(state === "ok" ? "#103a22" : "#ff2a2a");
 
     },
