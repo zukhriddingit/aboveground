@@ -15,7 +15,7 @@ plus Harvard and Kendall/MIT on the Red Line. Live MBTA trains are drawn citywid
 | 1 · Backend, MBTA, AI | `backend/**` | FastAPI on :8000, MBTA poller (`/vehicles`, `/alerts`, `/predictions`) with mock-train fallback, in-memory Stories (12 seeded + POST), AI plain-English alert translator with fallback templates |
 | 2 · 3D map, trains, avatar | `frontend/src/components/map/**`, `frontend/src/app/map-dev/**` | MapLibre 3D Boston, glowing T lines, Three.js layer: train pods, station beacons, alert holograms, tourist landmark beacons, the avatar + hats + Demo Ride |
 | 3 · Stories, Tourist Mode | `frontend/src/components/stories/**` | Story bubbles, Instagram-style Story viewer, 5-second Post Story sheet, Tourist narrator card (`speechSynthesis`) |
-| 4 · Fix the T, HUD, integration | `frontend/src/components/game/**`, `frontend/src/components/hud/**`, `frontend/src/app/page.tsx` | Wire-match mini-game, AI delay card, Transit Rank XP + wardrobe, map controls, dock, wiring everything in `page.tsx` |
+| 4 · Fix the T, HUD, integration | `frontend/src/components/game/**`, `frontend/src/components/hud/**`, `frontend/src/app/page.tsx` | Six 3D repair mini-games, AI delay card, Transit Rank XP + wardrobe, map controls, dock, wiring everything in `page.tsx` |
 
 Shared, locked at minute 0 (change only with the team's OK, in a small separate commit):
 
@@ -116,13 +116,14 @@ Wiring for the map card and `page.tsx`: `frontend/src/components/quickcheck/READ
 ## 90-second mentor demo
 
 1. Open the 3D map (10 s): tilted Boston, live trains and alerts only. Layers (top right) adds Station Stories, Shuttle
-   Wayfinders and Tourist Beacons; 2D Clean flattens the map.
+   Wayfinders and Tourist Beacons; 2D Clean flattens the map, and the sun/moon pair switches between the light daytime
+   map and the dark dusk map (the HUD follows, and both choices are remembered).
 2. Demo Ride + Tourist Beacons (25 s): turn on Tourist Beacons and Station Stories, the avatar rides to Kenmore and Copley,
    the browser narrates the Boston Public Library, tap a Cheap Eats bubble over Kenmore, post a live Story.
 3. Behind-the-Scenes Disruption Visualizer at Boylston (35 s): "Simulate T Delay" raises the red hologram over
    the Green Line signal-modernization zone; tap it to see what crews are fixing (a signal relay on the track
-   circuit), Gemini's two-sentence "why it's 15 minutes + your smartest move", and do the 15-second schematic
-   repair step. The same card covers the Blue Line Airport–Wonderland overhead-wire inspection, the Harvard
+   circuit), Gemini's two-sentence "why it's 15 minutes + your smartest move", then land the wires in the
+   full-screen 3D relay case (no timer). The same card covers the Blue Line Airport–Wonderland overhead-wire inspection, the Harvard
    disabled-train recovery and the Chinatown shuttle bridge.
 4. Waze for the T (10 s): one tap on "Ghost · Stale" at Park Street; with a second rider's tap the stop flips to
    amber "Unverified · Stale ETA" and the Ashmont branch gap shows even though the trunk looks fine. Works in a

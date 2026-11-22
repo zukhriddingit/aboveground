@@ -15,3 +15,5 @@ Read `README.md` first: it has the product, the folder ownership table and the A
 6. UI look: MBTA wayfinding, not neon. Use the tokens in `frontend/src/lib/ui.ts` (matte `bg-zinc-950/88 backdrop-blur-xl`
    panels, 1 px `border-white/12`, official line colours on white type, white as the only accent, MBTA red for delays,
    no coloured glows). Floating panels end `bottom-24` above the dock. Keep the centre of the 3D map clear.
+   The HUD has a light theme (`components/hud/HudTheme.tsx` swaps `white` and the `zinc` scale), so white type on a
+   coloured fill (line bullets, MBTA red) must be `text-[#fff]`, not `text-white`.
