@@ -24,6 +24,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Literal, Optional
+from urllib.parse import quote
 
 from fastapi import APIRouter, Query
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -65,7 +66,15 @@ class NewStationStory(_Camel):
             raise ValueError("author is empty")
         return v
 
-    @field_validator("caption", "place_name")
+    @field_validator("caption")
+    @classmethod
+    def _caption(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("caption is empty")
+        return v
+
+    @field_validator("place_name")
     @classmethod
     def _strip(cls, v: str) -> str:
         return v.strip()
@@ -83,24 +92,116 @@ class StationStory(NewStationStory):
     created_at: str
 
 
+def story_scene(
+    top: str,
+    bottom: str,
+    glow: str,
+    track: str,
+    emojis: list[tuple[str, int, int, int]],
+    seed: int,
+    *,
+    water: bool = False,
+    sun: Optional[str] = None,
+    stars: bool = False,
+) -> str:
+    """A 720x1280 generated SVG 'photo' for a seeded story, in the T-Feed scene style (community.py's _scene).
+    Inline, so nothing can 404 offline. Integer-only maths, so storyScene() in frontend/src/lib/mockData.ts
+    builds the byte-identical data URL."""
+    state = (seed * 7919) % 2147483647 or 1
+
+    def nxt() -> int:
+        nonlocal state
+        state = (state * 48271) % 2147483647
+        return state
+
+    def rint(lo: int, hi: int) -> int:
+        return lo + nxt() % (hi - lo + 1)
+
+    w, h, base = 720, 1280, 990
+    out = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {w} {h}" width="{w}" height="{h}">',
+        f'<defs><linearGradient id="s" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="{top}"/><stop offset="1" stop-color="{bottom}"/></linearGradient>',
+        f'<radialGradient id="g" cx=".5" cy=".4" r=".55"><stop offset="0" stop-color="{glow}" stop-opacity=".75"/><stop offset="1" stop-color="{glow}" stop-opacity="0"/></radialGradient></defs>',
+        f'<rect width="{w}" height="{h}" fill="url(#s)"/>',
+        '<circle cx="360" cy="520" r="430" fill="url(#g)"/>',
+    ]
+    if stars:
+        for _ in range(18):
+            out.append(f'<circle cx="{rint(20, 700)}" cy="{rint(60, 520)}" r="{rint(2, 4)}" fill="#ffffff" opacity="0.{rint(40, 90)}"/>')
+    if sun:
+        out.append(f'<circle cx="360" cy="{base - 230}" r="120" fill="{sun}"/>')
+    x = -16
+    while x < w:
+        bw, bh = rint(60, 118), (rint(80, 250) if water else rint(140, 430))  # a river view: a low, distant skyline
+        out.append(f'<rect x="{x}" y="{base - bh}" width="{bw}" height="{bh}" fill="#0a0f24" opacity=".94"/>')
+        for wy in range(base - bh + 22, base - 18, 36):
+            for wx in range(x + 10, x + bw - 14, 24):
+                if nxt() % 100 < 30:
+                    out.append(f'<rect x="{wx}" y="{wy}" width="8" height="12" fill="#ffd98a" opacity="0.{rint(45, 95)}"/>')
+        x += bw + rint(4, 14)
+    if water:
+        out.append(f'<rect y="{base}" width="{w}" height="{h - base}" fill="#0b1636"/>')
+        for i in range(10):
+            half = 40 + rint(40, 200)
+            out.append(
+                f'<rect x="{360 - half}" y="{base + 26 + i * 28}" width="{2 * half}" height="5" rx="2.5" '
+                f'fill="{sun or glow}" opacity="0.{55 - i * 5:02d}"/>'
+            )
+    else:
+        out.append(f'<rect y="{base}" width="{w}" height="{h - base}" fill="#060a18"/>')
+    ty = base + 8 if water else base + 48
+    out.append(f'<rect y="{ty - 12}" width="{w}" height="24" fill="{track}" opacity=".28"/>')
+    out.append(f'<rect y="{ty - 3}" width="{w}" height="6" fill="{track}"/>')
+    for ch, cx, cy, size in emojis:
+        out.append(
+            f'<text x="{cx}" y="{cy}" font-size="{size}" text-anchor="middle" dominant-baseline="central" '
+            f'font-family="Apple Color Emoji,Segoe UI Emoji,Noto Color Emoji,sans-serif">{ch}</text>'
+        )
+    out.append("</svg>")
+    # Same escaping as JavaScript's encodeURIComponent.
+    return "data:image/svg+xml;charset=utf-8," + quote("".join(out), safe="!~*'()")
+
+
+_GREEN, _RED = "#38d283", "#ff5948"
+
+# One scene per seeded story, matching its caption (same as STORY_SCENES in frontend/src/lib/mockData.ts).
+STORY_SCENES: dict[str, str] = {
+    # $7 pizza slice before the game, Kenmore
+    "s1": story_scene("#3a1240", "#ff7a3d", "#ffb36b", _GREEN, [("🍕", 360, 560, 300), ("⚾", 560, 330, 110), ("🏟️", 170, 310, 110)], 11),
+    # Sox fans on Lansdowne St at night
+    "s2": story_scene("#0b1442", "#9b1c2e", _RED, _GREEN, [("🧢", 360, 560, 280), ("⚾", 190, 330, 110), ("📣", 560, 320, 110)], 12, stars=True),
+    # Sunset over the Charles from the BU Bridge
+    "s3": story_scene("#3d1a5c", "#ff8a4c", "#ffcf6b", _GREEN, [("🚣", 540, 1110, 90)], 13, water=True, sun="#ffd27a"),
+    # Bates Hall reading room, Boston Public Library (the green lamps)
+    "s4": story_scene("#0b2a24", "#1f5f4a", "#7ee0a8", _GREEN, [("📚", 360, 540, 280), ("💡", 190, 310, 110), ("🏛️", 550, 300, 110)], 14),
+    # Ramen under $15 near Copley
+    "s5": story_scene("#2a0f2e", "#c2410c", "#ffab31", _GREEN, [("🍜", 360, 560, 290), ("🥢", 560, 350, 120), ("♨️", 190, 340, 100)], 15),
+    # Free outdoor show at the Parkman Bandstand on the Common
+    "s6": story_scene("#120b3a", "#4c1d95", "#c084fc", _GREEN, [("🎸", 360, 540, 270), ("🎶", 190, 320, 110), ("🌳", 570, 330, 120)], 16, stars=True),
+    # Chinatown dumplings, 8 for $6
+    "s7": story_scene("#3a0d12", "#b4361c", "#ffab31", _GREEN, [("🥟", 360, 560, 290), ("🏮", 170, 280, 110), ("🏮", 550, 260, 110)], 17),
+    # Street musician in the Harvard Pit
+    "s8": story_scene("#1a0b2e", "#7f1d1d", _RED, _RED, [("🎷", 360, 540, 280), ("🎵", 190, 330, 110), ("🎶", 560, 300, 110)], 18),
+}
+
+
 def _seeds() -> list[dict[str, Any]]:
     now = datetime.now(timezone.utc)
-    photo = lambda seed: f"https://picsum.photos/seed/{seed}/720/1280"  # noqa: E731
     rows = [
-        ("s1", "place-kencl", "CHEAP_EATS", "maya.bu", "$7 pizza slice the size of my face before the game", "Pizza by the Slice", "$7", 4, "kenmore-slice", 12),
-        ("s2", "place-kencl", "EVENTS", "jtan", "Sox fans spilling onto Lansdowne already", "Lansdowne St", None, 6, "lansdowne", 25),
-        ("s3", "place-bucen", "VIBES", "terriergirl", "Sunset over the Charles from the BU bridge", "BU Bridge", None, 5, "charles-sunset", 40),
-        ("s4", "place-coecl", "VIBES", "readsalot", "Bates Hall reading room is silent and gorgeous", "Boston Public Library", None, 1, "bates-hall", 18),
-        ("s5", "place-coecl", "CHEAP_EATS", "noodlenerd", "Ramen under $15 that actually slaps", "Boylston St ramen", "$14", 3, "copley-ramen", 55),
-        ("s6", "place-pktrm", "EVENTS", "commonfolk", "Free outdoor show at the Parkman Bandstand tonight", "Boston Common", None, 2, "common-show", 8),
-        ("s7", "place-boyls", "CHEAP_EATS", "dumplingdan", "Chinatown dumplings, 8 for $6", "Chinatown", "$6", 5, "chinatown-dumplings", 30),
-        ("s8", "place-harsq", "VIBES", "pitpal", "Street musician in the Pit is unreal right now", "The Pit", None, 1, "harvard-pit", 15),
+        ("s1", "place-kencl", "CHEAP_EATS", "maya.bu", "$7 pizza slice the size of my face before the game", "Pizza by the Slice", "$7", 4, 12),
+        ("s2", "place-kencl", "EVENTS", "jtan", "Sox fans spilling onto Lansdowne already", "Lansdowne St", None, 6, 25),
+        ("s3", "place-bucen", "VIBES", "terriergirl", "Sunset over the Charles from the BU bridge", "BU Bridge", None, 5, 40),
+        ("s4", "place-coecl", "VIBES", "readsalot", "Bates Hall reading room is silent and gorgeous", "Boston Public Library", None, 1, 18),
+        ("s5", "place-coecl", "CHEAP_EATS", "noodlenerd", "Ramen under $15 that actually slaps", "Boylston St ramen", "$14", 3, 55),
+        ("s6", "place-pktrm", "EVENTS", "commonfolk", "Free outdoor show at the Parkman Bandstand tonight", "Boston Common", None, 2, 8),
+        ("s7", "place-boyls", "CHEAP_EATS", "dumplingdan", "Chinatown dumplings, 8 for $6", "Chinatown", "$6", 5, 30),
+        ("s8", "place-harsq", "VIBES", "pitpal", "Street musician in the Pit is unreal right now", "The Pit", None, 1, 15),
     ]
     out = []
-    for sid, station, cat, author, caption, place, price, walk, seed, ago in rows:
+    for sid, station, cat, author, caption, place, price, walk, ago in rows:
         story = {
             "id": sid, "stationId": station, "category": cat, "author": author, "caption": caption,
-            "placeName": place, "walkMin": walk, "imageUrl": photo(seed), "createdAt": _iso(now - timedelta(minutes=ago)),
+            "placeName": place, "walkMin": walk, "imageUrl": STORY_SCENES[sid], "createdAt": _iso(now - timedelta(minutes=ago)),
         }
         if price:
             story["priceTag"] = price
@@ -122,13 +223,22 @@ def _load_rider_stories() -> list[dict[str, Any]]:
         return []
 
 
-def _save(rider: list[dict[str, Any]]) -> None:
-    tmp = _DATA_FILE.with_suffix(".json.tmp")
-    try:
-        tmp.write_text(json.dumps(rider), encoding="utf-8")
-        os.replace(tmp, _DATA_FILE)
-    except OSError:
-        pass  # read-only disk: stories just won't survive a restart
+_save_lock = threading.Lock()
+
+
+def _save(rider: Optional[list[dict[str, Any]]] = None) -> None:
+    """Mirror the rider stories to disk. Concurrent POSTs each run this in a worker thread and share one .tmp
+    file, so they take turns; with no argument the snapshot is taken inside the turn, so the last write wins."""
+    with _save_lock:
+        if rider is None:
+            with _lock:
+                rider = [s for s in _stories if s["id"] not in SEED_IDS]
+        tmp = _DATA_FILE.with_suffix(".json.tmp")
+        try:
+            tmp.write_text(json.dumps(rider), encoding="utf-8")
+            os.replace(tmp, _DATA_FILE)
+        except OSError:
+            pass  # read-only disk: stories just won't survive a restart
 
 
 with _lock:
@@ -156,6 +266,5 @@ async def post_story(body: NewStationStory) -> dict[str, Any]:
     with _lock:
         _stories.insert(0, story)
         del _stories[MAX_STORIES:]
-        rider = [s for s in _stories if s["id"] not in SEED_IDS]
-    await asyncio.to_thread(_save, rider)
+    await asyncio.to_thread(_save)
     return story
