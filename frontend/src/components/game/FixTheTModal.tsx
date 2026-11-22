@@ -169,7 +169,7 @@ function FixTheTDialog({ alert, station, stats, simulated, unlockName, explore, 
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className={`${PANEL} relative max-h-[92dvh] w-full max-w-lg animate-[fixt-pop_0.2s_ease-out] overflow-y-auto p-5`}
+        className={`${PANEL} relative max-h-[92dvh] w-full max-w-lg animate-[fixt-pop_0.2s_ease-out] overflow-y-auto p-5 [scrollbar-color:rgba(255,255,255,0.25)_transparent] [scrollbar-width:thin]`}
       >
         {step !== "won" && (
           <button

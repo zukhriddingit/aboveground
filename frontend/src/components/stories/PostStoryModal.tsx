@@ -52,6 +52,14 @@ function PostStorySheet({
   const cameraRef = useRef<HTMLInputElement>(null);
   const galleryRef = useRef<HTMLInputElement>(null);
   const captionRef = useRef<HTMLTextAreaElement>(null);
+  const stationRow = useRef<HTMLDivElement>(null);
+
+  // The preselected station (the one the rider was looking at) may sit off the end of the chip row.
+  useEffect(() => {
+    const row = stationRow.current;
+    const chip = row?.querySelector<HTMLElement>('[aria-pressed="true"]');
+    if (row && chip) row.scrollLeft = chip.offsetLeft - row.clientWidth / 2 + chip.offsetWidth / 2;
+  }, []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
@@ -174,7 +182,7 @@ function PostStorySheet({
 
         {/* Station */}
         <Label>Station</Label>
-        <div className="tv-no-scrollbar -mx-5 mb-4 flex gap-2 overflow-x-auto px-5">
+        <div ref={stationRow} className="tv-no-scrollbar relative -mx-5 mb-4 flex gap-2 overflow-x-auto px-5">
           {stations.map((s) => {
             const active = s.id === stationId;
             return (
@@ -182,6 +190,7 @@ function PostStorySheet({
                 key={s.id}
                 type="button"
                 onClick={() => setStationId(s.id)}
+                aria-pressed={active}
                 className={`flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold ring-1 transition ${
                   active ? "bg-white text-black ring-white" : "bg-white/5 text-white/80 ring-white/15 hover:bg-white/10"
                 }`}

@@ -185,7 +185,7 @@ export function QuickCheckBar({
         <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
           <span className={LABEL}>Quick-Check</span>
           <span className="rounded border border-white/12 px-1 text-[10px] font-semibold text-zinc-200">+{QUICK_POINTS} XP per tap</span>
-          <span className="ml-auto flex min-w-0 items-center gap-1">
+          <span className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-1">
             {status}
             <StaleEtaBadge signals={sig} compact />
           </span>
