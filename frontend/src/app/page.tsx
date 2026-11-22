@@ -20,7 +20,10 @@ import {
   IncidentSim,
   IncidentTag,
   effectLabel,
+  faultForGame,
+  faultPlace,
   featuredStationFor,
+  gameFor,
   scenarioFor,
   shortName,
   translateForGame,
@@ -254,7 +257,7 @@ export default function Home() {
       setAlertsOpen(false);
       setExplore({ id, ...scenario });
       setFixAlert(staged.get(id)?.alert ?? translateForGame(station, a.header, id, scenario.game));
-      if (!sim.incidents.has(id)) sim.startIncident(id, station.id, { holds: false });
+      if (!sim.incidents.has(id)) sim.startIncident(id, station.id, { holds: false, fault: faultForGame(scenario.game) });
       viewTunnel(station.id);
       walkInWhenOpen(station.id);
     },
@@ -294,7 +297,8 @@ export default function Home() {
     setSimulating(true);
     try {
       const { alert } = await triggerDelay(station);
-      sim.startIncident(alert.id, alert.stationId);
+      const fault = faultForGame(gameFor(alert));
+      sim.startIncident(alert.id, alert.stationId, { fault });
       setSimAlerts((list) => [...list, alert]);
       setCleared((set) => {
         const next = new Set(set);
@@ -305,7 +309,7 @@ export default function Home() {
         viewTunnel(station.id);
         walkInWhenOpen(station.id);
       }
-      push(alert.plainTitle, { tone: "danger", description: "The street is opening over the tunnel. Trains are holding at the platform.", durationMs: 5500 });
+      push(alert.plainTitle, { tone: "danger", description: faultPlace(fault, station.id, shortName(station)), durationMs: 6000 });
     } finally {
       setSimulating(false);
     }
@@ -320,6 +324,7 @@ export default function Home() {
       const station = stationById(alert.stationId);
       const name = station ? shortName(station) : "the station";
       const simulatedOnly = alert.id.startsWith("live-");
+      const fault = sim.incidents.get(alert.id)?.fault ?? faultForGame(gameFor(alert));
 
       const reveal = async () => {
         if (!unlockedHat) {
@@ -368,7 +373,7 @@ export default function Home() {
         await exitTunnel();
         window.setTimeout(() => void reveal(), 400);
       };
-      if (scene.current) scene.current.playRepair(alert.stationId, { onRestored: restore, onDone: () => void finish() });
+      if (scene.current) scene.current.playRepair(alert.stationId, { onRestored: restore, onDone: () => void finish() }, fault);
       else {
         restore();
         void finish();
