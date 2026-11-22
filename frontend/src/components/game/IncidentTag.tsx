@@ -5,7 +5,7 @@ import { TriangleAlert } from "lucide-react";
 import { MapAnchor } from "@/components/map";
 import type { Station, TranslatedAlert } from "@/types/tverse";
 import { shortName } from "./alertTranslator";
-import { formatElapsed } from "./FixTheTModal";
+import { formatElapsed } from "./format";
 import type { IncidentSim } from "./incidentSim";
 import { zoomScale } from "./trackGeo";
 

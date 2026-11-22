@@ -1,7 +1,9 @@
 // Fix the T (Member 4): delay simulation, 3D repair effects, the delay card and mini-games.
-export { FixTheTModal, POINTS_PER_FIX, formatElapsed, type FixTheTModalProps } from "./FixTheTModal";
+// The delay card (FixTheTModal) and the 3D scene (FixTheTScene) are loaded on demand, so import
+// them from their own files rather than from here.
+export { formatElapsed } from "./format";
 export { FixTheTMap, type FixTheTMapProps } from "./FixTheTMap";
-export { FixTheTScene, type RepairCallbacks } from "./FixTheTScene";
+export type { RepairCallbacks } from "./FixTheTScene";
 export type { TunnelView } from "./TunnelView";
 export { IncidentTag } from "./IncidentTag";
 export { zoomScale } from "./trackGeo";
@@ -9,8 +11,6 @@ export { IncidentSim, RIDERS_PER_TRAIN, type FeedSource, type Incident, type Inc
 export { useWorldFeed, triggerDelay, type WorldFeed } from "./useWorldFeed";
 export { canPlay, demoAlert, gameFor, shortName, translateForGame, translateLocally, DEMO_RAW_TEXT } from "./alertTranslator";
 export { faultForGame, faultPlace, type FaultKind } from "./faults";
-export { WireMatchGame } from "./WireMatchGame";
-export { TrackWeldGame } from "./TrackWeldGame";
 export { ClosureMarkers } from "./ClosureMarkers";
 export { useLiveMbta, type ClosureSite, type LiveMbta } from "./useLiveMbta";
 export {
