@@ -40,12 +40,15 @@ import {
   triggerDelay,
   useLiveMbta,
   useWorldFeed,
+  workItems,
+  workTitle,
   type FeedSource,
   type GameKind,
   type LiveAlert,
   type LiveEvent,
   type MbtaStation,
   type TunnelView,
+  type WorkItem,
 } from "@/components/game";
 import {
   DEFAULT_LAYERS,
@@ -141,7 +144,7 @@ export default function Home() {
   }, [mapReady, theme]);
   const telemetryUnlocked = rank.level >= 3;
   /** A simulated repair staged from a live MBTA alert, while its card or repair is up. */
-  const [explore, setExplore] = useState<{ id: string; game: GameKind; label: string; alert: LiveAlert } | null>(null);
+  const [explore, setExplore] = useState<{ id: string; game: GameKind; label: string; alert: LiveAlert; items: WorkItem[] } | null>(null);
   // Read lazily: the toggle only renders inside the alerts panel, which starts closed, so SSR never shows it.
   const [notifySupported] = useState(() => typeof window !== "undefined" && "Notification" in window);
   const [notifyOn, setNotifyOn] = useState(
@@ -416,17 +419,23 @@ export default function Home() {
   /** "Explore a simulated repair" for a live alert: the tunnel opens, but the real trains keep moving. */
   const exploreLive = useCallback(
     (a: LiveAlert, pick?: { station: Station; scenario: { game: GameKind; label: string } }) => {
-      const scenario = pick?.scenario ?? scenarioFor(a.cause);
+      // Planned work names its jobs ("switch and rail upgrades"); each one gets its own puzzle, in that order.
+      const items = a.closure ? workItems(a) : [];
+      const work = items.length ? `${workTitle(items)} work` : null;
+      const scenario = work ? { game: items[0].game, label: work } : (pick?.scenario ?? scenarioFor(a.cause));
       const station = pick?.station ?? featuredStationFor(a, stationsRef.current, live.index);
       if (!scenario || !station || repairing || pendingCard.current) return;
       const busy = simAlerts.find((s) => s.stationId === station.id);
       if (busy) return openAlert(busy);
       const id = liveKey(a);
       setAlertsOpen(false);
-      setExplore({ id, ...scenario, alert: a });
+      setExplore({ id, ...scenario, alert: a, items });
       if (!sim.incidents.has(id)) sim.startIncident(id, station.id, { holds: false, fault: faultForGame(scenario.game) });
       // Fly to the station and go down onto the platform first; the card (and its mini-game) follows.
-      const card = staged.get(id)?.alert ?? translateForGame(station, a.header, id, scenario.game);
+      const base = staged.get(id)?.alert ?? translateForGame(station, a.header, id, scenario.game);
+      const card = work
+        ? { ...base, plainTitle: `${work.charAt(0).toUpperCase()}${work.slice(1)} near ${shortName(station)}`, plainExplanation: items.map((i) => i.what).join(" ") }
+        : base;
       pendingCard.current = id;
       const showCard = () => {
         if (pendingCard.current !== id) return;
