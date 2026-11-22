@@ -301,8 +301,17 @@ export default function TVerseMap(props: TVerseMapProps) {
       m.on("pitchstart", gesture);
       m.on("zoomstart", gesture);
 
-      const pick = (point: maplibregl.Point) => latest.current.viewMode === "2d"
-        ? pickFlat(m, point) : layerRef.current?.pick(point.x, point.y);
+      // A click on a station's name opens the station even when a train is dwelling right there.
+      const stationLabelAt = (point: maplibregl.Point) => {
+        if (!m.getLayer("station-names")) return null;
+        const id = m.queryRenderedFeatures(point, { layers: ["station-names"] })[0]?.properties?.id;
+        return typeof id === "string" ? { kind: "station" as const, id } : null;
+      };
+      const pick = (point: maplibregl.Point) => {
+        if (latest.current.viewMode === "2d") return pickFlat(m, point);
+        const hit = layerRef.current?.pick(point.x, point.y);
+        return !hit || hit.kind === "train" ? stationLabelAt(point) ?? hit : hit;
+      };
       m.on("click", e => {
         const layer = layerRef.current;
         const hit = pick(e.point);

@@ -1504,8 +1504,10 @@ export class ThreeOverlayLayer implements CustomLayerInterface {
       const r = Math.max(28, Math.hypot(head.x - feet.x, head.y - feet.y) * 0.55);
       test("avatar", "me", this.v3.set(this.avatarPos.x, this.avatarSize * 0.5, this.avatarPos.z), r);
     }
-    const priority: Record<PickKind, number> = { alert: 0, avatar: 1, landmark: 2, train: 3, station: 4 };
-    candidates.sort((a, b) => priority[a.kind] - priority[b.kind] || a.d - b.d);
+    // Trains and stations rank together by how close the click is (a hit on a station's model counts as dead
+    // centre): a train dwelling at a stop must not make the stop itself unclickable.
+    const priority: Record<PickKind, number> = { alert: 0, avatar: 1, landmark: 2, train: 3, station: 3 };
+    candidates.sort((a, b) => priority[a.kind] - priority[b.kind] || a.d - b.d || (a.kind === b.kind ? 0 : a.kind === "station" ? -1 : 1));
     return candidates[0] ? { kind: candidates[0].kind, id: candidates[0].id } : null;
   }
 
