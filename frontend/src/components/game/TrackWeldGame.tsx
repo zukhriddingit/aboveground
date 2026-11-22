@@ -441,7 +441,7 @@ const STEPS: Array<{ id: Phase; label: string }> = [
 ];
 
 /** Thermite weld: preheat, pour, grind, cool. */
-export function TrackWeldGame({ onWin, onExit, place }: MiniGameProps) {
+export function TrackWeldGame({ onWin, onExit, place, planned }: MiniGameProps) {
   const [phase, setPhase] = useState<Phase>("heat");
   const [temp, setTemp] = useState(START_F);
   const [needle, setNeedle] = useState(0);
@@ -536,7 +536,7 @@ export function TrackWeldGame({ onWin, onExit, place }: MiniGameProps) {
   return (
     <ArenaShell
       hostRef={hostRef}
-      eyebrow={`Fix the T · Track repair${place ? ` · ${place}` : ""}`}
+      eyebrow={`Fix the T · ${planned ? "Rail upgrade" : "Track repair"}${place ? ` · ${place}` : ""}`}
       title="Thermite weld"
       objective={objective}
       steps={STEPS.map((s, i) => ({ label: s.label, done: i < stepIndex || won, active: i === stepIndex && !won }))}
@@ -554,7 +554,7 @@ export function TrackWeldGame({ onWin, onExit, place }: MiniGameProps) {
       meter={meter}
       message={message}
       action={action}
-      complete={won ? { title: "Rail welded", subtitle: "Ground flush and below 700 °F · trains can cross" } : null}
+      complete={won ? { title: "Rail welded", subtitle: planned ? "Ground flush and below 700 °F · one joint of many on the new rail" : "Ground flush and below 700 °F · trains can cross" } : null}
       onExit={onExit}
     />
   );

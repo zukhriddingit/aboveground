@@ -441,7 +441,7 @@ class RelayCaseScene {
 }
 
 /** Signal relay: drag each tagged wire onto the relay terminal with the same tag. */
-export function WireMatchGame({ onWin, onExit, place }: MiniGameProps) {
+export function WireMatchGame({ onWin, onExit, place, planned }: MiniGameProps) {
   const [order] = useState(shuffled);
   const [landed, setLanded] = useState<WireId[]>([]);
   const [holding, setHolding] = useState<WireId | null>(null);
@@ -474,14 +474,16 @@ export function WireMatchGame({ onWin, onExit, place }: MiniGameProps) {
   return (
     <ArenaShell
       hostRef={hostRef}
-      eyebrow={`Fix the T · Signal repair${place ? ` · ${place}` : ""}`}
-      title="Signal relay case"
+      eyebrow={`Fix the T · ${planned ? "Signal upgrade" : "Signal repair"}${place ? ` · ${place}` : ""}`}
+      title={planned ? "Pre-commissioning check" : "Signal relay case"}
       objective={
         won
           ? "Track circuit clear. The signal shows green."
           : holding
             ? `Bring the ${holding} wire to the post marked ${holding} on the relay rack`
-            : "Land each tagged field wire on its relay's terminal post"
+            : planned
+              ? "Before the new signals go live, land each tagged field wire on its terminal and prove the signal clears"
+              : "Land each tagged field wire on its relay's terminal post"
       }
       steps={WIRES.map((w) => ({ label: `${w.id} · ${w.name}`, done: landed.includes(w.id), active: holding === w.id }))}
       prompts={[
@@ -490,7 +492,13 @@ export function WireMatchGame({ onWin, onExit, place }: MiniGameProps) {
       ]}
       meter={<ArenaGauge label="Relays picked up" value={`${landed.length}/4`} fraction={landed.length / 4} tone={won ? "good" : "neutral"} note={won ? "Track circuit clear" : "Signal held at red"} />}
       message={message}
-      complete={won ? { title: "Signal restored", subtitle: "All four relays up · the home signal clears to green" } : null}
+      complete={
+        won
+          ? planned
+            ? { title: "Circuit checked", subtitle: "Every wire landed · the signal clears, ready for final testing" }
+            : { title: "Signal restored", subtitle: "All four relays up · the home signal clears to green" }
+          : null
+      }
       onExit={onExit}
     />
   );
