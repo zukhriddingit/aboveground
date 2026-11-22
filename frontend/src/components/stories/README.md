@@ -58,6 +58,6 @@ Z-index: narrator card `z-[60]`, modals `z-[70]`. The narrator sits top-centre, 
 ## Notes for the team
 
 - Posted images are base64 JPEG data URLs, usually 100–250 KB, so the POST body can reach about 500 KB (`backend/stories.py` allows 3 MB).
-- `MOCK_STORIES` and the backend's 8 seeds use random `picsum.photos` seeds, so photos don't match captions (snowy trees on the
-  pizza story). Real food photos would help the demo.
+- `MOCK_STORIES` and the backend's 8 seeds use drawn 720×1280 SVG scenes that match each caption (`storyScene()` in
+  `lib/mockData.ts`, `story_scene()` in `backend/stories.py`; both produce the same bytes), so the demo needs no network.
 - On the main page, bubbles and T-Feed pins are the **Station Stories** map layer (off on first load; posting a Story turns it on).

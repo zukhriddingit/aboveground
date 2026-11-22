@@ -279,6 +279,7 @@ def check_units() -> None:
         world._DEMO_RAW["place-chncl"]: ("TRACK", "TRACK_WELD"),
         world._DEMO_RAW["place-boyls"]: ("SIGNAL", "WIRE_MATCH"),
         "Orange Line: Shuttle buses replace service for scheduled maintenance.": ("PLANNED_WORK", "TRACK_WELD"),
+        "Green Line: Shuttle buses replace service due to a disabled train.": ("DISABLED_TRAIN", "TRACK_WELD"),
         "Red Line: Delays due to police activity and a disabled train.": ("EMERGENCY", "WIRE_MATCH"),
     }
     bad = [(raw, world.classify(raw)) for raw, (cat, game) in cases.items()

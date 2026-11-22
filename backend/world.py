@@ -284,11 +284,12 @@ def status() -> dict[str, Any]:
 
 # First match wins. A "track problem" beats PLANNED_WORK's "shuttle" (Chinatown: shuttles *because of* a track
 # problem), and a disabled train beats a signal problem (Harvard: "signal problem and a disabled train").
+# Same order as the game's offline RULES (frontend/src/components/game/alertTranslator.ts): first match wins.
 _RULES: list[tuple[str, tuple[str, ...]]] = [
     ("EMERGENCY", ("medical", "police", "fire department", "emergency", "unattended", "injur")),
-    ("TRACK", ("track problem", "track defect", "broken rail")),
-    ("PLANNED_WORK", ("upgrade", "shuttle", "construction", "maintenance", "accessib", "renovat", "not stopping", "closed", "track work", "scheduled")),
     ("DISABLED_TRAIN", ("disabled", "mechanical", "stalled")),
+    ("TRACK", ("track problem", "track defect", "track issue", "broken rail", "rail defect", "rail fastener")),
+    ("PLANNED_WORK", ("upgrade", "shuttle", "construction", "maintenance", "accessib", "renovat", "not stopping", "closed", "track work", "scheduled")),
     ("SIGNAL", ("signal", "track circuit", "relay")),
     ("FROZEN", ("frozen", "freez", " ice ", "snow")),
     ("SWITCH", ("switch",)),
