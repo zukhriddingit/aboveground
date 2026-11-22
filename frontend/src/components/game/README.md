@@ -51,16 +51,31 @@ alert stays up until the MBTA clears it.
 
 1. **Simulate T Delay** (`triggerDelay`) calls `POST /api/alerts/trigger`; if the backend is down it uses a
    local plain-English alert (`alertTranslator.ts`) and rotates through six problem types per station.
-2. **The street opens.** The camera drops over the station, the street cracks along the track and the pavement
-   slides apart to show the tunnel underneath (`TunnelCutaway`): tiled walls, platforms, steel columns, track,
-   overhead wire (Green) or third rail, a red signal, a sparking relay cabinet and a work crew. BU Central is a
-   surface stop in the Commonwealth Ave median, so it gets `SurfaceStation` instead (crew, truck, cones).
+2. **The street opens where the trouble really is** (`faults.ts`). MBTA speed-restriction data puts about 90%
+   of restricted track between stations, and signal and switch faults cluster at the interlockings just past
+   the platforms, so the cut (`TunnelCutaway`) runs from the platform end to the fault while the trains stand by
+   at the platform:
+
+   | Problem | Where it is staged |
+   | --- | --- |
+   | Signal (wire match) | ~130 m into the tunnel, at a signal and its relay case |
+   | Track (weld) | ~170 m out, a cracked rail between stations |
+   | Switch / frozen switch | at the interlocking: Copley, Kenmore and Park St crossovers |
+   | Power (breakers) | ~120 m out: arcing third rail (heavy rail) or a broken trolley wire (Green) |
+   | Disabled train (couple and tow) | at the platform, hazard lights on |
+
+   The work zone follows MBTA right-of-way practice: a lookout with a lantern, a yellow lantern before the zone,
+   a green lantern after it, a speed sign and RESUME SPEED, light towers, ANSI Class 2 lime vests with the
+   X on the back, bare third rail on insulators and a safety walk with railings. BU Central is a surface stop in
+   the Commonwealth Ave median, so `SurfaceStation` builds the same work zone down the median, clear of
+   Member 2's station model, with a train held short of it.
 3. **Trains hold.** `IncidentSim` sits between the train feed and `<TVerseMap vehicles>`: trains approaching the
    broken station queue up and stop, with amber rings, and the track segment pulses red.
 4. **Fix it.** `FixTheTModal` picks one of six puzzles from what broke: wire match (signals), weld (track),
    switch throw, breaker sequence (power), couple and tow (disabled train) or ice thaw (frozen switch).
-5. **Repair.** The crew walks to the cabinet and welds, the signal turns green, the trains pull out, the street
-   closes, then the camera flies to the avatar and the new hat pops on. `TunnelView` lets you walk the platform.
+5. **Repair.** The crew works at the fault, the signal turns green, the trains pull out, the street closes,
+   then the camera flies to the avatar and the new hat pops on. `TunnelView` drops you on the platform end
+   facing the work zone and lets you walk the safety walk out to it.
 
 ## Files
 
@@ -70,9 +85,10 @@ alert stays up until the MBTA clears it.
 | `ClosureMarkers.tsx` | Red X over closed or suspended stations, pinned with `MapAnchor` |
 | `incidentSim.ts` | Train engine: glides trains along the real tracks, queues/holds/releases them, has its own fleet |
 | `FixTheTScene.ts` | Second Three.js layer + MapLibre line layer, attached with `TVerseMapHandle.getMap()`; repair timeline |
-| `TrackCorridor.ts`, `TunnelCutaway.ts`, `SurfaceStation.ts` | Geometry along the real track; the opened tunnel; the street-level stop |
+| `faults.ts` | Problem type → fault kind, how far down the line and in which direction it is staged, toast copy |
+| `TrackCorridor.ts`, `TunnelCutaway.ts`, `SurfaceStation.ts` | Geometry along the real track; the opened tunnel; the street-level work zone |
 | `TunnelView.ts` | Walk-in view: a second renderer with an eye-level camera on the platform |
-| `tunnelModels.ts`, `tunnelTextures.ts`, `fx.ts` | Trains, crew, signal, cabinet, props; canvas textures; sparks and smoke |
+| `tunnelModels.ts`, `tunnelTextures.ts`, `fx.ts` | MBTA fleets, crew, signal, cabinet, work-zone props; canvas textures; sparks and smoke |
 | `FixTheTModal.tsx` + six `*Game.tsx` | Delay card and the mini-games |
 | `useWorldFeed.ts` | `/api/world` → live MBTA vehicles → simulated fleet; `triggerDelay()` |
 | `alertTranslator.ts` | Plain-English copy for simulated delays and how each repair works |
@@ -82,15 +98,20 @@ alert stays up until the MBTA clears it.
 Every model in `tunnelModels.ts` is built in code and can be replaced with a glTF loaded through
 `three/addons/loaders/GLTFLoader.js`, as long as it keeps the same conventions:
 
-- Meters at **3x** real size (a 22 m Type 9 is ~66 m), matching the cutaway's cross-section.
+- Cross-section at **3x** real size, lengths at **1.5x** (`LENGTH_SCALE`), so a 22 m Type 9 is ~33 m long.
 - **y = 0** is the top of the rail for trains and the floor for everything else.
 - Trains: each car is its own object, nose toward **+X**, centered on its bogies (`TrainModel.cars[].offset` is
   the car's distance ahead of the train center), so cars can follow a curve.
 - Crew, cabinet and signal face **+Z** (the signal's lamps face **+X**).
 - Scene axes: x = east, y = up, z = south.
 
+Fleets (`consistFor` picks one per train from its id): Green Line Type 9 + Type 9, Type 8 + Type 7 or
+Type 8 + Type 8 two-car sets; Red Line CRRC, 1800 or 1700 series six-car sets; Orange Line CRRC; Blue Line
+0700 series. Each has its own livery, door layout and an amber destination sign (`trainSign`).
+
 Station dimensions (all in `TunnelCutaway.ts`): walls at ±22.5 m, floor at -19.5 m, rail top at -18.6 m,
-tracks at ±6 m, roof slab underside at -6.6 m, platforms ±10.5 → ±22.5 m for 50 m either side of the station.
+tracks at ±6 m, roof slab underside at -6.6 m, platforms ±10.5 → ±22.5 m for 50 m (Green) or 95 m (Red,
+Orange, Blue) either side of the station.
 
 ## Notes for the team
 

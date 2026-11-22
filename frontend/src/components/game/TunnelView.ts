@@ -1,11 +1,12 @@
-// Walk-in view of an opened station. MapLibre's camera can't go below the street, so this is a
-// second Three.js renderer with an eye-level camera that draws the same Fix the T scene (the live
-// cutaway, trains, crew, sparks). The camera drops in through the opening and lands on the platform.
+// Walk-in view of an opened tunnel. MapLibre's camera can't go below the street, so this is a second
+// Three.js renderer with an eye-level camera that draws the same Fix the T scene (the live cutaway,
+// trains, crew, sparks). The camera drops in through the opening, lands at the platform end nearest
+// the fault, and you can walk on along the safety walk to the work zone.
 import * as T from "three";
 import type { TunnelCutaway } from "./TunnelCutaway";
 import { clamp, easeInOut } from "./trackGeo";
 
-/** Eye height above the platform: 1.8 m at the cutaway's 3x scale. */
+/** Eye height above the floor: 1.8 m at the cutaway's 3x scale. */
 const EYE = 5.6;
 const INTRO_MS = 3400;
 const WALK_SPEED = 14;
@@ -36,7 +37,9 @@ export class TunnelView {
     private readonly scene: T.Scene,
     private readonly cut: TunnelCutaway,
   ) {
-    this.s = cut.platform.from + 8;
+    const start = cut.walkStart;
+    this.s = start.s;
+    this.yaw = start.facing > 0 ? 0.08 : Math.PI + 0.08;
     this.renderer = new T.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.outputColorSpace = T.SRGBColorSpace;
@@ -45,7 +48,7 @@ export class TunnelView {
     this.renderer.setClearColor("#0b1026");
     const canvas = this.renderer.domElement;
     canvas.style.cssText = "position:absolute;inset:0;width:100%;height:100%;touch-action:none;cursor:grab";
-    canvas.setAttribute("aria-label", "View from the station platform. Drag to look around.");
+    canvas.setAttribute("aria-label", "View from inside the tunnel. Drag to look around; walk along the platform and safety walk.");
     host.appendChild(canvas);
 
     this.resize = new ResizeObserver(() => this.fit());
@@ -61,7 +64,7 @@ export class TunnelView {
     this.frame = requestAnimationFrame(this.loop);
   }
 
-  /** Hold to walk along the platform: -1 back, 1 forward, 0 stop. */
+  /** Hold to walk along the platform and safety walk: -1 back, 1 forward, 0 stop. */
   walk(dir: -1 | 0 | 1) {
     this.walking = dir;
   }
@@ -136,15 +139,16 @@ export class TunnelView {
     const dt = this.last ? Math.min(0.1, (now - this.last) / 1000) : 1 / 60;
     this.last = now;
     const cut = this.cut;
-    const plat = cut.platform;
+    const [from, to] = cut.walkRange;
 
     const fwd = (this.keys.has("w") || this.keys.has("arrowup") ? 1 : 0) - (this.keys.has("s") || this.keys.has("arrowdown") ? 1 : 0) + this.walking;
     const turn = (this.keys.has("a") || this.keys.has("arrowleft") ? 1 : 0) - (this.keys.has("d") || this.keys.has("arrowright") ? 1 : 0);
     this.yaw -= turn * dt * 1.4;
     this.s += fwd * WALK_SPEED * dt * Math.sign(Math.cos(this.yaw) || 1);
-    this.s = clamp(this.s, plat.from, plat.to);
+    this.s = clamp(this.s, from, to);
+    const stand = cut.walkAt(this.s);
 
-    cut.worldAt(this.s, plat.lat, plat.y + EYE, this.pos);
+    cut.worldAt(this.s, stand.lat, stand.y + EYE, this.pos);
 
     if (this.lookTarget) {
       this.v.subVectors(this.lookTarget, this.pos);
@@ -164,12 +168,13 @@ export class TunnelView {
       this.pos.z + Math.sin(heading) * Math.cos(this.pitch) * 50,
     );
 
-    // Drop in through the opening: start high over the street looking down, land on the platform.
+    // Drop in through the opening: start high over the street looking down, land at the platform end.
     const intro = easeInOut((now - this.started) / INTRO_MS);
     if (intro < 1) {
-      const from = cut.worldAt(this.s - 30, 0, 190, this.v2);
-      const fromTarget = cut.worldAt(this.s + 25, plat.lat * 0.4, plat.y, this.v);
-      this.camera.position.lerpVectors(from, this.pos, intro);
+      const facing = Math.sign(Math.cos(this.yaw)) || 1;
+      const above = cut.worldAt(this.s - 30 * facing, 0, 190, this.v2);
+      const fromTarget = cut.worldAt(this.s + 25 * facing, stand.lat * 0.4, stand.y, this.v);
+      this.camera.position.lerpVectors(above, this.pos, intro);
       this.camera.lookAt(fromTarget.lerp(this.target, intro));
     } else {
       this.camera.position.copy(this.pos);
