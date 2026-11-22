@@ -570,6 +570,16 @@ export default function Home() {
     [awardFix, exitTunnel, progress.equipped, push, sim, stationById, viewTunnel],
   );
 
+  // Development only: __winFix() wins the open repair step, to check the crew's repair without playing it.
+  useEffect(() => {
+    if (process.env.NODE_ENV === "production" || !fixAlert) return;
+    const w = window as unknown as { __winFix?: () => void };
+    w.__winFix = () => void handleWin(fixAlert);
+    return () => {
+      delete w.__winFix;
+    };
+  }, [fixAlert, handleWin]);
+
   const toggleNotify = useCallback(async () => {
     if (notifyOn) {
       writeStorage(NOTIFY_KEY, null);
