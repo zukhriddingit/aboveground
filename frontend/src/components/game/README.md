@@ -8,18 +8,25 @@ public `TVerseMap` API.
 
 Everything below is read in the browser from `https://api-v3.mbta.com` (`mbtaV3.ts`, `useLiveMbta.ts`).
 No key is needed (about 20 requests a minute per IP); set `NEXT_PUBLIC_MBTA_API_KEY` for 1,000. The page
-stays under 10 requests a minute and pauses polling while the tab is hidden.
+stays around 12 requests a minute and pauses polling while the tab is hidden. (The V3 API's push streaming
+answers 406 without a key, so events come from comparing polls.)
 
 | Feature | Endpoint | Refresh |
 | --- | --- | --- |
 | Moving trains | `/vehicles?filter[route]=Red,Orange,Blue,Green-B…` (lat, lng, bearing, `updated_at`; trains silent for 3 min are dropped) | 12 s |
-| Closure X + notifications | `/alerts?filter[route]=…&filter[datetime]=NOW` (effect, cause, active period, informed routes/stops, description) | 60 s |
+| Closure X, LIVE tags, events | `/alerts?filter[route]=…&filter[datetime]=NOW` (effect, cause, active period, informed routes/stops, description) | 20 s |
 | Next train countdown | `/predictions?filter[stop]=place-boyls,place-coecl,…` (one request for every featured station) | 30 s |
 | Station locations | `/stops?filter[route_type]=0,1&include=parent_station` (maps platform ids like `70158` to `place-boyls`) | cached 24 h |
 | Track lines | `data/t-lines.json`, the official MBTA shapes simplified to ~3 m, bundled at build time | static |
 
 - **Red X** (`ClosureMarkers.tsx`): only for an active alert whose effect is `SUSPENSION`, `SHUTTLE`,
   `STATION_CLOSURE` or `STOP_CLOSURE`, at each station it names. A delay alone never draws an X.
+- **Live events** (`useLiveMbta.ts`): each alert poll is compared with the last, so a new alert, a changed
+  header or an alert that drops out arrive as `new`, `updated` and `cleared` events. The vehicle feed adds
+  `stopped` when a train stands still (within 30 m) for 3 minutes while not `STOPPED_AT` a platform, and
+  `moving` when it starts again. They show in the panel's "Latest" list, as toasts, and on the map
+  (`LiveMarkers.tsx`): a LIVE tag over a featured station with a real disruption (delay, detour, service
+  change) and a chip over each standing train. Elevator, escalator and access notices never count.
 - **Notifications**: one summary toast on load, then a toast for each newly reported closure. The bell in
   the alerts panel adds a browser notification while the tab is in the background.
 - **Alerts panel** (`hud/LiveAlerts.tsx`): every alert grouped as closures, delays and notices, with its
@@ -47,7 +54,12 @@ didn't report. The card shows the MBTA's words, then how that kind of repair gen
 puzzle illustrates a repair. Playing it opens the tunnel but holds no trains (the trains are real), and the
 alert stays up until the MBTA clears it.
 
-## Simulated delays
+## 2D and 3D
+
+The 2D/3D button in the bottom bar flattens the map: north-up, no tilt or rotation, and the extruded
+buildings swapped for flat footprints, which is also lighter on slow devices. The choice is remembered.
+
+## Simulated delays (demo)
 
 1. **Simulate T Delay** (`triggerDelay`) calls `POST /api/alerts/trigger`; if the backend is down it uses a
    local plain-English alert (`alertTranslator.ts`) and rotates through six problem types per station.
@@ -76,7 +88,7 @@ alert stays up until the MBTA clears it.
    | Puzzle | What you do |
    | --- | --- |
    | Signal (wire match) | Land each tagged field wire (1TR, 2TR, HR, DR) on its relay's terminal post in a relay case; the relay picks up and the signal clears |
-   | Track (weld) | A thermite weld: preheat the rail ends to about 1,000 °C, tap the crucible when the steel is ready, grind the collar flush |
+   | Track (weld) | A thermite weld: preheat the rail ends to about 1,700 °F, tap the crucible when the steel is ready, grind the collar flush, and hold trains until the weld is below 700 °F |
    | Switch | Throw the switches on the model board so the trolley reaches its destination, twice |
    | Power (breakers) | Close the substation's feeder breakers in the dispatcher's order; the voltmeter climbs to 600 V DC |
    | Disabled train | Couple the rescue train, connect the air line and charge the brake pipe to 90 psi, then tow |
