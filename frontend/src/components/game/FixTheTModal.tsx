@@ -235,14 +235,14 @@ function FixTheTDialog({ alert, station, stats, simulated, unlockName, explore, 
                   {closure.reason ? ` for ${closure.reason}` : ""}.
                 </p>
                 <p className="mt-1 text-[14px] leading-relaxed text-slate-100">{closure.timing.long}</p>
-                <p className="mt-2 text-[12px] leading-relaxed text-slate-400">The puzzle is one repair job; the closure covers the whole project.</p>
+                <p className="mt-2 text-[12px] leading-relaxed text-slate-400">The puzzle shows one job; the closure covers the whole project.</p>
               </div>
             )}
 
             <div className="rounded-xl border border-amber-300/20 bg-amber-300/5 p-3.5">
               <p className="mb-2 flex flex-wrap items-center gap-2 text-[11px] font-semibold tracking-widest text-amber-200 uppercase">
                 <Clock3 className="size-3.5" />
-                {closure ? "How long one repair like this takes" : "How long it really takes"}
+                {closure ? "How long work like this takes" : "How long it really takes"}
                 <span className="rounded-full bg-amber-300/15 px-2 py-0.5 text-[11px] tracking-normal text-amber-100 normal-case">{real.typical}</span>
               </p>
               <p className="text-[14px] leading-relaxed text-slate-100">{real.detail}</p>
