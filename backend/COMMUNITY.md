@@ -33,12 +33,7 @@ survives a restart. The file is gitignored. On first run it is seeded with 8 Bos
 If the seeded posts are more than 6 h old at startup, they are slid forward so the demo feed looks fresh
 (rider posts are never touched). `COMMUNITY_RESET=1` starts over from the seeds; `COMMUNITY_DATA_FILE` moves the file.
 
-## Run it alone (before `main.py` exists)
+## Run it
 
-```bash
-cd backend
-python3 -m venv .venv && .venv/bin/pip install -r requirements-community.txt
-.venv/bin/uvicorn community_dev_app:app --reload --port 8000
-```
-
-`community_dev_app.py` is a tiny CORS-enabled app that only mounts this router. Delete it once `main.py` includes the router.
+`main.py` mounts this router with the rest of the backend: `cd backend && .venv/bin/uvicorn main:app --reload --port 8000`.
+Author names keep single spaces ("Anonymous Rider", "Adam King"); other whitespace is collapsed.

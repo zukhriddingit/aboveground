@@ -121,7 +121,8 @@ class CommunityPost(_Camel):
 
 
 def _clean_handle(value: str) -> str:
-    return "".join(value.strip().lstrip("@").split())[:32]
+    # Single spaces are kept: display names like "Adam King" or "Anonymous Rider".
+    return " ".join(value.strip().lstrip("@").split())[:32]
 
 
 class NewCommunityPost(_Camel):
