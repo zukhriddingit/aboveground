@@ -9,6 +9,8 @@ export interface RealRepair {
   detail: string;
   /** Real MBTA cases, most typical first. */
   examples: string[];
+  /** Which example is planned, project-scale work, for the card after a planned closure (default the first). */
+  planned?: number;
   sources: Array<{ label: string; url: string }>;
 }
 
@@ -22,6 +24,7 @@ export const REAL_REPAIRS: Record<GameKind, RealRepair> = {
       "June 11, 2019: a derailment near JFK/UMass wrecked the signals there. Crews rebuilt signal bungalows and nearly 20 miles of signal cable, and regular Red Line service took 106 days to come back.",
       "November 2026: the central Green Line tunnel closed for nine days to lay 12.5 miles of new signal cable, replacing signals over 100 years old. Copley's new signals are due in early March 2027.",
     ],
+    planned: 2,
     sources: [
       { label: "WBUR, Oct 2025", url: "https://www.wbur.org/news/2025/10/03/mbta-signal-system-red-orange-line-updates-boston" },
       { label: "Boston Globe, Jun 2025", url: "https://www.bostonglobe.com/2025/06/05/metro/red-line-d-line-medford-somerville-signal-problems/" },
@@ -44,6 +47,7 @@ export const REAL_REPAIRS: Record<GameKind, RealRepair> = {
       "Jan. 26, 2023: a signal and switch failure at Copley Junction stranded three trains around 9 p.m.; the switch was repaired and service resumed at 12:30 a.m., about three and a half hours later.",
       "After the 2019 derailment, switch operations at Columbia Junction near JFK/UMass stayed limited until new signals were finished in April 2026, almost seven years later.",
     ],
+    planned: 1,
     sources: [
       { label: "Boston.com, Jan 2023", url: "https://www.boston.com/news/local-news/2023/01/27/green-line-shutdown-mbta-riders-sent-walking-through-tunnels/" },
       { label: "MBTA, Apr 2026", url: "https://www.mbta.com/news/2026-04-08/mbta-completes-major-signal-modernization-columbia-junction-weeks-ahead-schedule" },
@@ -75,6 +79,23 @@ export const REAL_REPAIRS: Record<GameKind, RealRepair> = {
     sources: [
       { label: "MBTA, Impacts of Winter 2015", url: "https://onlinepubs.trb.org/onlinepubs/conferences/2015/LRT/McClellan.pdf" },
       { label: "Boston Globe, Feb 2015", url: "https://www.bostonglobe.com/metro/2015/02/03/record-amounts-snow-compounds-problems-for-already-battered-transit-system/lB69Adr1JmzUxS60U1OpaN/story.html" },
+    ],
+  },
+  ACCESS_UPGRADE: {
+    typical: "Months to years",
+    detail:
+      "Replacing one station elevator takes the MBTA six to 12 months on average, depending on the job and how easy the work area is to reach; an overhaul of an existing elevator takes about 8 to 10 weeks. Making a whole station accessible, with new elevators and raised platforms, takes years.",
+    examples: [
+      "Symphony closed in June 2026 for a $150.8 million renovation: four new elevators, raised platforms and accessible restrooms. It is due to reopen in summer 2029 and to be finished in fall 2030.",
+      "Green Line C branch, 2026: seven Beacon Street stops get platforms raised 8 inches above the rail for today's trolleys, with sloped walkways and new lighting. In a nine-day shutdown in November crews built new inbound platforms at Summit Avenue and Hawes Street. Once only Type 10 cars run, a later phase adds 6 more inches for level boarding.",
+      "Andrew, 2019: replacing three elevators was due to finish in August; water and structural problems stretched the outage past 13 months.",
+    ],
+    sources: [
+      { label: "MBTA Symphony project", url: "https://www.mbta.com/projects/symphony-station-accessibility-improvements" },
+      { label: "MBTA, Nov 2026", url: "https://www.mbta.com/news/2026-11-16/mbta-continues-successfully-advance-green-line-modernization-investments-makes" },
+      { label: "Brookline Record, Oct 2026", url: "https://brooklinerecord.com/articles/brookline-c-branch-trains-shut-down-nov-7-15-for-station-work-mvtg2wp1" },
+      { label: "Boston Globe, Oct 2019", url: "https://www.bostonglobe.com/metro/2019/10/01/mbta-elevator-repair-delays-pushing-buttons/Vzv0qLewpDE91TjSHkgIvJ/story.html" },
+      { label: "MBTA, Dec 2025", url: "https://cdn.mbta.com/sites/default/files/2025-12/Accessibility%20Initiatives%20Report%20H2%202025.pdf" },
     ],
   },
 };

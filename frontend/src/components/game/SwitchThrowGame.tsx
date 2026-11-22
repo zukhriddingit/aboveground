@@ -1,7 +1,9 @@
 "use client";
-// A junction in 3D at dusk: the entry track splits at switch 1, then again at switches 2 and 3 into
-// four tracks. Click a switch machine to throw its points; the lit preview shows where the route ends.
-// When it ends at the destination, send the Green Line car through. Twice, to two destinations.
+// A real MBTA junction in 3D at dusk (junctions.ts picks the one nearest the station on its line): the
+// entry track splits at switch 1, and again at switches 2 and 3 where the junction has more tracks.
+// Click a switch machine to throw its points; the lit preview shows where the route ends. In a repair,
+// send the line's car to two destinations. In a planned closure the trains are parked, so the job is
+// testing the new switches: run the test train over every route.
 import { useEffect, useRef, useState } from "react";
 import * as T from "three";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
@@ -11,10 +13,10 @@ import { buildLrv, buildRail, buildTies, offsetPath, rodBetween, samplePath, swe
 import { sfx } from "./arena/sfx";
 import type { Stage } from "./arena/Stage";
 import { nextMessageKey, useArena } from "./arena/useArena";
+import { junctionFor, LINE_PAINT, type Junction } from "./junctions";
 import type { MiniGameProps } from "./miniGame";
 
-const EXITS = ["PARK STREET", "YARD", "KENMORE", "SIDING"] as const;
-const ROUNDS = 2;
+const REPAIR_ROUNDS = 2;
 const SPEED = 9;
 const RAIL_OFF = 0.7535;
 /** Where the car waits on the entry track (meters from its start). */
@@ -22,31 +24,57 @@ const START_D = 9;
 
 const v = (x: number, z: number) => new T.Vector3(x, 0, z);
 const bez = (a: T.Vector3, b: T.Vector3, c: T.Vector3, d: T.Vector3) => new T.CubicBezierCurve3(a, b, c, d);
+type Curve = T.Curve<T.Vector3>;
 
-// Centerlines: the entry, the two legs off switch 1, and the four legs off switches 2 and 3.
+// Centerlines: the entry, the two legs off switch 1, then either a second split or a straight run per leg.
 const ENTRY = new T.LineCurve3(v(-26, 0), v(-7, 0));
 const LEG1 = [bez(v(-7, 0), v(-2.5, 0), v(-2.5, -3.6), v(2, -3.6)), bez(v(-7, 0), v(-2.5, 0), v(-2.5, 3.6), v(2, 3.6))];
 const LEG2 = [
   [bez(v(2, -3.6), v(6.5, -3.6), v(6.5, -5.6), v(11, -5.6)), bez(v(2, -3.6), v(6.5, -3.6), v(6.5, -1.8), v(11, -1.8))],
   [bez(v(2, 3.6), v(6.5, 3.6), v(6.5, 1.8), v(11, 1.8)), bez(v(2, 3.6), v(6.5, 3.6), v(6.5, 5.6), v(11, 5.6))],
 ];
-const TAIL_Z = [-5.6, -1.8, 1.8, 5.6];
-const TAIL = TAIL_Z.map((z) => new T.LineCurve3(v(11, z), v(21, z)));
+const tail = (z: number) => new T.LineCurve3(v(11, z), v(21, z));
+const STRAIGHT = [new T.LineCurve3(v(2, -3.6), v(21, -3.6)), new T.LineCurve3(v(2, 3.6), v(21, 3.6))];
 const SWITCH_AT = [v(-7, 0), v(2, -3.6), v(2, 3.6)];
 
+/** The track layout for 2, 3 or 4 exits: each exit's curves after the entry, and its end z. */
+function layoutFor(n: number) {
+  const upper: Array<{ curves: Curve[]; z: number }> =
+    n >= 3
+      ? [
+          { curves: [LEG1[0], LEG2[0][0], tail(-5.6)], z: -5.6 },
+          { curves: [LEG1[0], LEG2[0][1], tail(-1.8)], z: -1.8 },
+        ]
+      : [{ curves: [LEG1[0], STRAIGHT[0]], z: -3.6 }];
+  const lower: Array<{ curves: Curve[]; z: number }> =
+    n >= 4
+      ? [
+          { curves: [LEG1[1], LEG2[1][0], tail(1.8)], z: 1.8 },
+          { curves: [LEG1[1], LEG2[1][1], tail(5.6)], z: 5.6 },
+        ]
+      : [{ curves: [LEG1[1], STRAIGHT[1]], z: 3.6 }];
+  const exits = [...upper, ...lower];
+  /** Diverging legs start inside the turnout, where the straight leg already has ties. */
+  const diverging = new Set<Curve>([LEG1[1], LEG2[0][1], LEG2[1][1]]);
+  return { exits, diverging, switches: n - 1 };
+}
+type Layout = ReturnType<typeof layoutFor>;
+
 /** sw[0]: upper leg at switch 1; sw[1]: upper leg at switch 2; sw[2]: upper leg at switch 3. */
-function routeOf(sw: boolean[]) {
+function routeOf(sw: boolean[], n: number) {
+  if (n === 2) return sw[0] ? 0 : 1;
+  if (n === 3) return sw[0] ? (sw[1] ? 0 : 1) : 2;
   return sw[0] ? (sw[1] ? 0 : 1) : sw[2] ? 2 : 3;
 }
 
-function routePath(exit: number) {
-  const upper = exit < 2;
-  const leg2 = LEG2[upper ? 0 : 1][exit % 2];
-  return [ENTRY, LEG1[upper ? 0 : 1], leg2, TAIL[exit]].flatMap((c, i) => {
+function routePath(layout: Layout, exit: number) {
+  return [ENTRY, ...layout.exits[exit].curves].flatMap((c, i) => {
     const pts = samplePath(c, 0.4);
     return i === 0 ? pts : pts.slice(1);
   });
 }
+
+const START_SW = [true, false, true];
 
 class JunctionScene {
   private readonly lrv: LrvModel;
@@ -56,15 +84,21 @@ class JunctionScene {
   private readonly previewMat = new T.MeshBasicMaterial({ color: new T.Color(0.35, 1.6, 2.2), transparent: true, opacity: 0.55, blending: T.AdditiveBlending, depthWrite: false });
   private run: { path: T.Vector3[]; lengths: number[]; d: number; exit: number } | null = null;
   private readonly off: () => void;
-  private sw = [true, false, true];
+  private sw: boolean[];
   private round = 0;
   private busy = false;
+  private readonly n: number;
 
   constructor(
     private readonly stage: Stage,
+    private readonly layout: Layout,
+    junction: Junction,
+    car: { belt: string; pantograph: boolean; dest: string },
     private readonly targets: number[],
     private readonly report: { sw: (sw: boolean[]) => void; arrived: (exit: number, ok: boolean, round: number) => void },
   ) {
+    this.n = layout.exits.length;
+    this.sw = START_SW.slice(0, layout.switches);
     const { scene } = stage;
     stage.frame({ x: 0.5, y: 0, z: 0.6 }, 17.5, { x: -0.1, y: 1.9, z: 1 });
 
@@ -75,12 +109,8 @@ class JunctionScene {
     scene.add(ground);
 
     // Track bed, ties and rails for every leg.
-    const legs: Array<{ curve: T.Curve<T.Vector3>; skip: number }> = [
-      { curve: ENTRY, skip: 0 },
-      ...LEG1.map((c, i) => ({ curve: c, skip: i === 0 ? 0 : 3.2 })),
-      ...LEG2.flatMap((pair) => pair.map((c, i) => ({ curve: c, skip: i === 0 ? 0 : 3.2 }))),
-      ...TAIL.map((c) => ({ curve: c, skip: 0 })),
-    ];
+    const curves = new Set<Curve>([ENTRY, ...layout.exits.flatMap((e) => e.curves)]);
+    const legs = [...curves].map((curve) => ({ curve, skip: layout.diverging.has(curve) ? 3.2 : 0 }));
     for (const { curve, skip } of legs) {
       const center = samplePath(curve, 0.3);
       const bed = new T.Mesh(
@@ -95,7 +125,7 @@ class JunctionScene {
     }
 
     // Switch machines beside each turnout, with the moving points and a route lamp.
-    SWITCH_AT.forEach((at, i) => {
+    SWITCH_AT.slice(0, layout.switches).forEach((at, i) => {
       const g = new T.Group();
       g.position.set(at.x + 1.2, 0, at.z - 2.4);
       const box = new T.Mesh(new RoundedBoxGeometry(0.9, 0.55, 0.55, 3, 0.05), paintedSteel("#3d5a46", "switchMachine"));
@@ -132,8 +162,10 @@ class JunctionScene {
     });
 
     // Destination boards at the end of the four tracks, tilted up toward the dispatcher's view.
-    TAIL_Z.forEach((z, i) => {
-      const tex = labelTexture(EXITS[i], { bg: "#111214", fg: "#ffffff", w: 512, h: 112, font: "700 54px Helvetica, Arial, sans-serif", border: "#3a3d42" });
+    layout.exits.forEach(({ z }, i) => {
+      const text = junction.exits[i].board;
+      const px = Math.min(54, Math.floor(470 / (0.62 * text.length)));
+      const tex = labelTexture(text, { bg: "#111214", fg: "#ffffff", w: 512, h: 112, font: `700 ${px}px Helvetica, Arial, sans-serif`, border: "#3a3d42" });
       const mat = new T.MeshStandardMaterial({ map: tex, emissiveMap: tex, emissive: "#ffffff", emissiveIntensity: 0.25, roughness: 0.5 });
       const board = new T.Mesh(new T.PlaneGeometry(3.4, 0.75), mat);
       board.position.set(19.2, 0.9, z);
@@ -151,10 +183,9 @@ class JunctionScene {
       this.signs.push({ mat, beacon, marker });
     });
 
-    this.lrv = buildLrv({ dest: "C  CLEVELAND CIRCLE" });
-    this.lrv.group.scale.setScalar(1);
+    this.lrv = buildLrv(car);
     scene.add(this.lrv.group);
-    this.placeTrain(routePath(routeOf(this.sw)), START_D);
+    this.placeTrain(this.pathNow(), START_D);
 
     // Dusk: a cold sky, a low moon for shadows, warm streetlights along the junction.
     stage.scene.background = new T.Color("#0b1220");
@@ -202,8 +233,12 @@ class JunctionScene {
     }
   }
 
+  private pathNow() {
+    return routePath(this.layout, routeOf(this.sw, this.n));
+  }
+
   private updatePreview() {
-    const path = routePath(routeOf(this.sw)).map((p) => new T.Vector3(p.x, 0.28, p.z));
+    const path = this.pathNow().map((p) => new T.Vector3(p.x, 0.28, p.z));
     const geo = sweep([new T.Vector2(-0.22, 0), new T.Vector2(0.22, 0), new T.Vector2(0.22, 0.02), new T.Vector2(-0.22, 0.02)], path, false);
     if (this.preview) {
       this.preview.geometry.dispose();
@@ -224,8 +259,8 @@ class JunctionScene {
 
   send() {
     if (this.busy) return;
-    const exit = routeOf(this.sw);
-    const path = routePath(exit);
+    const exit = routeOf(this.sw, this.n);
+    const path = routePath(this.layout, exit);
     const lengths = [0];
     for (let i = 1; i < path.length; i++) lengths.push(lengths[i - 1] + path[i].distanceTo(path[i - 1]));
     this.run = { path, lengths, d: START_D, exit };
@@ -240,7 +275,8 @@ class JunctionScene {
 
   private onKey = (e: KeyboardEvent) => {
     if ((e.target as HTMLElement | null)?.closest?.("input, textarea, select, [contenteditable]")) return;
-    if (e.key === "1" || e.key === "2" || e.key === "3") this.throwSwitch(Number(e.key) - 1);
+    const k = Number(e.key);
+    if (Number.isInteger(k) && k >= 1 && k <= this.sw.length) this.throwSwitch(k - 1);
     else if (e.key === " " || e.key === "Enter") {
       e.preventDefault();
       this.send();
@@ -276,12 +312,12 @@ class JunctionScene {
           const ok = exit === this.targets[this.round];
           if (ok) this.round += 1;
           this.report.arrived(exit, ok, this.round);
-          this.placeTrain(routePath(routeOf(this.sw)), START_D);
+          this.placeTrain(this.pathNow(), START_D);
           this.busy = false;
         }, 700);
       }
     } else if (!this.busy) {
-      this.placeTrain(routePath(routeOf(this.sw)), START_D);
+      this.placeTrain(this.pathNow(), START_D);
     }
     this.lrv.setHazards(false, t);
   };
@@ -293,36 +329,67 @@ class JunctionScene {
   }
 }
 
-/** Switch problems: throw the three switches so the car reaches its destination, twice. */
-export function SwitchThrowGame({ onWin, onExit, place }: MiniGameProps) {
-  const [targets] = useState(() => {
-    const a = Math.floor(Math.random() * 4);
-    return [a, (a + 1 + Math.floor(Math.random() * 3)) % 4];
+const capFirst = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
+
+function shuffled(n: number) {
+  const a = Array.from({ length: n }, (_, i) => i);
+  for (let i = n - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+/**
+ * Switch jobs at the real junction nearest the station: in a repair, line up two routes for waiting cars;
+ * in a planned closure, test the new switches by running the test train over every route.
+ */
+export function SwitchThrowGame({ onWin, onExit, place, stationId, line, planned }: MiniGameProps) {
+  const [setup] = useState(() => {
+    const junction = junctionFor(line, stationId);
+    const n = junction.exits.length;
+    const order = shuffled(n);
+    const targets = planned ? order : order.slice(0, Math.min(REPAIR_ROUNDS, n));
+    const paint = line ?? "Green";
+    return {
+      junction,
+      layout: layoutFor(n),
+      targets,
+      car: { belt: LINE_PAINT[paint], pantograph: paint === "Green" || paint === "Blue", dest: planned ? "TEST TRAIN" : junction.exits[targets[0]].board },
+    };
   });
+  const { junction, targets } = setup;
+  const exits = junction.exits;
+  const rounds = targets.length;
   const [round, setRound] = useState(0);
-  const [sw, setSw] = useState([true, false, true]);
+  const [sw, setSw] = useState(() => START_SW.slice(0, setup.layout.switches));
   const [moving, setMoving] = useState(false);
-  const [message, setMessage] = useState<ArenaMessage | null>(null);
+  const [message, setMessage] = useState<ArenaMessage | null>(() => ({
+    text: `${capFirst(junction.name)}, ${junction.where}: ${junction.about}`,
+    tone: "info",
+    key: nextMessageKey(),
+  }));
   const { hostRef, sceneRef } = useArena(
     (stage) =>
-      new JunctionScene(stage, targets, {
+      new JunctionScene(stage, setup.layout, setup.junction, setup.car, setup.targets, {
         sw: setSw,
         arrived: (exit, ok, r) => {
           setMoving(false);
           setRound(r);
           if (ok) {
             sfx.good();
-            setMessage({ text: `Arrived at ${EXITS[exit]}`, tone: "good", key: nextMessageKey() });
+            const text = planned ? `Test train reached ${exits[exit].short}: that route lines and locks.` : `Arrived at ${exits[exit].short}`;
+            setMessage({ text, tone: "good", key: nextMessageKey() });
           } else {
             sfx.buzz();
-            setMessage({ text: `That route ran to ${EXITS[exit]}. Set it for ${EXITS[targets[r]]} and try again.`, tone: "warn", key: nextMessageKey() });
+            setMessage({ text: `That route ran to ${exits[exit].short}. Set it for ${exits[targets[r]].short} and try again.`, tone: "warn", key: nextMessageKey() });
           }
         },
       }),
     { background: "#0b1220", fog: { color: "#0b1220", near: 40, far: 90 }, envIntensity: 0.35, exposure: 1.25 },
   );
 
-  const won = round >= ROUNDS;
+  const won = round >= rounds;
   const finish = useRef(onWin);
   useEffect(() => {
     finish.current = onWin;
@@ -334,27 +401,36 @@ export function SwitchThrowGame({ onWin, onExit, place }: MiniGameProps) {
     return () => clearTimeout(t);
   }, [won]);
 
-  const target = targets[Math.min(round, ROUNDS - 1)];
-  const routed = routeOf(sw);
+  const target = targets[Math.min(round, rounds - 1)];
+  const routed = routeOf(sw, exits.length);
+  const train = planned ? "test train" : "car";
   return (
     <ArenaShell
       hostRef={hostRef}
-      eyebrow={`Fix the T · Switch repair${place ? ` · ${place}` : ""}`}
-      title="Line up the junction"
-      objective={won ? "Both routes set and run." : `Throw the switches so the route ends at ${EXITS[target]}, then send the car`}
-      steps={targets.map((t, i) => ({ label: `Route ${i + 1} · ${EXITS[t]}`, done: round > i, active: round === i }))}
+      eyebrow={`Fix the T · ${planned ? "Switch replacement" : "Switch repair"}${place ? ` · ${place}` : ""}`}
+      title={planned ? `Test the new switches · ${capFirst(junction.name)}` : `Line up ${junction.name}`}
+      objective={
+        won
+          ? planned
+            ? "Every route tested."
+            : "Both routes set and run."
+          : planned
+            ? `Trains are parked for the closure, so a test train proves each route before service resumes. Set the switches for ${exits[target].short}, then send it`
+            : `Throw the switches so the route ends at ${exits[target].short}, then send the car`
+      }
+      steps={targets.map((t, i) => ({ label: `Route ${i + 1} · ${exits[t].short}`, done: round > i, active: round === i }))}
       prompts={[
         { input: "Click", label: "Throw a switch machine" },
-        { input: "1 2 3", label: "Throw switch" },
-        { input: "Space", label: "Send the car" },
+        { input: sw.map((_, i) => i + 1).join(" "), label: "Throw switch" },
+        { input: "Space", label: `Send the ${train}` },
       ]}
       meterAt="top"
       meter={
         <ArenaGauge
           label="Route set to"
-          value={EXITS[routed].split(" ")[0]}
+          value={exits[routed].short}
           tone={routed === target ? "good" : "warn"}
-          note={routed === target ? "Lined up for the destination" : `Destination: ${EXITS[target]}`}
+          note={routed === target ? "Lined up for the destination" : `Destination: ${exits[target].short}`}
         />
       }
       message={message}
@@ -362,7 +438,7 @@ export function SwitchThrowGame({ onWin, onExit, place }: MiniGameProps) {
         won
           ? null
           : {
-              label: moving ? "Car on its way…" : "Send the car",
+              label: moving ? `${capFirst(train)} on its way…` : `Send the ${train}`,
               input: "Space",
               disabled: moving,
               active: routed === target && !moving,
@@ -372,7 +448,13 @@ export function SwitchThrowGame({ onWin, onExit, place }: MiniGameProps) {
               },
             }
       }
-      complete={won ? { title: "Junction lined up", subtitle: "Both cars reached their tracks" } : null}
+      complete={
+        won
+          ? planned
+            ? { title: "Every route tested", subtitle: `The new switches at ${junction.name} line and lock` }
+            : { title: "Junction lined up", subtitle: "Both cars reached their tracks" }
+          : null
+      }
       onExit={onExit}
     />
   );

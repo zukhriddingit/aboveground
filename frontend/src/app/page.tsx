@@ -23,7 +23,10 @@ import {
   ClosureMarkers,
   closureScenario,
   FixTheTMap,
+  closureStatus,
+  closureTiming,
   IncidentSim,
+  isSurfaceStation,
   IncidentTag,
   LiveMarkers,
   alertForStoppedTrain,
@@ -41,12 +44,15 @@ import {
   triggerDelay,
   useLiveMbta,
   useWorldFeed,
+  workItems,
+  workTitle,
   type FeedSource,
   type GameKind,
   type LiveAlert,
   type LiveEvent,
   type MbtaStation,
   type TunnelView,
+  type WorkItem,
 } from "@/components/game";
 import {
   DEFAULT_LAYERS,
@@ -88,6 +94,10 @@ const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve,
 const flagKey = (id: StationId) => `flag:${id}`;
 const liveKey = (alert: LiveAlert) => `live-${alert.id}`;
 const NOTIFY_KEY = "tverse-notify-closures";
+/** After the walk-in drops onto the platform, how long before a live alert's card opens. */
+const LANDED_MS = 3000;
+/** Street-level stops have no walk-in: the card opens once the camera has flown over. */
+const SURFACE_ARRIVE_MS = 2800;
 const VIEW_KEY = "tverse-map-view";
 const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? "").replace(/\/$/, "");
 const SOURCE_LABEL: Record<FeedSource, string> = { backend: "Backend", live: "MBTA", sim: "Simulated", overnight: "Sample (T closed)" };
@@ -146,7 +156,7 @@ export default function Home() {
   const [telemetry, setTelemetry] = useState(false);
   const telemetryUnlocked = rank.level >= 3;
   /** A simulated repair staged from a live MBTA alert, while its card or repair is up. */
-  const [explore, setExplore] = useState<{ id: string; game: GameKind; label: string } | null>(null);
+  const [explore, setExplore] = useState<{ id: string; game: GameKind; label: string; alert: LiveAlert; items: WorkItem[] } | null>(null);
   // Read lazily: the toggle only renders inside the alerts panel, which starts closed, so SSR never shows it.
   const [notifySupported] = useState(() => typeof window !== "undefined" && "Notification" in window);
   const [notifyOn, setNotifyOn] = useState(
@@ -369,19 +379,23 @@ export default function Home() {
     walkInTimer.current = undefined;
   }, []);
 
-  /** Once the street over a station has opened, drop the camera in onto the platform. */
+  /** Once the street over a station has opened, drop the camera in onto the platform; `then` runs after landing. */
   const walkInWhenOpen = useCallback(
-    (id: StationId) => {
+    (id: StationId, then?: () => void) => {
       cancelWalkIn();
       const giveUp = Date.now() + 10000;
       const attempt = () => {
         if (scene.current?.isTunnelOpen(id)) {
           walkInTimer.current = window.setTimeout(() => {
             walkInTimer.current = undefined;
-            enterTunnel(id);
+            const entered = enterTunnel(id);
+            if (then) window.setTimeout(then, entered ? LANDED_MS : 400);
           }, 900);
         } else if (Date.now() < giveUp) walkInTimer.current = window.setTimeout(attempt, 300);
-        else walkInTimer.current = undefined;
+        else {
+          walkInTimer.current = undefined;
+          then?.();
+        }
       };
       walkInTimer.current = window.setTimeout(attempt, 1800);
     },
@@ -396,24 +410,41 @@ export default function Home() {
     }
   }, [view, cancelWalkIn, exitTunnel]);
   useEffect(() => cancelWalkIn, [cancelWalkIn]);
+  /** A live alert's card waits until the camera is at the station; one at a time. */
+  const pendingCard = useRef<string | null>(null);
 
   /** "Explore a simulated repair" for a live alert: the tunnel opens, but the real trains keep moving. */
   const exploreLive = useCallback(
     (a: LiveAlert, pick?: { station: Station; scenario: { game: GameKind; label: string } }) => {
-      const scenario = pick?.scenario ?? scenarioFor(a.cause, a.header);
+      // Planned work names its jobs ("switch and rail upgrades"); each one gets its own puzzle, in that order.
+      const items = a.closure ? workItems(a) : [];
+      const work = items.length ? `${workTitle(items)} work` : null;
+      const scenario = work ? { game: items[0].game, label: work } : (pick?.scenario ?? scenarioFor(a.cause, a.header));
       const station = pick?.station ?? featuredStationFor(a, stationsRef.current, live.index);
-      if (!scenario || !station || repairing) return;
+      if (!scenario || !station || repairing || pendingCard.current) return;
       const busy = simAlerts.find((s) => s.stationId === station.id);
       if (busy) return openAlert(busy);
       const id = liveKey(a);
       setAlertsOpen(false);
-      setExplore({ id, ...scenario });
-      setFixAlert(staged.get(id)?.alert ?? translateForGame(station, a.header, id, scenario.game));
+      setExplore({ id, ...scenario, alert: a, items });
       if (!sim.incidents.has(id)) sim.startIncident(id, station.id, { holds: false, fault: faultForGame(scenario.game) });
+      // Fly to the station and go down onto the platform first; the card (and its mini-game) follows.
+      const base = staged.get(id)?.alert ?? translateForGame(station, a.header, id, scenario.game);
+      const card = work
+        ? { ...base, plainTitle: `${work.charAt(0).toUpperCase()}${work.slice(1)} near ${shortName(station)}`, plainExplanation: items.map((i) => i.what).join(" ") }
+        : base;
+      pendingCard.current = id;
+      const showCard = () => {
+        if (pendingCard.current !== id) return;
+        pendingCard.current = null;
+        setFixAlert(card);
+      };
+      push(`Heading to ${shortName(station)}`, { description: "The repair card opens once you're there.", durationMs: 3500 });
       viewTunnel(station.id);
-      walkInWhenOpen(station.id);
+      if (isSurfaceStation(station.id)) window.setTimeout(showCard, SURFACE_ARRIVE_MS);
+      else walkInWhenOpen(station.id, showCard);
     },
-    [live.index, openAlert, repairing, sim, simAlerts, staged, viewTunnel, walkInWhenOpen],
+    [live.index, openAlert, push, repairing, sim, simAlerts, staged, viewTunnel, walkInWhenOpen],
   );
 
   /** A red X: explore a simulated repair at that closed station, whether or not the map features it. */
@@ -575,12 +606,16 @@ export default function Home() {
       const before = sim.stats(alert.id);
       const heldBefore = sim.incidents.has(alert.id) ? before.heldTrains : 0;
 
+      const closed = explore?.id === alert.id && explore.alert.closure ? explore.alert : null;
       const restore = () => {
         sim.resolveIncident(alert.id);
         if (simulatedOnly) {
           push("Simulated repair complete", {
             tone: "success",
-            description: `That's roughly how crews handle it. The real MBTA alert near ${name} stays up until they clear it.`,
+            description: closed
+              ? `${name} is still ${closureStatus(closed)} in real life. ${closureTiming(closed).long.split(/(?<=\.)\s/)[0]}`
+              : `That's roughly how crews handle it. The real MBTA alert near ${name} stays up until they clear it.`,
+            durationMs: closed ? 7000 : undefined,
           });
           return;
         }
@@ -609,7 +644,7 @@ export default function Home() {
         void finish();
       }
     },
-    [awardFix, exitTunnel, progress.equipped, push, sim, stationById, viewTunnel],
+    [awardFix, exitTunnel, explore, progress.equipped, push, sim, stationById, viewTunnel],
   );
 
   // Development only: __winFix() wins the open repair step, to check the crew's repair without playing it.

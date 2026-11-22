@@ -22,6 +22,10 @@ answers 406 without a key, so events come from comparing polls.)
 - **Red X** (`ClosureMarkers.tsx`): only for an active alert whose effect is `SUSPENSION`, `SHUTTLE`,
   `STATION_CLOSURE` or `STOP_CLOSURE`, at each station it names. A delay alone never draws an X. Tapping an X
   explores a simulated repair at that station, featured or not (see below).
+- **How long it's out** (`closureTiming` in `mbtaV3.ts`): under each X, and on the alerts panel, the delay card
+  and the card after the repair. Planned work has an end date in the alert's active period ("Through December 10",
+  in Boston days); long projects are published as ongoing with the reopening only in the text ("expected to reopen
+  in 2029" becomes "Until 2029, 2 to 3 years from now, about 3 years in all"); "permanently closed" says so.
 - **Live events** (`useLiveMbta.ts`): each alert poll is compared with the last, so a new alert, a changed
   header or an alert that drops out arrive as `new`, `updated` and `cleared` events. The vehicle feed adds
   `stopped` when a train stands still (within 30 m) for 3 minutes while not `STOPPED_AT` a platform, and
@@ -55,7 +59,8 @@ problem somewhere the MBTA didn't report.
 
 A red X explores it at the closed station itself, whichever it is (Symphony, Broadway, Hawes St...): the page
 adds that station to the map's station list for the scene, and `closureScenario(alert)` picks the puzzle from
-the cause, then the alert's own words ("switch and rail upgrades"), else track repair, since most closures are
+the cause, then the alert's own words ("accessibility upgrades" gives the step-free station game at Symphony,
+Summit Ave and Hawes St; "switch and rail upgrades" the junction), else track repair, since most closures are
 planned track and station work published as `CONSTRUCTION` or `UNKNOWN_CAUSE`. Stations in a tunnel open the
 street (`faults.ts` lists them); where buildings cover the whole stretch, the street stays shut and the walk-in
 view goes straight down to the platform. Every other stop gets the street-level work zone. The card shows the MBTA's words, then how that kind of repair generally works, and says the
@@ -84,6 +89,7 @@ repair started in 2D tilts back to 3D so the opened street shows.
    | Switch / frozen switch | at the interlocking: Copley, Kenmore and Park St crossovers |
    | Power (breakers) | ~120 m out: arcing third rail (heavy rail) or a broken trolley wire (Green) |
    | Disabled train (couple and tow) | at the platform, hazard lights on |
+   | Accessibility work (step-free station) | at the platform: a glass elevator hoistway going in at the back, precast edge units stacked by the edge |
 
    The work zone follows MBTA right-of-way practice: a lookout with a lantern, a yellow lantern before the zone,
    a green lantern after it, a speed sign and RESUME SPEED, light towers, ANSI Class 2 lime vests with the
@@ -93,7 +99,7 @@ repair started in 2D tilts back to 3D so the opened street shows.
    (street-level, elevated or open cut) gets that work zone instead of an opened street.
 3. **Trains hold.** `IncidentSim` sits between the train feed and `<TVerseMap vehicles>`: trains approaching the
    broken station queue up and stop, with amber rings, and the track segment pulses red.
-4. **Fix it.** `FixTheTModal` picks one of six mini-games from what broke. Each is a full-screen 3D scene
+4. **Fix it.** `FixTheTModal` picks one of seven mini-games from what broke. Each is a full-screen 3D scene
    modeled on the real job, with a console-style HUD (objective and steps, a gauge, feedback, input prompts).
    There's no timer and no way to lose: a wrong move gets sparks, a buzz and a hint, and you try again.
    Esc or Back returns to the delay card.
@@ -102,16 +108,24 @@ repair started in 2D tilts back to 3D so the opened street shows.
    | --- | --- |
    | Signal relay case | Drag each tagged field wire (1TR, 2TR, HR, DR) onto its relay's brass terminal post; the nut runs down, the relay picks up behind its clear cover, and with all four the signal clears to green |
    | Thermite weld | Hold the oxy-propane torch until the rail ends reach about 1,700 °F (they glow with their real color), tap the crucible as the reaction peaks, grind the riser flush with a profile grinder, then open the track once the weld is below 700 °F |
-   | Junction | Click the switch machines to throw them (the lit preview shows the route), then send the Green Line car; twice, to two destinations |
+   | Junction | The real junction nearest the station on its line (`junctions.ts`): Columbia Junction (Ashmont, Braintree, Cabot Yard) on the southern Red Line, a crossover elsewhere on the Red Line, Kenmore (B, the Blandford St pocket track, C, D), Copley Junction (E or Kenmore) and the GLX junction (Union Square or Medford/Tufts) on the Green Line, Wellington and Orient Heights yards on the Orange and Blue Lines. Throw the switch machines (the lit preview shows the route) and send that line's car to two destinations; in a planned closure the trains are parked, so you test the new switches by running a test train over every route |
    | Substation switchgear | Watch the amber READY lamps light the dispatcher's order, then turn the pistol-grip handles to CLOSE in that order; the bus voltmeter climbs to 600 V DC, a breaker out of order arcs |
    | Tunnel rescue | Feather the throttle to couple under 2 mph (faster and the knuckles bounce), drag the glad hand across to connect the brake pipe, hold the valve until 90 psi, then tow the stalled car clear |
    | Frozen switch | Play the hand torch over the ice wedged between the point and the stock rail; once it's all melted the point slams shut |
+   | Step-free station | Lower each precast platform edge unit (yellow tactile strip and all) onto the laser line 8 in above the rail, within ¼ in; at a station below the street, then lower the new elevator car down its glass hoistway, level its sill with the platform within ½ in (the ADA limit) and open the doors. Street-level stops (the C branch) end with the first trolley at the raised platform; heavy-rail stations get only the elevator |
 
    The 3D games share `arena/`: `Stage` (renderer with ACES tone mapping, studio reflections, soft shadows,
    bloom, a film grade and a handheld camera), `materials` (PBR materials with textures painted in code),
    `fx` (spark streaks, smoke and steam, torch flames, hot-steel color from temperature), `railKit` (a 115RE
    rail section swept along any path, ties, ballast, a Green Line car), `ArenaShell` (the HUD) and `sfx`
    (synthesized sounds, with a mute button in the HUD).
+
+   **Planned closures** (`workItems` in `mbtaV3.ts`) are split into the jobs they cover, in the MBTA's order: from
+   the MBTA's announcement of that closure when it published one (the Nov 20–22 Red Line closure is signal
+   pre-commissioning near North Quincy, then switch areas and the rail at them between Broadway and North Quincy,
+   though its alert only says "switch and rail upgrades"), else from the alert's own reason. The card explains
+   each job, lists its real steps and marks the ones the puzzle has you do; the puzzles play back to back
+   (signal, switch, weld for that closure), and the card after them says how the work adds up.
 
    After a win the card says how long that repair really takes on the T, with a real MBTA example and its
    source (`realRepairs.ts`), then plays the 3D repair after 9 seconds or when you tap "Watch the crew fix it".
@@ -161,7 +175,7 @@ are released when the rider leaves.
 | `TunnelView.ts` | Walk-in renderer, camera guidance, pointer gestures and keyboard navigation |
 | `crewModels.ts`, `repairCrew.ts` | Shared rounded figure and tool geometry, joint rig, foot placement, two-hand tool poses and fault-specific cues |
 | `tunnelModels.ts`, `tunnelTextures.ts`, `fx.ts` | MBTA fleets, crew, signal, cabinet, work-zone props; canvas textures; sparks and smoke |
-| `FixTheTModal.tsx` + six `*Game.tsx` | Delay card and the 3D mini-games (loaded on demand, like `FixTheTScene`); `miniGame.ts` is their props |
+| `FixTheTModal.tsx` + seven `*Game.tsx` | Delay card and the 3D mini-games (loaded on demand, like `FixTheTScene`); `miniGame.ts` is their props |
 | `arena/` | What the mini-games share: renderer, materials, effects, track kit, HUD, sounds |
 | `realRepairs.ts` | How long each kind of repair really takes, with sources |
 | `useWorldFeed.ts` | `/api/world` → live MBTA vehicles → simulated fleet; overnight (00:30–06:00 Boston, under 20 live trains) a labelled sample service (`?service=sample\|live` forces it); `triggerDelay()` |
