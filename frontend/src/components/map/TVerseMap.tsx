@@ -16,6 +16,7 @@ import { MapOverlayContext, OverlayHub } from "./mapContext";
 import { StationInfoCard, TrainInfoCard } from "./MapInfoCard";
 import { createMapStyle, WINDOW_IMAGES, windowTexture } from "./mapStyle";
 import { DemoRide, RIDE_COORDS, RIDE_STOPS } from "./rideRoute";
+import { allowStationModel } from "./stationModels";
 import { ThreeOverlayLayer } from "./ThreeOverlayLayer";
 import type { FlyOptions, TVerseMapHandle, TVerseMapProps } from "./types";
 
@@ -38,6 +39,9 @@ const RIDE_CAMERA = { zoom: 15.85, pitch: 64, bearingOffset: -38 };
 const GESTURE_HOLD = 2500;
 /** The avatar idles this far (m) beside BU Central so it never covers the station's beacon or bubbles. */
 const HOME_OFFSET = 70;
+/** Station models load once the camera is this close (zoom, and metres from the map centre). */
+const MODEL_ZOOM = 14.8;
+const MODEL_RADIUS = 1500;
 const STEP_OFF_S = 0.9;
 const smoothstep = (u: number) => u * u * (3 - 2 * u);
 
@@ -178,6 +182,15 @@ export default function TVerseMap(props: TVerseMapProps) {
       };
       m.setMissingStyleImageResolver(addWindows);
 
+      const allowNearbyModels = () => {
+        if (m.getZoom() < MODEL_ZOOM) return;
+        const centre = m.getCenter();
+        for (const s of latest.current.stations) {
+          if (centre.distanceTo(new lib.LngLat(s.lng, s.lat)) < MODEL_RADIUS) allowStationModel(s.id);
+        }
+      };
+      m.on("moveend", allowNearbyModels);
+
       m.on("style.load", () => {
         const p = latest.current;
         WINDOW_IMAGES.forEach(addWindows);
@@ -196,6 +209,7 @@ export default function TVerseMap(props: TVerseMapProps) {
         m.getSource<maplibregl.GeoJSONSource>("ride")?.setData(rideLine);
         syncStationLabels(m, p.stations);
         layer.setStations(p.stations);
+        allowNearbyModels();
         layer.setVehicles(p.vehicles);
         layer.setTouristMode(!!p.touristMode);
         layer.setHat(p.avatarHat ?? "none", false);
