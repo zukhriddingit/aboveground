@@ -1,10 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Bus, Camera, Gauge, Landmark, Layers, LocateFixed, Lock, TrainFront, TriangleAlert, X, type LucideIcon } from "lucide-react";
+import { Bus, Camera, Gauge, Landmark, Layers, LocateFixed, Lock, Moon, Sun, TrainFront, TriangleAlert, X, type LucideIcon } from "lucide-react";
 import { CONTROL, CONTROL_ACTIVE, CONTROL_STATIC, FOCUS, LABEL, PANEL } from "@/lib/ui";
-import type { MapLayerVisibility } from "@/components/map";
-import { LAYER_INFO, LAYER_ORDER, TELEMETRY_INFO, type MapLayerKey, type ViewMode } from "./layers";
+import { LAYER_INFO, LAYER_ORDER, type MapLayerKey, type MapLayers, type ThemeMode, type ViewMode } from "./layers";
 import { Switch } from "./Switch";
 
 const ICONS: Record<MapLayerKey, LucideIcon> = {
@@ -13,6 +12,7 @@ const ICONS: Record<MapLayerKey, LucideIcon> = {
   stories: Camera,
   shuttles: Bus,
   tourist: Landmark,
+  telemetry: Gauge,
 };
 
 const VIEWS: Array<{ mode: ViewMode; short: string; label: string }> = [
@@ -20,16 +20,18 @@ const VIEWS: Array<{ mode: ViewMode; short: string; label: string }> = [
   { mode: "3d", short: "3D", label: "3D World" },
 ];
 
+const THEMES: Array<{ mode: ThemeMode; icon: LucideIcon; label: string }> = [
+  { mode: "light", icon: Sun, label: "Light" },
+  { mode: "dark", icon: Moon, label: "Dark" },
+];
+
 export interface MapControlsProps {
   viewMode: ViewMode;
   onViewModeChange: (mode: ViewMode) => void;
-  /** The page's `layers` state, passed straight to <TVerseMap visibleLayers>. */
-  layers: MapLayerVisibility;
-  /** The page's `setLayers` (or a wrapper with the same shape): called with the whole next object. */
-  onLayersChange: (next: MapLayerVisibility) => void;
-  /** Pro Telemetry readout (HUD only, not a map layer). */
-  telemetry: boolean;
-  onTelemetryChange: (on: boolean) => void;
+  theme: ThemeMode;
+  onThemeChange: (theme: ThemeMode) => void;
+  layers: MapLayers;
+  onLayerChange: (key: MapLayerKey, on: boolean) => void;
   /** Pro Telemetry is a Transit Rank reward; until then its switch is locked with this hint. */
   telemetryLockedHint?: string | null;
   onRecenter: () => void;
@@ -37,21 +39,21 @@ export interface MapControlsProps {
   onOpen?: () => void;
 }
 
-/** Top-right stack like Apple/Google Maps: 2D/3D, a Layers popover (closed by default) and recenter. */
+/** Top-right stack like Apple/Google Maps: 2D/3D, light/dark, a Layers popover (closed by default) and recenter. */
 export function MapControls({
   viewMode,
   onViewModeChange,
+  theme,
+  onThemeChange,
   layers,
-  onLayersChange,
-  telemetry,
-  onTelemetryChange,
+  onLayerChange,
   telemetryLockedHint,
   onRecenter,
   onOpen,
 }: MapControlsProps) {
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
-  const extras = LAYER_ORDER.filter((k) => k !== "trains" && k !== "alerts" && layers[k]).length + (telemetry && !telemetryLockedHint ? 1 : 0);
+  const extras = LAYER_ORDER.filter((k) => k !== "trains" && k !== "alerts" && layers[k]).length + (layers.telemetry ? 1 : 0);
 
   useEffect(() => {
     if (!open) return;
@@ -85,6 +87,27 @@ export function MapControls({
               } ${active ? "bg-white text-zinc-950" : "text-zinc-300 hover:bg-white/[0.08] hover:text-white"} ${FOCUS}`}
             >
               {v.short}
+            </button>
+          );
+        })}
+      </div>
+
+      <div role="group" aria-label="Map theme" className={`${CONTROL_STATIC} h-auto w-11 flex-col overflow-hidden p-0`}>
+        {THEMES.map((t, i) => {
+          const active = theme === t.mode;
+          return (
+            <button
+              key={t.mode}
+              type="button"
+              onClick={() => onThemeChange(t.mode)}
+              aria-pressed={active}
+              aria-label={`${t.label} map`}
+              title={`${t.label} map`}
+              className={`flex h-10 w-full items-center justify-center transition-colors ${
+                i > 0 ? "border-t border-white/12" : ""
+              } ${active ? "bg-white text-zinc-950" : "text-zinc-300 hover:bg-white/[0.08] hover:text-white"} ${FOCUS}`}
+            >
+              <t.icon className="size-[17px]" />
             </button>
           );
         })}
@@ -146,60 +169,46 @@ export function MapControls({
                 </button>
               ))}
             </div>
+            <p className={`${LABEL} mt-3 mb-2`}>Theme</p>
+            <div className="grid grid-cols-2 gap-1 rounded-lg bg-white/[0.06] p-1">
+              {THEMES.map((t) => (
+                <button
+                  key={t.mode}
+                  type="button"
+                  onClick={() => onThemeChange(t.mode)}
+                  aria-pressed={theme === t.mode}
+                  className={`flex h-8 items-center justify-center gap-1.5 rounded-md text-[12px] font-semibold transition-colors ${
+                    theme === t.mode ? "bg-white text-zinc-950" : "text-zinc-300 hover:text-white"
+                  } ${FOCUS}`}
+                >
+                  <t.icon className="size-3.5" />
+                  {t.label}
+                </button>
+              ))}
+            </div>
           </div>
 
           <div className="px-1.5 py-1.5">
             <p className={`${LABEL} px-2 pt-1.5 pb-1`}>Layers</p>
-            {LAYER_ORDER.map((key) => (
-              <LayerRow
-                key={key}
-                icon={ICONS[key]}
-                label={LAYER_INFO[key].label}
-                detail={LAYER_INFO[key].detail}
-                checked={layers[key]}
-                onChange={(on) => onLayersChange({ ...layers, [key]: on })}
-              />
-            ))}
-            <LayerRow
-              icon={Gauge}
-              label={TELEMETRY_INFO.label}
-              detail={telemetryLockedHint ?? TELEMETRY_INFO.detail}
-              checked={telemetry && !telemetryLockedHint}
-              locked={!!telemetryLockedHint}
-              onChange={onTelemetryChange}
-            />
+            {[...LAYER_ORDER, "telemetry" as const].map((key) => {
+              const Icon = ICONS[key];
+              const locked = key === "telemetry" && !!telemetryLockedHint;
+              return (
+                <div key={key} className={`flex items-center gap-3 rounded-lg px-2 py-2 ${locked ? "opacity-70" : "hover:bg-white/[0.04]"}`}>
+                  <span className="flex size-8 shrink-0 items-center justify-center rounded-md border border-white/12 bg-white/[0.04] text-zinc-200">
+                    {locked ? <Lock className="size-4" /> : <Icon className="size-4" />}
+                  </span>
+                  <span className="min-w-0 flex-1 leading-tight">
+                    <span className="block text-[13px] font-medium text-white">{LAYER_INFO[key].label}</span>
+                    <span className="block text-[11px] text-zinc-400">{locked ? telemetryLockedHint : LAYER_INFO[key].detail}</span>
+                  </span>
+                  <Switch size="sm" checked={layers[key] && !locked} disabled={locked} onChange={(on) => onLayerChange(key, on)} label={LAYER_INFO[key].label} />
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
-    </div>
-  );
-}
-
-function LayerRow({
-  icon: Icon,
-  label,
-  detail,
-  checked,
-  locked = false,
-  onChange,
-}: {
-  icon: LucideIcon;
-  label: string;
-  detail: string;
-  checked: boolean;
-  locked?: boolean;
-  onChange: (on: boolean) => void;
-}) {
-  return (
-    <div className={`flex items-center gap-3 rounded-lg px-2 py-2 ${locked ? "opacity-70" : "hover:bg-white/[0.04]"}`}>
-      <span className="flex size-8 shrink-0 items-center justify-center rounded-md border border-white/12 bg-white/[0.04] text-zinc-200">
-        {locked ? <Lock className="size-4" /> : <Icon className="size-4" />}
-      </span>
-      <span className="min-w-0 flex-1 leading-tight">
-        <span className="block text-[13px] font-medium text-white">{label}</span>
-        <span className="block text-[11px] text-zinc-400">{detail}</span>
-      </span>
-      <Switch size="sm" checked={checked} disabled={locked} onChange={onChange} label={label} />
     </div>
   );
 }
