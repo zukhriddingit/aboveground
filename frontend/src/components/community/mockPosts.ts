@@ -3,6 +3,7 @@
 import type { CommunityPost, CommunityReply, PostVibe, RiderBadge, StationId, TransitLine } from "@/types/tverse";
 import { stopName } from "./feedStops";
 import { sceneSvg, type SceneOptions } from "./sceneArt";
+import { withSeedPhoto } from "./seedPhotos";
 
 type ReplySeed = [author: string, badge: RiderBadge, text: string, replyTo: string | null, likes: number, minutesAgo: number];
 
@@ -114,7 +115,7 @@ let art: Partial<Record<number, string>> = {};
 
 export function buildMockPosts(now = Date.now()): CommunityPost[] {
   const ago = (min: number) => new Date(now - min * 60_000).toISOString();
-  return SEEDS.map((s) => {
+  return SEEDS.map((s): CommunityPost => {
     const id = `seed-${s.n}`;
     if (s.scene && !art[s.n]) art = { ...art, [s.n]: sceneSvg(s.scene) };
     const replies: CommunityReply[] = s.replies.map(([author, badge, text, replyTo, likes, m], i) => ({
@@ -144,5 +145,5 @@ export function buildMockPosts(now = Date.now()): CommunityPost[] {
       replies,
       createdAt: ago(s.minutesAgo),
     };
-  });
+  }).map(withSeedPhoto);
 }

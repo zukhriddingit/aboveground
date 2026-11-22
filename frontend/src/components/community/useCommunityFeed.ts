@@ -6,6 +6,7 @@ import { ApiError, createPost, createReply, fetchPosts, likeReply as likeReplyAp
 import { tickClock } from "./feedMeta";
 import { activityStore, seenStore, useLocalStore, useRiderIdentity } from "./localStore";
 import { buildMockPosts } from "./mockPosts";
+import { withSeedPhoto } from "./seedPhotos";
 
 /** Ids of posts/replies that exist only in this browser (optimistic, or made while offline). */
 const LOCAL = "local-";
@@ -86,7 +87,7 @@ export function useCommunityFeed({ pollMs = 12_000 }: UseCommunityFeedOptions = 
       const ids = new Set(data.map((p) => p.id));
       const prevById = new Map((prev ?? []).map((p) => [p.id, p]));
       const localPosts = (prev ?? []).filter((p) => isLocal(p.id) && !ids.has(p.id));
-      const merged = data.map((p) => {
+      const merged = data.map(withSeedPhoto).map((p) => {
         const extra = prevById.get(p.id)?.replies.filter((r) => isLocal(r.id)) ?? [];
         return extra.length ? { ...p, replies: [...p.replies, ...extra] } : p;
       });
