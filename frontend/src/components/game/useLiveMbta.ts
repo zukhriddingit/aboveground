@@ -22,6 +22,8 @@ const ALERTS_MS = 20_000;
 const ARRIVALS_MS = 30_000;
 const STOPPED_CHECK_MS = 15_000;
 const MAX_EVENTS = 40;
+/** A train with no reported status this close to a station centre counts as at the platform. */
+const PLATFORM_METERS = 150;
 
 export type LiveEventKind = "new" | "updated" | "cleared" | "stopped" | "moving";
 
@@ -210,7 +212,14 @@ export function useLiveMbta(featured: StationId[]): LiveMbta {
         }
         return best && bestM < 1500 ? best.name : null;
       };
-      const list = stoppedTrains(now).map((t) => ({ ...t, near: nearOf(t) }));
+      // Backend trains carry no current_status: one standing right by a station is dwelling, not stuck.
+      const atPlatform = (t: StoppedTrain) => {
+        for (const s of index?.stations.values() ?? []) {
+          if (Math.hypot((s.lng - t.lng) * 82_000, (s.lat - t.lat) * 111_000) < PLATFORM_METERS) return true;
+        }
+        return false;
+      };
+      const list = stoppedTrains(now, atPlatform).map((t) => ({ ...t, near: nearOf(t) }));
       const before = stoppedBefore.current;
       const fresh: LiveEvent[] = [];
       for (const t of list) {

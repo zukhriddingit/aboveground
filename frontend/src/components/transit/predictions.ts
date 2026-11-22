@@ -1,5 +1,6 @@
-// MBTA V3 /predictions for our stops, straight from api-v3.mbta.com in the browser (no key, CORS
-// open, like map/mbtaLive.ts). One request for every stop; 20 req/min without a key, so poll >= 30 s.
+// MBTA V3 /predictions for our stops, straight from api-v3.mbta.com in the browser (CORS open, like
+// map/mbtaLive.ts). One request for every stop. Without a key the limit is 20 req/min per IP, shared
+// by everyone on the venue Wi-Fi, so NEXT_PUBLIC_MBTA_API_KEY is sent when set and a 429 backs off.
 import type { StationId } from "@/types/tverse";
 
 export interface Prediction {
@@ -22,9 +23,13 @@ interface Resource {
 
 const ROUTES = "Red,Orange,Blue,Green-B,Green-C,Green-D,Green-E";
 const TIMEOUT_MS = 5000;
+const KEY = process.env.NEXT_PUBLIC_MBTA_API_KEY;
+const RATE_LIMIT_BACKOFF_MS = 60_000;
+let rateLimitedUntil = 0;
 
 export async function fetchPredictions(stationIds: StationId[], signal?: AbortSignal): Promise<Prediction[]> {
   if (!stationIds.length) return [];
+  if (Date.now() < rateLimitedUntil) throw new Error("Waiting out the MBTA API rate limit");
   const params = new URLSearchParams({
     "filter[stop]": stationIds.join(","),
     "filter[route]": ROUTES,
@@ -38,7 +43,12 @@ export async function fetchPredictions(stationIds: StationId[], signal?: AbortSi
   const onAbort = () => controller.abort();
   signal?.addEventListener("abort", onAbort);
   try {
-    const res = await fetch(`https://api-v3.mbta.com/predictions?${params}`, { cache: "no-store", signal: controller.signal });
+    const res = await fetch(`https://api-v3.mbta.com/predictions?${params}`, {
+      cache: "no-store",
+      signal: controller.signal,
+      headers: KEY ? { "x-api-key": KEY } : undefined,
+    });
+    if (res.status === 429) rateLimitedUntil = Date.now() + RATE_LIMIT_BACKOFF_MS;
     if (!res.ok) throw new Error(`MBTA predictions HTTP ${res.status}`);
     const payload: { data?: Resource[]; included?: Resource[] } = await res.json();
     if (!Array.isArray(payload.data)) throw new Error("Missing MBTA prediction collection");

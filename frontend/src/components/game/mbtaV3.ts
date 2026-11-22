@@ -98,9 +98,12 @@ export interface StoppedTrain {
 }
 
 interface TrackedTrain extends StoppedTrain {
-  /** MBTA current_status: IN_TRANSIT_TO, INCOMING_AT or STOPPED_AT. */
+  /** MBTA current_status: IN_TRANSIT_TO, INCOMING_AT or STOPPED_AT; UNKNOWN when the feed doesn't say (backend). */
   status: string;
 }
+
+/** Status for trains whose feed has no current_status (the backend's /api/world vehicles). */
+const UNKNOWN_STATUS = "UNKNOWN";
 
 const tracked = new Map<string, TrackedTrain>();
 
@@ -123,10 +126,27 @@ function trackStill(seen: Array<Omit<TrackedTrain, "since">>, now: number) {
   for (const id of [...tracked.keys()]) if (!ids.has(id)) tracked.delete(id);
 }
 
-/** Trains that have stood still between stations for STOPPED_MS or more, from the vehicle polls so far. */
-export function stoppedTrains(now = Date.now()): StoppedTrain[] {
+/**
+ * Feed the backend's /api/world trains into the standing-still tracker, so "Standing trains" works when the
+ * browser isn't polling /vehicles itself. The backend's mock fleet ("mock-" ids) never moves, so it's skipped.
+ */
+export function trackVehicles(vehicles: TrainVehicle[], now = Date.now()) {
+  trackStill(
+    vehicles
+      .filter((v) => !v.id.startsWith("mock-") && Number.isFinite(v.lat) && Number.isFinite(v.lng))
+      .map((v) => ({ id: v.id, route: v.route, lat: v.lat, lng: v.lng, status: UNKNOWN_STATUS, stopId: null })),
+    now,
+  );
+}
+
+/**
+ * Trains that have stood still between stations for STOPPED_MS or more, from the vehicle polls so far.
+ * `atPlatform` screens out trains with no reported status that are really just dwelling at a station.
+ */
+export function stoppedTrains(now = Date.now(), atPlatform?: (t: StoppedTrain) => boolean): StoppedTrain[] {
   return [...tracked.values()]
     .filter((t) => t.status !== "STOPPED_AT" && now - t.since >= STOPPED_MS)
+    .filter((t) => t.status !== UNKNOWN_STATUS || !atPlatform?.(t))
     .map((t) => ({ id: t.id, route: t.route, lat: t.lat, lng: t.lng, stopId: t.stopId, since: t.since }));
 }
 
