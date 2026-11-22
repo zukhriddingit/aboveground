@@ -1,0 +1,702 @@
+{
+  "name": "Copley Square",
+  "title": "Copley Square, Boston",
+  "region": "Boston · Back Bay",
+  "place": "Boylston Street × Dartmouth Street",
+  "timezone": "America/New_York",
+  "level": 3.35,
+  "styles": {
+    "default": {
+      "facade": "brick",
+      "wall": [
+        "#ad6e59",
+        "#a65f49",
+        "#ae795e",
+        "#966857"
+      ],
+      "trim": "#d0ae8e",
+      "frame": "#645651",
+      "glass": [
+        "#89a4a9",
+        "#a4b6b4",
+        "#9caeb1"
+      ],
+      "roof": "flat",
+      "flatRoof": [
+        "#777b7c",
+        "#8c8884"
+      ],
+      "roofColour": "#5a6269",
+      "roofTex": "slate",
+      "levels": 4,
+      "floor": 3.35,
+      "bay": 2.5,
+      "parapet": 0.35,
+      "shop": "poi",
+      "shopHeight": 3.2,
+      "awning": "some",
+      "awningDepth": 0.85,
+      "stripes": false
+    },
+    "rules": [
+      {
+        "if": {
+          "minLevels": 9
+        },
+        "set": {
+          "facade": "civic",
+          "wall": [
+            "#b09182",
+            "#ae8c77"
+          ],
+          "bay": 3.05,
+          "roof": "flat",
+          "awning": false
+        }
+      },
+      {
+        "if": {
+          "type": "school"
+        },
+        "set": {
+          "facade": "civic",
+          "wall": "#bb8b72",
+          "shop": "none"
+        }
+      },
+      {
+        "if": {
+          "type": "apartments"
+        },
+        "set": {
+          "facade": "apartment",
+          "wall": [
+            "#ac7966",
+            "#b38b72"
+          ],
+          "bay": 2.75
+        }
+      },
+      {
+        "if": {
+          "type": [
+            "roof",
+            "service"
+          ]
+        },
+        "set": {
+          "facade": "plain",
+          "height": 2.5,
+          "levels": 1,
+          "shop": "none",
+          "roof": "flat"
+        }
+      }
+    ]
+  },
+  "buildings": {},
+  "palette": {
+    "ground": "#dcc3a7",
+    "road": "#a9a5a5",
+    "pavement": "#cead97",
+    "walk": "#c7a18e",
+    "grass": "#a6c87c",
+    "water": "#72a6a1",
+    "slab": "#c7af91",
+    "marking": "#f7eed8",
+    "kerb": "#c7c1b7",
+    "paving": "#ab9082"
+  },
+  "paving": {
+    "style": "slabs",
+    "size": 0.52,
+    "colour": "#b29485",
+    "stone": "#d4b3a0"
+  },
+  "lamp": {
+    "colour": "#3e4946",
+    "height": 5.3,
+    "head": "#f5e5c3",
+    "auto": true
+  },
+  "shops": {
+    "signs": [
+      ""
+    ],
+    "font": "Georgia, serif",
+    "fascias": [
+      "#365749",
+      "#664442",
+      "#4a5058",
+      "#965d46"
+    ],
+    "awnings": [
+      "#345d4a",
+      "#893e36",
+      "#e0cdab",
+      "#333e45"
+    ]
+  },
+  "cafes": {
+    "umbrellas": [
+      "#d7bc8c",
+      "#887d65",
+      "#49695a"
+    ],
+    "table": "#b48764",
+    "chair": "#625c52"
+  },
+  "trees": {
+    "default": {
+      "style": 2,
+      "colours": [
+        "#86ad64",
+        "#779c57",
+        "#95b86d"
+      ],
+      "height": 8.5,
+      "vary": 0.3,
+      "spring": "#a7c87c",
+      "autumn": "#d69643",
+      "mix": [
+        {
+          "share": 4,
+          "style": 2,
+          "autumn": "#dfa746"
+        },
+        {
+          "share": 3,
+          "style": 3,
+          "autumn": "#be7042"
+        },
+        {
+          "share": 2,
+          "style": 4,
+          "autumn": "#d9b952"
+        }
+      ]
+    }
+  },
+  "people": {
+    "skin": [
+      "#805445",
+      "#ba8668",
+      "#e0ad87",
+      "#b57b5e",
+      "#865d4f"
+    ],
+    "clothes": [
+      "#587982",
+      "#883e49",
+      "#bd8c51",
+      "#464858",
+      "#4f7059"
+    ],
+    "pants": [
+      "#48566c",
+      "#675d57",
+      "#45484d"
+    ],
+    "hair": [
+      "#49372d",
+      "#695144",
+      "#ad8359"
+    ],
+    "umbrellas": [
+      "#536578",
+      "#b85c50",
+      "#e7c66a"
+    ],
+    "bikes": [
+      "#3c759b",
+      "#485c56",
+      "#923e37"
+    ]
+  },
+  "vehicles": {
+    "kinds": [
+      "sedan",
+      "hatch",
+      "suv",
+      "mpv"
+    ],
+    "colours": [
+      "#e3ddd2",
+      "#434950",
+      "#7a8891",
+      "#a9554b",
+      "#c4c7c4"
+    ],
+    "plate": "#eeeae1",
+    "taxi": {
+      "share": 0.09,
+      "colours": [
+        "#f3eee1",
+        "#f6f4e9"
+      ],
+      "kind": "sedan",
+      "sign": "#f2e0b0"
+    }
+  },
+  "seasons": [
+    {
+      "id": "spring",
+      "label": "Spring",
+      "note": {
+        "text": "Boston Logan averages a daily high of 56.4°F in April.",
+        "source": "NOAA · Boston Logan normals",
+        "url": "https://www.ncei.noaa.gov/access/services/data/v1?dataset=normals-monthly-1991-2020&endDate=9996-12-31&format=pdf&startDate=0001-01-01&stations=USW00014739"
+      },
+      "leaves": "spring",
+      "wet": true,
+      "wx": "drizzle",
+      "umbrellas": true,
+      "cafes": "closed",
+      "grass": "#b1ce87"
+    },
+    {
+      "id": "summer",
+      "label": "Summer",
+      "note": {
+        "text": "Boston Logan averages a daily high of 82.1°F in July.",
+        "source": "NOAA · Boston Logan normals",
+        "url": "https://www.ncei.noaa.gov/access/services/data/v1?dataset=normals-monthly-1991-2020&endDate=9996-12-31&format=pdf&startDate=0001-01-01&stations=USW00014739"
+      },
+      "leaves": "summer",
+      "grass": "#99bf76"
+    },
+    {
+      "id": "fall",
+      "label": "Fall",
+      "note": {
+        "text": "Boston’s Arnold Arboretum records the fall colour of its maple collection.",
+        "source": "Arnold Arboretum of Harvard University",
+        "url": "https://arboretum.harvard.edu/plants/maple-collection-directions-and-accessibility-information/"
+      },
+      "leaves": "autumn",
+      "grass": "#b6ba78",
+      "icon": "autumn"
+    },
+    {
+      "id": "winter",
+      "label": "Winter",
+      "note": {
+        "text": "Boston Logan averages 14.3 inches of snow in January.",
+        "source": "NOAA · Boston Logan normals",
+        "url": "https://www.ncei.noaa.gov/access/services/data/v1?dataset=normals-monthly-1991-2020&endDate=9996-12-31&format=pdf&startDate=0001-01-01&stations=USW00014739"
+      },
+      "leaves": "bare",
+      "coats": true,
+      "snow": true,
+      "wx": "snow",
+      "cafes": false,
+      "crowd": 0.72
+    }
+  ],
+  "occasions": [
+    {
+      "id": "marathon",
+      "label": "Marathon Monday",
+      "note": {
+        "text": "The Boston Marathon finishes on Boylston Street before Dartmouth Street.",
+        "source": "Boston Athletic Association",
+        "url": "https://www.baa.org/wp-content/uploads/drupal-legacy/2023-04/Pocket%20Guide%20Finish%20Area.pdf"
+      },
+      "leaves": "spring",
+      "crowd": 1.45,
+      "dress": {
+        "colours": [
+          "#285c92",
+          "#e8bc42",
+          "#517aa2"
+        ],
+        "share": 0.55
+      }
+    },
+    {
+      "id": "market",
+      "label": "Market day",
+      "note": {
+        "text": "Copley Square Farmers Market meets on Tuesdays and Fridays during its season.",
+        "source": "Mass Farmers Markets",
+        "url": "https://www.massfarmersmarkets.org/news/wpjyswe7yk299w88gymdn5y8y3pg4w"
+      },
+      "leaves": "summer",
+      "crowd": 1.22
+    }
+  ],
+  "months": [
+    "winter",
+    "winter",
+    "spring",
+    "spring",
+    "spring",
+    "summer",
+    "summer",
+    "summer",
+    "fall",
+    "fall",
+    "fall",
+    "winter"
+  ],
+  "cameras": {
+    "iso": {
+      "yaw": -32,
+      "pitch": 38,
+      "zoom": 0.69,
+      "x": 0,
+      "y": 0,
+      "z": 8
+    },
+    "bird": {
+      "yaw": 52,
+      "pitch": 72,
+      "zoom": 0.57,
+      "x": 0,
+      "y": 0,
+      "z": 5
+    }
+  },
+  "views": [
+    {
+      "id": "mckim",
+      "label": "Dartmouth arcade",
+      "camera": {
+        "yaw": 18,
+        "pitch": 26,
+        "zoom": 1.72,
+        "x": 11,
+        "y": -67,
+        "z": 9
+      }
+    },
+    {
+      "id": "church",
+      "label": "Old South",
+      "camera": {
+        "yaw": -54,
+        "pitch": 28,
+        "zoom": 1.55,
+        "x": 18,
+        "y": 13,
+        "z": 25
+      }
+    },
+    {
+      "id": "inbound",
+      "label": "Iron entrance",
+      "camera": {
+        "yaw": 38,
+        "pitch": 30,
+        "zoom": 6.7,
+        "x": -0.98,
+        "y": -32.6,
+        "z": 2.7
+      }
+    },
+    {
+      "id": "outbound",
+      "label": "Glass entrance",
+      "camera": {
+        "yaw": -36,
+        "pitch": 28,
+        "zoom": 5.6,
+        "x": 50.3,
+        "y": 3.5,
+        "z": 2.15
+      }
+    },
+    {
+      "id": "newbury",
+      "label": "Newbury stoops",
+      "camera": {
+        "yaw": 70,
+        "pitch": 24,
+        "zoom": 4.45,
+        "x": -47,
+        "y": 57,
+        "z": 5.1
+      }
+    },
+    {
+      "id": "finish",
+      "label": "Finish line",
+      "camera": {
+        "yaw": 17,
+        "pitch": 49,
+        "zoom": 2.8,
+        "x": -48.5,
+        "y": -19.26,
+        "z": 1.3
+      }
+    },
+    {
+      "id": "exeter",
+      "label": "Exeter gables",
+      "camera": {
+        "yaw": -140,
+        "pitch": 31,
+        "zoom": 2.1,
+        "x": -98,
+        "y": 101,
+        "z": 10
+      }
+    },
+    {
+      "id": "plaza",
+      "label": "Market plaza",
+      "camera": {
+        "yaw": 29,
+        "pitch": 44,
+        "zoom": 2.35,
+        "x": 91,
+        "y": -69,
+        "z": 2
+      }
+    }
+  ],
+  "legend": [
+    {
+      "name": "McKim Building",
+      "source": "Dartmouth Street arcade",
+      "icon": "buildings",
+      "camera": {
+        "yaw": 18,
+        "pitch": 26,
+        "zoom": 1.72,
+        "x": 11,
+        "y": -67,
+        "z": 9
+      }
+    },
+    {
+      "name": "Old South Church",
+      "source": "Campanile and copper lantern",
+      "icon": "landmark",
+      "camera": {
+        "yaw": -54,
+        "pitch": 28,
+        "zoom": 1.55,
+        "x": 18,
+        "y": 13,
+        "z": 25
+      }
+    },
+    {
+      "name": "Inbound headhouse",
+      "source": "Ironwork beside the library",
+      "icon": "streets",
+      "camera": {
+        "yaw": 38,
+        "pitch": 30,
+        "zoom": 6.7,
+        "x": -0.98,
+        "y": -32.6,
+        "z": 2.7
+      }
+    },
+    {
+      "name": "Outbound headhouse",
+      "source": "Glass beside Old South",
+      "icon": "streets",
+      "camera": {
+        "yaw": -36,
+        "pitch": 28,
+        "zoom": 5.6,
+        "x": 50.3,
+        "y": 3.5,
+        "z": 2.15
+      }
+    }
+  ],
+  "credits": [
+    {
+      "label": "Pocket City",
+      "url": "https://april-zhu.com"
+    }
+  ],
+  "notes": [
+    {
+      "title": "Reading the block",
+      "text": "Boylston cuts between the library and Old South. Newbury is one street over. The plate includes the west side of Copley Square and stops short of Trinity Church.",
+      "links": [
+        {
+          "label": "OpenStreetMap contributors",
+          "url": "https://www.openstreetmap.org/#map=18/42.350065/-71.078142"
+        },
+        {
+          "label": "Sasaki",
+          "url": "https://www.sasaki.com/projects/copley-square-park/"
+        }
+      ]
+    },
+    {
+      "title": "Dartmouth Street arcade",
+      "text": "McKim’s granite library encloses a courtyard. Three arched doors face Dartmouth. Follow the red tile around the court to distinguish McKim from the modern wing on Exeter.",
+      "links": [
+        {
+          "label": "Boston Public Library",
+          "url": "https://www.bpl.org/wp-content/uploads/sites/30/2022/03/Volume-1_Executive-Summary.pdf"
+        },
+        {
+          "label": "Boston Landmarks Commission",
+          "url": "https://www.bostonpreservation.org/sites/default/files/2024-05/boston_public_library_central_branch_99.pdf"
+        },
+        {
+          "label": "BPL exterior guide",
+          "url": "https://www.bpl.org/central-library-points-of-interest/"
+        }
+      ]
+    },
+    {
+      "title": "Stone and copper",
+      "text": "Old South’s cruciform sanctuary, copper lantern and separate campanile follow the mapped roof parts and church plan. The rebuilt bell tower is drawn at the published 230 feet.",
+      "links": [
+        {
+          "label": "Old South Church",
+          "url": "https://oldsouth.org/history"
+        },
+        {
+          "label": "Sacred Space International",
+          "url": "https://www.pbs.org/godinamerica/art/bos_cityguide2.pdf"
+        },
+        {
+          "label": "Metropolitan Wind Symphony",
+          "url": "https://static1.squarespace.com/static/611159e445fb3406c889da10/t/65e2344a0c9ca25bd2102f3b/1709323338823/MWC_Program_20240303.pdf"
+        },
+        {
+          "label": "Dartmouth façade photograph",
+          "url": "https://commons.wikimedia.org/wiki/File:Old_South_Church_in_Boston.jpg"
+        }
+      ]
+    },
+    {
+      "title": "Two sides of the T",
+      "text": "The preserved 1914 entrance beside the library has iron scrollwork and a low marquise. Look across Boylston for the glass entrance beside Old South and across Dartmouth for its companion.",
+      "links": [
+        {
+          "label": "Federal Transit Administration",
+          "url": "https://www.transit.dot.gov/sites/fta.dot.gov/files/docs/regulations-and-guidance/environmental-programs/63526/ftahistoriccontextreport508compliant.pdf"
+        },
+        {
+          "label": "Copley station inbound headhouse, December 2014.JPG",
+          "url": "https://commons.wikimedia.org/wiki/File:Copley_station_inbound_headhouse,_December_2014.JPG"
+        },
+        {
+          "label": "Outbound headhouse at Copley station, July 2019.JPG",
+          "url": "https://commons.wikimedia.org/wiki/File:Outbound_headhouse_at_Copley_station,_July_2019.JPG"
+        },
+        {
+          "label": "Copley outbound headhouse from above.jpg",
+          "url": "https://commons.wikimedia.org/wiki/File:Copley_outbound_headhouse_from_above.jpg"
+        },
+        {
+          "label": "IN lettering at Copley inbound headhouse, March 2022.JPG",
+          "url": "https://commons.wikimedia.org/wiki/File:IN_lettering_at_Copley_inbound_headhouse,_March_2022.JPG"
+        }
+      ]
+    },
+    {
+      "title": "Along Newbury",
+      "text": "The former Exeter Street Theatre anchors the west end. Look for its Romanesque gables, the corner house at 277 Dartmouth and shop names from the map.",
+      "links": [
+        {
+          "label": "Back Bay Houses · 26 Exeter",
+          "url": "https://backbayhouses.org/26%20Exeter-181-Newbury/"
+        },
+        {
+          "label": "Back Bay Houses · 277 Dartmouth",
+          "url": "https://backbayhouses.org/277-dartmouth-147-newbury/"
+        },
+        {
+          "label": "OpenStreetMap contributors",
+          "url": "https://www.openstreetmap.org/#map=18/42.350065/-71.078142"
+        }
+      ]
+    },
+    {
+      "title": "Square and market",
+      "text": "The Dartmouth side of the square has a paved event space and a planted grove. Market day adds produce stalls to the plaza. The round BosTix booth stands near Boylston. The paving boundary is traced approximately from the landscape plan.",
+      "links": [
+        {
+          "label": "Sasaki",
+          "url": "https://www.sasaki.com/projects/copley-square-park/"
+        },
+        {
+          "label": "Boston Parks and Recreation",
+          "url": "https://www.boston.gov/sites/default/files/file/2024/11/Copley%20Square%20Park%20-%20November%202024%20Update.docx.pdf"
+        },
+        {
+          "label": "Mass Farmers Markets",
+          "url": "https://www.massfarmersmarkets.org/news/wpjyswe7yk299w88gymdn5y8y3pg4w"
+        },
+        {
+          "label": "The Boston Sun",
+          "url": "https://thebostonsun.com/wp-content/uploads/2025/08/TBS0806.pdf"
+        }
+      ]
+    },
+    {
+      "title": "Marathon Monday",
+      "text": "The blue and yellow street mark stays through the year. On race day the chute takes over Boylston, with runners moving east past the library.",
+      "links": [
+        {
+          "label": "Boston Athletic Association",
+          "url": "https://www.baa.org/wp-content/uploads/drupal-legacy/2023-04/Pocket%20Guide%20Finish%20Area.pdf"
+        },
+        {
+          "label": "RoadSafe Traffic Systems",
+          "url": "https://www.roadsafetraffic.com/roadsafe-paints-boston-marathon-start-and-finish-lines/"
+        },
+        {
+          "label": "OpenStreetMap · finish marker",
+          "url": "https://www.openstreetmap.org/node/7644779165"
+        }
+      ]
+    },
+    {
+      "title": "Field interpretation",
+      "text": "Sixty of the 110 mapped buildings or parts have neither a height nor a storey count. Unmeasured heights, bay and stoop placement, shop fascias, stonework, roof details and colours are drawn by eye.",
+      "links": [
+        {
+          "label": "OpenStreetMap contributors",
+          "url": "https://www.openstreetmap.org/#map=18/42.350065/-71.078142"
+        },
+        {
+          "label": "Back Bay Houses · 277 Dartmouth",
+          "url": "https://backbayhouses.org/277-dartmouth-147-newbury/"
+        },
+        {
+          "label": "Boston Landmarks Commission",
+          "url": "https://www.bostonpreservation.org/sites/default/files/2024-05/boston_public_library_central_branch_99.pdf"
+        }
+      ]
+    },
+    {
+      "title": "Street life",
+      "text": "The scene has 66 mapped tree positions and two illustrative park trees. Canopy colours and species mix, curb details, taxi frequency and plates, clothing, trips, café tables, weather and snow cover are illustrative. Race barriers, runners, market stalls and produce are representative. Climate notes use the Logan station. Boston-licensed taxis have white bodies.",
+      "links": [
+        {
+          "label": "NOAA · Boston Logan normals",
+          "url": "https://www.ncei.noaa.gov/access/services/data/v1?dataset=normals-monthly-1991-2020&endDate=9996-12-31&format=pdf&startDate=0001-01-01&stations=USW00014739"
+        },
+        {
+          "label": "Arnold Arboretum of Harvard University",
+          "url": "https://arboretum.harvard.edu/plants/maple-collection-directions-and-accessibility-information/"
+        },
+        {
+          "label": "Boston Athletic Association",
+          "url": "https://www.baa.org/wp-content/uploads/drupal-legacy/2023-04/Pocket%20Guide%20Finish%20Area.pdf"
+        },
+        {
+          "label": "Mass Farmers Markets",
+          "url": "https://www.massfarmersmarkets.org/news/wpjyswe7yk299w88gymdn5y8y3pg4w"
+        },
+        {
+          "label": "Boston Police · Rule 403",
+          "url": "https://police.boston.gov/wp-content/uploads/2024/03/Rule-403.pdf"
+        }
+      ]
+    }
+  ]
+}
