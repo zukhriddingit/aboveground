@@ -3,7 +3,6 @@
 import { useMemo, useState } from "react";
 import { AI_API, useAiText } from "@/components/ai";
 import { LineBullet } from "@/components/hud/LineBullet";
-import { LINE_COLORS } from "@/lib/theme";
 import { FOCUS } from "@/lib/ui";
 import type { CommunityPost, LineVibeResponse, QuickCheckKind, StationId, StationSignals, TransitLine } from "@/types/tverse";
 import { STOPS_BY_LINE, stopName } from "./feedStops";
@@ -89,15 +88,14 @@ export function LinePulse({
       onClick={() => setExpanded((e) => !e)}
       aria-expanded={expanded}
       title={vibe.value}
-      className={`mt-2.5 flex w-full items-start gap-2 rounded-lg border border-white/12 border-l-[3px] bg-white/[.03] px-2.5 py-2 text-left transition-colors hover:bg-white/[.06] ${FOCUS}`}
-      style={{ borderLeftColor: LINE_COLORS[line] }}
+      className={`mt-2.5 flex w-full items-start gap-2 rounded-lg border border-white/12 bg-white/[.03] px-2.5 py-2 text-left transition-colors hover:bg-white/[.06] ${FOCUS}`}
     >
       <LineBullet route={line} size={20} className="mt-px" />
       <span className={`block min-w-0 flex-1 text-[12px] leading-[1.45] text-zinc-200 ${expanded ? "" : "line-clamp-1"}`}>
         <span className="font-semibold text-white">{line} Line Pulse:</span> {vibe.value}
       </span>
       <span
-        className={`mt-px shrink-0 rounded px-1.5 py-0.5 text-[9px] font-bold tracking-wider uppercase ${
+        className={`mt-px shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold tracking-wider uppercase ${
           ai ? "bg-white/10 text-zinc-100" : "bg-white/[.05] text-zinc-500"
         }`}
         title={ai ? `Summarised by ${ai}${vibe.model ? ` (${vibe.model})` : ""}` : vibe.pending ? "Asking the AI (4 s budget)…" : "From rider posts and Quick-Checks"}

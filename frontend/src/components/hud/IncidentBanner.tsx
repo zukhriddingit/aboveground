@@ -2,7 +2,7 @@
 
 import { DoorOpen, Wrench } from "lucide-react";
 import { formatElapsed, type IncidentStats } from "@/components/game";
-import { BUTTON, BUTTON_PRIMARY, FOCUS, MBTA_RED, PANEL } from "@/lib/ui";
+import { BUTTON, BUTTON_PRIMARY, FOCUS, PANEL } from "@/lib/ui";
 import type { TranslatedAlert } from "@/types/tverse";
 
 /** Live counter for a simulated delay: trains holding, riders waiting, time since it broke. */
@@ -27,8 +27,8 @@ export function IncidentBanner({
       role="status"
       aria-live="polite"
       data-hud-panel="incident"
-      className={`${PANEL} flex items-center gap-3 border-l-[3px] p-2 pl-3`}
-      style={{ borderLeftColor: repairing ? "#34d399" : MBTA_RED }}
+      className={`${PANEL} flex items-center gap-3 p-2 pl-3`}
+      style={{ borderColor: repairing ? "rgba(52,211,153,.4)" : "rgba(218,41,28,.5)" }}
     >
       <span className="relative flex size-2.5 shrink-0">
         <span className={`absolute inline-flex h-full w-full animate-ping rounded-full opacity-60 ${repairing ? "bg-emerald-400" : "bg-[#DA291C]"}`} />

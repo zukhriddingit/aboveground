@@ -183,7 +183,7 @@ export function TouristNarratorCard({ touristMode, station, autoHideMs = 7000, o
   return (
     <div
       className="fixed left-1/2 top-4 z-[60] w-[min(92vw,420px)]"
-      style={{ animation: "tv-slide-down .4s cubic-bezier(.2,.9,.3,1.2)", transform: "translateX(-50%)" }}
+      style={{ animation: "tv-slide-down .4s cubic-bezier(.16,1,.3,1)", transform: "translateX(-50%)" }}
       role="status"
       aria-live="polite"
     >

@@ -796,7 +796,7 @@ export default function Home() {
             <TRoundel size={30} />
             <div className="leading-tight">
               <p className="text-[15px] font-semibold tracking-tight text-white">AboveGround</p>
-              <p className="text-[10px] text-zinc-400">T-Verse · Boston&apos;s live T</p>
+              <p className="text-[12px] leading-4 text-zinc-400">T-Verse · Boston&apos;s live T</p>
             </div>
           </div>
           <GameHUD

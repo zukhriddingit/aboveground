@@ -5,7 +5,7 @@ import { ChevronDown, TrainFront, TriangleAlert, X } from "lucide-react";
 import { countdownLabel, effectLabel, type Arrival, type LiveAlert } from "@/components/game";
 import { StaleEtaBadge } from "@/components/quickcheck";
 import { branchLabel } from "@/components/transit";
-import { CONTROL, FOCUS, LABEL, MBTA_RED, PANEL } from "@/lib/ui";
+import { CONTROL, FOCUS, LABEL, PANEL } from "@/lib/ui";
 import type { Station, StationId } from "@/types/tverse";
 import { LineBullet } from "./LineBullet";
 
@@ -22,7 +22,6 @@ function useNow(everyMs: number) {
 const COUNTDOWN = "font-mono text-[13px] font-semibold tabular-nums text-[#ffb547]";
 
 /** Amber for "riders don't trust this number", matching the station card's stale-ETA and branch-gap badges. */
-const AMBER = "#fbbf24";
 
 /**
  * Live countdown for the next trains at one station (MBTA V3 predictions). A button on phones,
@@ -115,8 +114,7 @@ export function NextTrains({
               {gaps.map((g) => (
                 <p
                   key={`${g.branch}|${g.directionId}`}
-                  className="flex items-start gap-1.5 rounded-md border border-white/12 border-l-[3px] bg-white/[0.03] px-2 py-1.5 text-[11.5px] leading-snug text-zinc-100"
-                  style={{ borderLeftColor: AMBER }}
+                  className="flex items-start gap-1.5 text-[12px] leading-snug text-zinc-200"
                 >
                   <TriangleAlert className="mt-px size-3.5 shrink-0 text-amber-300" />
                   <span>
@@ -134,8 +132,7 @@ export function NextTrains({
               key={a.id}
               type="button"
               onClick={() => onOpenAlert(a)}
-              className={`mb-2 flex w-full items-start gap-2 rounded-lg border border-white/12 border-l-[3px] bg-white/[0.03] p-2 text-left text-[12px] text-zinc-100 hover:bg-white/[0.07] ${FOCUS}`}
-              style={{ borderLeftColor: MBTA_RED }}
+              className={`mb-2 flex w-full items-start gap-2 rounded-lg border border-[#DA291C]/45 bg-[#DA291C]/[0.06] p-2 text-left text-[12px] text-zinc-100 hover:bg-[#DA291C]/[0.12] ${FOCUS}`}
             >
               <X className="mt-0.5 size-3.5 shrink-0 text-[#ff6b5e]" strokeWidth={3} />
               <span className="line-clamp-2">{a.shortHeader}</span>
@@ -151,7 +148,7 @@ export function NextTrains({
                       <LineBullet route={a.route} size={22} />
                       <div className="min-w-0 flex-1 leading-tight">
                         <p className="truncate text-[13px] font-medium text-white">{a.headsign || "Train"}</p>
-                        {a.status && <p className="truncate text-[10px] text-zinc-400">{a.status}</p>}
+                        {a.status && <p className="truncate text-[12px] text-zinc-400">{a.status}</p>}
                       </div>
                       <span className={`shrink-0 ${COUNTDOWN} ${stale ? "line-through decoration-amber-400/70 opacity-70" : ""}`}>{countdownLabel(a, now)}</span>
                     </div>

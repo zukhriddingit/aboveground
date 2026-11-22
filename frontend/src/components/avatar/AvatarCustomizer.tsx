@@ -48,7 +48,7 @@ export function AvatarCustomizer({ progress, onEquip, onClose }: {
     </div>
     <div className="relative mx-3 mt-3 h-36 rounded-lg border border-white/10 bg-zinc-800 sm:h-44">
       <AvatarCanvas hat={progress.equipped} />
-      <span className="pointer-events-none absolute right-2 bottom-1.5 flex items-center gap-1 text-[10px] text-zinc-400"><Rotate3d size={12} /> Drag to rotate</span>
+      <span className="pointer-events-none absolute right-2 bottom-1.5 flex items-center gap-1 text-[11px] text-zinc-400"><Rotate3d size={12} /> Drag to rotate</span>
     </div>
     <div className="space-y-3 px-3.5 py-3">
       <label className="flex items-center justify-between gap-2"><span className={LABEL}>Hair style</span>

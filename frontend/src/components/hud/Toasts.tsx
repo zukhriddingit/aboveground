@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CircleCheck, Info, TriangleAlert, X } from "lucide-react";
-import { FOCUS, MBTA_RED, PANEL } from "@/lib/ui";
+import { FOCUS, PANEL } from "@/lib/ui";
 
 export type ToastTone = "info" | "success" | "danger";
 
@@ -42,9 +42,9 @@ export function useToasts() {
 }
 
 const TONE = {
-  info: { icon: Info, bar: "#a1a1aa", text: "text-zinc-300" },
-  success: { icon: CircleCheck, bar: "#34d399", text: "text-emerald-300" },
-  danger: { icon: TriangleAlert, bar: MBTA_RED, text: "text-[#ff6b5e]" },
+  info: { icon: Info, text: "text-zinc-300" },
+  success: { icon: CircleCheck, text: "text-emerald-300" },
+  danger: { icon: TriangleAlert, text: "text-[#ff6b5e]" },
 } as const;
 
 export function ToastStack({ toasts, onDismiss }: { toasts: Toast[]; onDismiss: (id: number) => void }) {
@@ -56,8 +56,7 @@ export function ToastStack({ toasts, onDismiss }: { toasts: Toast[]; onDismiss: 
         return (
           <div
             key={t.id}
-            className={`${PANEL} pointer-events-auto flex items-start gap-2.5 border-l-[3px] p-3 text-sm`}
-            style={{ borderLeftColor: tone.bar }}
+            className={`${PANEL} pointer-events-auto flex items-start gap-2.5 p-3 text-sm`}
           >
             <Icon className={`mt-0.5 size-4 shrink-0 ${tone.text}`} />
             <div className="min-w-0 flex-1">

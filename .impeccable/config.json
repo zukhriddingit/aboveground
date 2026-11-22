@@ -1,0 +1,33 @@
+{
+  "hook": {
+    "enabled": true,
+    "limits": {
+      "maxFindings": 5,
+      "maxChars": 8000
+    }
+  },
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "bounce-easing",
+        "value": "cubic-bezier(.3, 1.4, .5, 1)",
+        "files": [
+          "frontend/src/components/game/*Game.tsx"
+        ],
+        "createdAt": "2026-11-22T07:14:13.391Z",
+        "reason": "Claude: physical overshoot of a breaker lever, switch point and pressure needle in the Fix the T mini-games"
+      },
+      {
+        "rule": "bounce-easing",
+        "value": "cubic-bezier(.3, 1.5, .5, 1)",
+        "files": [
+          "frontend/src/components/game/*Game.tsx"
+        ],
+        "createdAt": "2026-11-22T07:14:13.408Z",
+        "reason": "Claude: physical overshoot of a breaker lever, switch point and pressure needle in the Fix the T mini-games"
+      }
+    ]
+  }
+}
