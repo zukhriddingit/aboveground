@@ -81,7 +81,7 @@ export function LinePulse({
       }),
     (r) => (r && typeof r.text === "string" && r.text.trim() ? { value: r.text.trim(), source: r.source, model: r.model } : null),
   );
-  const gemini = vibe.source === "gemini";
+  const ai = vibe.source === "gemini" ? "Gemini" : vibe.source === "claude" ? "Claude" : null;
 
   return (
     <button
@@ -98,11 +98,11 @@ export function LinePulse({
       </span>
       <span
         className={`mt-px shrink-0 rounded px-1.5 py-0.5 text-[9px] font-bold tracking-wider uppercase ${
-          gemini ? "bg-white/10 text-zinc-100" : "bg-white/[.05] text-zinc-500"
+          ai ? "bg-white/10 text-zinc-100" : "bg-white/[.05] text-zinc-500"
         }`}
-        title={gemini ? `Summarised by Gemini${vibe.model ? ` (${vibe.model})` : ""}` : vibe.pending ? "Asking Gemini (4 s budget)…" : "From rider posts and Quick-Checks"}
+        title={ai ? `Summarised by ${ai}${vibe.model ? ` (${vibe.model})` : ""}` : vibe.pending ? "Asking the AI (4 s budget)…" : "From rider posts and Quick-Checks"}
       >
-        {gemini ? "✦ Gemini" : vibe.pending ? "…" : "Riders"}
+        {ai ? `✦ ${ai}` : vibe.pending ? "…" : "Riders"}
       </span>
     </button>
   );

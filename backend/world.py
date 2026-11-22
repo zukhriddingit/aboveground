@@ -354,7 +354,7 @@ def _raw_for(station_id: str, name: str, line: str, n: int) -> str:
 
 
 async def build_alert(station_id: str) -> tuple[dict[str, Any], str]:
-    """A TranslatedAlert for a simulated delay, and who wrote its explanation ("gemini" or "fallback").
+    """A TranslatedAlert for a simulated delay, and who wrote its explanation ("gemini", "claude" or "fallback").
     The four 2026 scenarios come first, then a rotation of problems; Gemini only if it answers within 4 s."""
     st = STATIONS_BY_ID.get(station_id) or {"id": station_id, "name": ai.STATION_NAMES.get(station_id, station_id), "line": ai.STATION_LINES.get(station_id, "Green")}
     name, line = st["name"], st["line"]
@@ -378,17 +378,17 @@ async def build_alert(station_id: str) -> tuple[dict[str, Any], str]:
     short = _SHORT.get(station_id, name)
     title, explain = _FLAVOR.get((station_id, category), (title_t.format(s=short), explain_t.format(n=name)))
     alt = ai.LINE_ALTERNATES.get(line, ai.LINE_ALTERNATES["Green"])
-    text = await ai.generate(
+    text, source = await ai.generate_text(
         f"MBTA alert text: {raw}\nStation: {name} ({line} Line)\nWhat crews are doing (our ops notes): {explain}\n"
         f"Expected wait: about {fix or 10} minutes.\nKnown good alternate move: {alt}\nRewrite this for a rider in exactly 2 sentences.",
         ai._ALERT_SYSTEM,
         max_tokens=220,
-        cache_key=f"trigger|{ai.model_name()}|{station_id}|{category}|{raw}",
+        cache_key=f"trigger|{station_id}|{category}|{raw}",
     )
     return {
         **base, "plainTitle": title, "plainExplanation": text or explain, "estimatedFixMin": fix,
         "miniGameType": game, "alternateMove": alt,
-    }, "gemini" if text else "fallback"
+    }, source
 
 
 def active_alerts() -> list[dict[str, Any]]:

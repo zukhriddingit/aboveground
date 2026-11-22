@@ -93,6 +93,7 @@ def root() -> dict[str, Any]:
         "docs": "/docs",
         "routes": routes,
         "gemini": ai_translator.gemini_configured(),
+        "ai": ai_translator.active_provider(),
         "model": ai_translator.model_name(),
         "world": world.status(),
     }
@@ -103,6 +104,7 @@ def health() -> dict[str, Any]:
     return {
         "ok": True,
         "gemini": ai_translator.gemini_configured(),
+        "ai": ai_translator.active_provider(),
         "trains": world.vehicle_source(),
         # Names only, so it's safe to show: which settings came from a .env file.
         "envFromFile": sorted(k for k in ENV_LOADED if k.isupper()),

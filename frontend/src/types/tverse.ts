@@ -280,7 +280,8 @@ export interface QuickReportSummary {
 
 // ---- P0.2 Gemini text (POST /api/ai/*). Always answers; `source` says who wrote it. ----
 
-export type AiSource = "gemini" | "fallback";
+/** Who wrote an AI text: Gemini, Claude (interim provider while no Gemini key is set) or the template. */
+export type AiSource = "gemini" | "claude" | "fallback";
 
 /** POST /api/ai/translate-alert body. Send what you have; the server fills gaps from its scenarios. */
 export interface TranslateAlertRequest {

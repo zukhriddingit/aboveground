@@ -1,7 +1,7 @@
 "use client";
 
 // Fallback first, AI second: render the deterministic text immediately and swap in the Gemini
-// text only if the backend answers within 4 s with source "gemini". Never blocks the demo.
+// text only if the backend answers within 4 s with an AI source ("gemini", or "claude" while no Gemini key is set). Never blocks the demo.
 import { useEffect, useMemo, useState } from "react";
 import type {
   AiSource,
@@ -56,7 +56,7 @@ export interface UseAiTextOptions {
 /**
  * Generic fallback-first loader. `key` identifies the request (null = nothing to load);
  * `load` is called with an AbortSignal that fires after `timeoutMs`. `pick` turns the response
- * into a value; it replaces the fallback only when its source is "gemini" (or any source with
+ * into a value; it replaces the fallback only when an AI wrote it ("gemini" or "claude"), or any source with
  * `acceptBackendFallback`).
  */
 export function useAiText<T, R>(
@@ -77,7 +77,7 @@ export function useAiText<T, R>(
       .then((res) => {
         if (!alive) return;
         const picked = pick(res);
-        const ok = picked && (picked.source === "gemini" || acceptBackendFallback);
+        const ok = picked && (picked.source !== "fallback" || acceptBackendFallback);
         setSettled(ok ? { key, ...picked } : { key, value: null, source: "fallback" });
       })
       .catch(() => {
