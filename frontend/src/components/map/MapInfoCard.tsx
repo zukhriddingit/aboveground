@@ -1,11 +1,12 @@
 "use client";
 // Small cards that pop over a tapped station or train: next-arrival countdown + crowdedness.
 import { useEffect, useState } from "react";
-import { X } from "lucide-react";
+import { Building2, X } from "lucide-react";
 import type { Crowdedness, PlannedClosure, QuickCheckKind, Station, StationSignals, TrainVehicle } from "@/types/tverse";
 import { CROWDEDNESS, LINE_COLORS, LINE_GLOW, routeLine } from "@/lib/theme";
 import { QuickCheckBar, StaleEtaBadge } from "@/components/quickcheck";
 import { BranchGapBadge, ClosureCard, NextUsableBadge } from "@/components/transit";
+import { pocketCityUrl } from "./pocketCities";
 
 function useCountdown(totalSeconds: number) {
   const [left, setLeft] = useState(totalSeconds);
@@ -55,10 +56,12 @@ const ROUTE_NAMES: Record<string, string> = {
 };
 const COMPASS = ["north", "northeast", "east", "southeast", "south", "southwest", "west", "northwest"];
 
-export function StationInfoCard({ station, onClose, onAlertClick, signals, onQuickCheckPoints, onShowPickup }: {
+export function StationInfoCard({ station, onClose, onAlertClick, signals, onQuickCheckPoints, onShowPickup, onStreetView }: {
   station: Station;
   onClose: () => void;
   onAlertClick?: (station: Station) => void;
+  /** Open this station's Pocket City "Street view" (only when one exists). */
+  onStreetView?: (station: Station) => void;
   /** This stop's rider Quick-Check signals (stale-ETA badge + the 1-tap bar's state). */
   signals?: StationSignals;
   onQuickCheckPoints?: (points: number, kind: QuickCheckKind) => void;
@@ -104,6 +107,13 @@ export function StationInfoCard({ station, onClose, onAlertClick, signals, onQui
           {station.nextUsable && <NextUsableBadge next={station.nextUsable} />}
           {station.plannedClosure && <ClosureCard closure={station.plannedClosure} compact onShowPickup={onShowPickup} />}
         </div>
+      )}
+      {onStreetView && pocketCityUrl(station.id) && (
+        <button type="button" onClick={() => onStreetView(station)}
+          className="mt-2.5 flex w-full items-center justify-center gap-1.5 rounded-xl border border-white/12 bg-white/[0.06] px-3 py-1.5 text-xs font-semibold text-zinc-100 hover:bg-white/[0.12]">
+          <Building2 size={13} />
+          Street view · see the block around the station
+        </button>
       )}
       <QuickCheckBar variant="compact" stationId={station.id} stationName={station.name} line={station.line}
         signals={signals} onPointsAwarded={onQuickCheckPoints} className="mt-2.5" />

@@ -1,0 +1,801 @@
+{
+  "name": "Harvard Square",
+  "title": "Harvard Square, Cambridge",
+  "region": "Cambridge · Red Line",
+  "place": "The station plaza and the gates of Harvard Yard",
+  "timezone": "America/New_York",
+  "level": 3.35,
+  "styles": {
+    "default": {
+      "facade": "brick",
+      "wall": [
+        "#a7654f",
+        "#ad7256",
+        "#995b45",
+        "#a87558"
+      ],
+      "trim": "#c8b395",
+      "frame": "#d3c8b3",
+      "glass": [
+        "#80969b",
+        "#9faeaa",
+        "#778e8f"
+      ],
+      "roof": "flat",
+      "flatRoof": [
+        "#817c72",
+        "#918a7a"
+      ],
+      "roofColour": "#626970",
+      "roofTex": "slate",
+      "levels": 3,
+      "floor": 3.35,
+      "bay": 3.1,
+      "parapet": 0.38,
+      "shop": "poi",
+      "shopHeight": 3.55,
+      "awning": false,
+      "rooftop": "auto"
+    },
+    "rules": [
+      {
+        "if": {
+          "type": "dormitory"
+        },
+        "set": {
+          "roof": "hipped",
+          "pitch": 34,
+          "shop": "none",
+          "bay": 2.65,
+          "wall": [
+            "#a35b45",
+            "#98503f",
+            "#a5654a"
+          ]
+        }
+      },
+      {
+        "if": {
+          "type": "university"
+        },
+        "set": {
+          "facade": "civic",
+          "roof": "hipped",
+          "pitch": 23,
+          "shop": "none"
+        }
+      },
+      {
+        "if": {
+          "type": "bridge"
+        },
+        "set": {
+          "height": 3.0,
+          "facade": "glass",
+          "shop": "none",
+          "parapet": 0.12
+        }
+      },
+      {
+        "if": {
+          "type": "retail"
+        },
+        "set": {
+          "facade": "brick",
+          "levels": 3,
+          "shop": "poi"
+        }
+      }
+    ]
+  },
+  "buildings": {
+    "w29824107": {
+      "roof": "gabled",
+      "pitch": 38,
+      "floor": 3.24,
+      "wall": "#a5634d"
+    },
+    "w29789621": {
+      "roof": "gabled",
+      "pitch": 39,
+      "floor": 3.19,
+      "wall": "#a66850"
+    },
+    "w29684576": {
+      "roof": "gabled",
+      "pitch": 39,
+      "wall": "#a66952"
+    },
+    "w29630925": {
+      "roof": "gabled",
+      "pitch": 32,
+      "wall": "#a66149"
+    },
+    "w427501617": {
+      "levels": 4,
+      "wall": "#af785f"
+    },
+    "w427501618": {
+      "levels": 3,
+      "wall": "#a65e45"
+    },
+    "w427501619": {
+      "levels": 3,
+      "wall": "#a37556"
+    },
+    "w427501620": {
+      "levels": 3
+    },
+    "w427501621": {
+      "levels": 2
+    },
+    "w427504029": {
+      "levels": 2
+    },
+    "w427504030": {
+      "levels": 2
+    },
+    "w427504031": {
+      "levels": 2
+    },
+    "w427503239": {
+      "height": 3.12
+    }
+  },
+  "palette": {
+    "ground": "#dccdb4",
+    "road": "#b1aaa4",
+    "pavement": "#c7ad94",
+    "walk": "#c28d71",
+    "grass": "#9abe70",
+    "slab": "#ceba97",
+    "marking": "#f4ebd4",
+    "kerb": "#c6bbab",
+    "paving": "#ad836e"
+  },
+  "paving": {
+    "style": "slabs",
+    "size": 0.34,
+    "colour": "#af8a74"
+  },
+  "lamp": {
+    "colour": "#424b44",
+    "height": 4.5,
+    "head": "#eee1bd",
+    "auto": false
+  },
+  "shops": {
+    "signs": [
+      "BOOKS",
+      "CAFÉ",
+      "MARKET"
+    ],
+    "font": "Georgia,serif",
+    "fascias": [
+      "#3e5753",
+      "#684c42",
+      "#6a4541"
+    ],
+    "awnings": [
+      "#ac6c53",
+      "#47665e"
+    ]
+  },
+  "cafes": {
+    "umbrellas": [
+      "#a34b42",
+      "#cfb98b"
+    ],
+    "stripes": false,
+    "table": "#927963",
+    "chair": "#554f43"
+  },
+  "trees": {
+    "default": {
+      "style": 2,
+      "height": 8.1,
+      "vary": 0.4,
+      "colours": [
+        "#79a459",
+        "#8eae60",
+        "#64984f"
+      ],
+      "spring": "#a8c574",
+      "autumn": "#c5873c"
+    },
+    "rules": [
+      {
+        "match": "Conifer",
+        "style": 5,
+        "evergreen": true,
+        "height": 8.5,
+        "colours": [
+          "#58885e",
+          "#629160"
+        ]
+      },
+      {
+        "match": "Broadleaf|^$",
+        "mix": [
+          {
+            "share": 4,
+            "style": 2,
+            "colours": [
+              "#80a653",
+              "#8bae60"
+            ],
+            "spring": "#a4c56e",
+            "autumn": "#dba849"
+          },
+          {
+            "share": 3,
+            "style": 3,
+            "colours": [
+              "#68954f",
+              "#79a159"
+            ],
+            "spring": "#b0c776",
+            "autumn": "#b55e40"
+          },
+          {
+            "share": 2,
+            "style": 1,
+            "colours": [
+              "#8aac61",
+              "#79a259"
+            ],
+            "spring": "#abd078",
+            "autumn": "#c6883f"
+          },
+          {
+            "share": 1,
+            "style": 3,
+            "height": 5.45,
+            "colours": [
+              "#8cac65"
+            ],
+            "blossom": "#eadbc9",
+            "autumn": "#c4804b"
+          }
+        ]
+      }
+    ]
+  },
+  "people": {
+    "skin": [
+      "#edc8aa",
+      "#dcb08c",
+      "#bc895f",
+      "#a57250",
+      "#80563e",
+      "#f4d4b7"
+    ],
+    "clothes": [
+      "#873e41",
+      "#355568",
+      "#6e7861",
+      "#b68b56",
+      "#d5cab1",
+      "#53575c",
+      "#6d8b91",
+      "#b66246"
+    ],
+    "pants": [
+      "#425369",
+      "#554b46",
+      "#706353",
+      "#46515a"
+    ],
+    "hair": [
+      "#46332b",
+      "#292b28",
+      "#67513d",
+      "#b3976c"
+    ],
+    "umbrellas": [
+      "#8e4141",
+      "#587586",
+      "#555955"
+    ],
+    "bikes": [
+      "#3b81a2",
+      "#405c62",
+      "#985a42"
+    ]
+  },
+  "vehicles": {
+    "kinds": [
+      "sedan",
+      "hatch",
+      "suv",
+      "small"
+    ],
+    "colours": [
+      "#e1ddd2",
+      "#82847e",
+      "#4b575c",
+      "#6b8084",
+      "#964f43",
+      "#d0c8ba"
+    ],
+    "plate": "#eee9dd"
+  },
+  "seasons": [
+    {
+      "id": "spring",
+      "label": "Spring",
+      "leaves": "blossom",
+      "petals": true,
+      "grass": "#a5be70",
+      "crowd": 1.02,
+      "note": {
+        "text": "A spring photo essay caught white blossoms opening near Harvard’s Science Center.",
+        "source": "The Harvard Crimson",
+        "url": "https://www.thecrimson.com/article/2022/5/10/spring-photo-essay/"
+      }
+    },
+    {
+      "id": "summer",
+      "label": "Summer",
+      "leaves": "summer",
+      "grass": "#96b964",
+      "crowd": 1.16,
+      "note": {
+        "text": "The canopy in Harvard Yard shades the paths in summer.",
+        "source": "Harvard Gazette",
+        "url": "https://news.harvard.edu/gazette/story/2012/11/in-the-yard-a-changing-of-the-guard/"
+      }
+    },
+    {
+      "id": "autumn",
+      "label": "Autumn",
+      "leaves": "autumn",
+      "grass": "#a5ac6e",
+      "crowd": 1.02,
+      "note": {
+        "text": "Photographers found gold leaves at a Yard gate and crimson foliage inside.",
+        "source": "Harvard Gazette",
+        "url": "https://news.harvard.edu/gazette/story/2023/12/photos-of-harvard-in-autumn/"
+      }
+    },
+    {
+      "id": "winter",
+      "label": "Winter",
+      "leaves": "bare",
+      "wx": "snow",
+      "snow": true,
+      "coats": true,
+      "cafes": false,
+      "crowd": 0.73,
+      "note": {
+        "text": "The last snowstorm of 2020 left Johnston Gate blanketed in snow.",
+        "source": "Harvard Gazette",
+        "url": "https://news.harvard.edu/gazette/story/2021/01/snowy-campus-scenes-are-frozen-in-time/"
+      }
+    }
+  ],
+  "occasions": [
+    {
+      "id": "commencement",
+      "label": "May Commencement",
+      "leaves": "spring",
+      "grass": "#9fbd73",
+      "crowd": 1.38,
+      "note": {
+        "text": "On Commencement morning, graduates and guests gather near Johnston Gate.",
+        "source": "Harvard Gazette",
+        "url": "https://news.harvard.edu/gazette/story/2010/05/color-commencement-style/"
+      }
+    },
+    {
+      "id": "pit",
+      "label": "Pit-A-Palooza · 2022",
+      "leaves": "summer",
+      "night": 0.76,
+      "litShare": 0.74,
+      "crowd": 1.33,
+      "cafes": "closed",
+      "note": {
+        "text": "Pit-A-Palooza ran from 6 to 10 p.m. on June 25, 2022.",
+        "source": "Harvard Square Business Association",
+        "url": "https://harvardsquare.com/news/pit-a-palooza-a-celebration-of-the-harvard-square-pit-and-those-who-called-it-home/"
+      }
+    }
+  ],
+  "months": [
+    "winter",
+    "winter",
+    "spring",
+    "spring",
+    "spring",
+    "summer",
+    "summer",
+    "summer",
+    "autumn",
+    "autumn",
+    "autumn",
+    "winter"
+  ],
+  "cameras": {
+    "iso": {
+      "yaw": -57,
+      "pitch": 38,
+      "zoom": 0.68,
+      "x": 0,
+      "y": 0,
+      "z": 4
+    },
+    "bird": {
+      "yaw": -78,
+      "pitch": 72,
+      "zoom": 0.56,
+      "x": 0,
+      "y": 0,
+      "z": 3
+    }
+  },
+  "views": [
+    {
+      "id": "square",
+      "label": "News kiosk",
+      "camera": {
+        "yaw": -53,
+        "pitch": 13,
+        "zoom": 6.8,
+        "x": 26.5,
+        "y": -94,
+        "z": 2.0
+      }
+    },
+    {
+      "id": "redline",
+      "label": "Red Line",
+      "camera": {
+        "yaw": -148,
+        "pitch": 23,
+        "zoom": 6.8,
+        "x": 35.4,
+        "y": -114.25,
+        "z": 1.55
+      }
+    },
+    {
+      "id": "pit",
+      "label": "The Pit",
+      "camera": {
+        "yaw": 86,
+        "pitch": 32,
+        "zoom": 6.1,
+        "x": 38,
+        "y": -108,
+        "z": 1.6
+      }
+    },
+    {
+      "id": "gate",
+      "label": "Johnston Gate",
+      "camera": {
+        "yaw": 200,
+        "pitch": 18,
+        "zoom": 4.8,
+        "x": 17.5,
+        "y": 33.8,
+        "z": 2.9
+      }
+    },
+    {
+      "id": "yards",
+      "label": "Harvard Hall",
+      "camera": {
+        "yaw": -48,
+        "pitch": 27,
+        "zoom": 3.2,
+        "x": 32.6,
+        "y": 57,
+        "z": 7.0
+      }
+    },
+    {
+      "id": "mass",
+      "label": "Massachusetts Hall",
+      "camera": {
+        "yaw": 143,
+        "pitch": 26,
+        "zoom": 3.3,
+        "x": 40.5,
+        "y": 16.5,
+        "z": 6.2
+      }
+    },
+    {
+      "id": "chapel",
+      "label": "Holden Chapel",
+      "camera": {
+        "yaw": 167,
+        "pitch": 29,
+        "zoom": 5.2,
+        "x": 19.6,
+        "y": 105.3,
+        "z": 4.65
+      }
+    },
+    {
+      "id": "parish",
+      "label": "First Parish",
+      "camera": {
+        "yaw": -17,
+        "pitch": 28,
+        "zoom": 2.6,
+        "x": -44,
+        "y": -4.1,
+        "z": 14.5
+      }
+    },
+    {
+      "id": "coop",
+      "label": "The Coop",
+      "camera": {
+        "yaw": 18,
+        "pitch": 25,
+        "zoom": 3.85,
+        "x": -7.7,
+        "y": -99,
+        "z": 7.0
+      }
+    }
+  ],
+  "legend": [
+    {
+      "name": "The copper kiosk",
+      "source": "Cambridge Historical Commission",
+      "icon": "landmark",
+      "count": "",
+      "camera": {
+        "yaw": -53,
+        "pitch": 13,
+        "zoom": 6.8,
+        "x": 26.5,
+        "y": -94,
+        "z": 2.0
+      }
+    },
+    {
+      "name": "Harvard station",
+      "source": "MBTA · Red Line",
+      "icon": "streets",
+      "count": "",
+      "camera": {
+        "yaw": -148,
+        "pitch": 23,
+        "zoom": 6.8,
+        "x": 35.4,
+        "y": -114.25,
+        "z": 1.55
+      }
+    },
+    {
+      "name": "Johnston Gate",
+      "source": "Harvard University",
+      "icon": "landmark",
+      "count": "",
+      "camera": {
+        "yaw": 200,
+        "pitch": 18,
+        "zoom": 4.8,
+        "x": 17.5,
+        "y": 33.8,
+        "z": 2.9
+      }
+    },
+    {
+      "name": "The Harvard Coop",
+      "source": "Cambridge Historical Commission",
+      "icon": "shops",
+      "count": "",
+      "camera": {
+        "yaw": 18,
+        "pitch": 25,
+        "zoom": 3.85,
+        "x": -7.7,
+        "y": -99,
+        "z": 7.0
+      }
+    }
+  ],
+  "notes": [
+    {
+      "title": "The square before the rebuild",
+      "text": "The copper-roofed kiosk opened as a subway entrance in 1928 and later housed Out of Town News. It reopened as the Cambridge KiOSK in May 2025. The brick plaza, newsstand lettering and Pit here recall the square before reconstruction.",
+      "links": [
+        {
+          "label": "Cambridge Historical Commission",
+          "url": "https://www.cambridgema.gov/-/media/files/historicalcommission/pdf/chcmeetingfiles/l121_kiosk_final_report_113017.pdf"
+        },
+        {
+          "label": "Cambridge Public Works",
+          "url": "https://www.cambridgema.gov/departments/publicworks/cityprojects/2021/harvardsquarekioskandplaza"
+        },
+        {
+          "label": "The Harvard Crimson · plaza reconstruction",
+          "url": "https://www.thecrimson.com/article/2025/3/14/pit-demolished/"
+        }
+      ]
+    },
+    {
+      "title": "Two roofs, two entrances",
+      "text": "Follow the copper ribs to where the kiosk’s long barrel crosses its shorter vault. Beside it, a red HARVARD sign spans the open stair under the later glass canopy. The central flight and two escalators descend in the mapped direction.",
+      "links": [
+        {
+          "label": "Touloukian Touloukian · preservation drawings",
+          "url": "https://www.cambridgema.gov/-/media/files/historicalcommission/pdf/chcmeetingfiles/kiosk_071218_presentation.pdf"
+        },
+        {
+          "label": "Pi.1415926535 · southeast elevation",
+          "url": "https://commons.wikimedia.org/wiki/File:Harvard_Square_Subway_Kiosk_from_the_southeast,_November_2020.jpg"
+        },
+        {
+          "label": "ArnoldReinhold · main entrance",
+          "url": "https://commons.wikimedia.org/wiki/File:Harvard_station_headhouse,_February_2010.jpg"
+        },
+        {
+          "label": "OpenStreetMap · central stair",
+          "url": "https://www.openstreetmap.org/way/1433190514"
+        }
+      ]
+    },
+    {
+      "title": "From the gate into the Yard",
+      "text": "Brick panels and wrought iron mark the 1889 Johnston Gate. Massachusetts Hall’s paired chimneys and gambrel face Harvard Hall’s low wings and cupola across the walk. At Holden Chapel a carved family crest fills each pediment.",
+      "links": [
+        {
+          "label": "McKim, Mead & White · plate 19",
+          "url": "https://resources.library.nd.edu/documents/architecture/McKMW-Monograph-v1.pdf"
+        },
+        {
+          "label": "National Park Service · Massachusetts Hall",
+          "url": "https://npgallery.nps.gov/NRHP/GetAsset/NHLS/66000769_text"
+        },
+        {
+          "label": "Bruner/Cott · elevations and site plan",
+          "url": "https://www.cambridgema.gov/-/media/files/historicalcommission/pdf/chcmeetingfiles/case4020_plans.pdf"
+        },
+        {
+          "label": "Harvard University · pediment restoration",
+          "url": "https://bpb-us-e1.wpmucdn.com/websites.harvard.edu/dist/f/100/files/2024/01/Harvard-University-Town-Gown-Report-2023.pdf#page=20"
+        }
+      ]
+    },
+    {
+      "title": "Across Massachusetts Avenue",
+      "text": "First Parish has Gothic tracery, a clock and a slender spire. Beside it, scallop-shouldered slates stand in the Old Burying Ground. At the Coop, four pale columns frame the shop entrance.",
+      "links": [
+        {
+          "label": "Kaplan Construction · First Parish",
+          "url": "https://www.kaplanconstructs.com/portfolio/project/first-parish-in-cambridge/"
+        },
+        {
+          "label": "City of Cambridge · Old Burial Ground",
+          "url": "https://www.cambridgema.gov/services/cambridgecemetery"
+        },
+        {
+          "label": "Cambridge Historical Commission · storefront survey",
+          "url": "https://www.cambridgema.gov/-/media/files/historicalcommission/pdf/slideshows/ss_printing.pdf"
+        }
+      ]
+    },
+    {
+      "title": "At the edge of the Yard",
+      "text": "Lehman Hall’s pilasters and pediments face the square. The yellow clapboards and shingled gambrel of Wadsworth House follow its restoration photographs. Matthews Hall breaks the long dormitory roofline with cross gables.",
+      "links": [
+        {
+          "label": "Harvard Griffin GSAS · Lehman Hall",
+          "url": "https://gsas.harvard.edu/news/find-your-center-looking-back-lehman-hall"
+        },
+        {
+          "label": "Harvard University · Wadsworth House",
+          "url": "https://www.cambridgema.gov/-/media/files/cdd/planning/towngown/tg2020/town_gown_2020_harvard.pdf"
+        },
+        {
+          "label": "Harvard University · photogravures",
+          "url": "https://upload.wikimedia.org/wikipedia/commons/2/2e/Harvard_University_and_Cambridge_-_photogravures_%28IA_harvarduniversit00unse%29.pdf"
+        }
+      ]
+    },
+    {
+      "title": "Music in the Pit",
+      "text": "Curved tiers between the kiosk and headhouse made room for street performers. The summer guitarist and open case recall that use. The evening crowd recalls the June 2022 Pit-A-Palooza celebration.",
+      "links": [
+        {
+          "label": "City of Cambridge · plaza plan, p. 43",
+          "url": "https://www.cambridgema.gov/-/media/Files/CDD/ParksandOpenSpace/ParkProjects/HSquarePublicSpace/hsq20181018kioskworkinggroupfinalreport1.pdf#page=43"
+        },
+        {
+          "label": "WBUR · Pit photographs and oral history",
+          "url": "https://www.wbur.org/news/2022/06/23/harvard-square-pit-a-palooza"
+        },
+        {
+          "label": "Harvard Square Business Association",
+          "url": "https://harvardsquare.com/news/pit-a-palooza-a-celebration-of-the-harvard-square-pit-and-those-who-called-it-home/"
+        }
+      ]
+    },
+    {
+      "title": "Commencement morning",
+      "text": "Caps and gowns gather along the walk inside Johnston Gate. The Yard’s main ceremony takes place beyond this block. The groups, clothing and gathering points are illustrative.",
+      "links": [
+        {
+          "label": "Harvard Gazette · Commencement Day",
+          "url": "https://news.harvard.edu/gazette/story/2010/05/color-commencement-style/"
+        },
+        {
+          "label": "Harvard Gazette · Commencement instructions",
+          "url": "https://news.harvard.edu/wp-content/uploads/2011/05/harvardgazette05-12-11.pdf"
+        }
+      ]
+    },
+    {
+      "title": "Weather in Cambridge",
+      "text": "The four seasons draw on photographs of the Yard and regional climate normals at Boston Logan. The spring flowers, summer shade, autumn colour and snow are interpretations of those observations.",
+      "links": [
+        {
+          "label": "The Harvard Crimson · spring photo essay",
+          "url": "https://www.thecrimson.com/article/2022/5/10/spring-photo-essay/"
+        },
+        {
+          "label": "Harvard Gazette · Yard trees",
+          "url": "https://news.harvard.edu/gazette/story/2012/11/in-the-yard-a-changing-of-the-guard/"
+        },
+        {
+          "label": "Harvard Gazette · autumn photographs",
+          "url": "https://news.harvard.edu/gazette/story/2023/12/photos-of-harvard-in-autumn/"
+        },
+        {
+          "label": "Harvard Gazette · winter photographs",
+          "url": "https://news.harvard.edu/gazette/story/2021/01/snowy-campus-scenes-are-frozen-in-time/"
+        },
+        {
+          "label": "NOAA · Boston Logan monthly normals",
+          "url": "https://www.ncei.noaa.gov/access/services/data/v1?dataset=normals-monthly-1991-2020&endDate=9996-12-31&format=pdf&startDate=0001-01-01&stations=USW00014739"
+        }
+      ]
+    },
+    {
+      "title": "What the map measures",
+      "text": "The extract contains 34 buildings or building parts and 95 tree positions. Nineteen of the 34 have neither a height nor a storey count. The named shops, roads and paths follow the extract.",
+      "links": [
+        {
+          "label": "OpenStreetMap contributors",
+          "url": "https://www.openstreetmap.org/#map=18/42.374455/-71.118838"
+        }
+      ]
+    },
+    {
+      "title": "What the drawing estimates",
+      "text": "Unmapped heights, façade colours, roof pitches, small ornament, paving, individual trees and headstones are illustrative. The Pit’s stepped relief is compressed. Shop displays, instruments, clothing, crowds, trips, lighting and weather are illustrative. The block combines the historical plaza with the supplied map.",
+      "links": [
+        {
+          "label": "OpenStreetMap contributors",
+          "url": "https://www.openstreetmap.org/#map=18/42.374455/-71.118838"
+        },
+        {
+          "label": "City of Cambridge · plaza plan, p. 43",
+          "url": "https://www.cambridgema.gov/-/media/Files/CDD/ParksandOpenSpace/ParkProjects/HSquarePublicSpace/hsq20181018kioskworkinggroupfinalreport1.pdf#page=43"
+        },
+        {
+          "label": "Kaplan Construction · First Parish",
+          "url": "https://www.kaplanconstructs.com/portfolio/project/first-parish-in-cambridge/"
+        },
+        {
+          "label": "Harvard Gazette · Yard trees",
+          "url": "https://news.harvard.edu/gazette/story/2012/11/in-the-yard-a-changing-of-the-guard/"
+        }
+      ]
+    }
+  ],
+  "credits": [
+    {
+      "label": "Cambridge Historical Commission",
+      "url": "https://www.cambridgema.gov/-/media/files/historicalcommission/pdf/chcmeetingfiles/l121_kiosk_final_report_113017.pdf"
+    }
+  ]
+}

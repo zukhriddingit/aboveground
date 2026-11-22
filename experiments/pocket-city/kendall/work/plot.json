@@ -1,0 +1,24 @@
+{
+ "lat": 42.3625553,
+ "lon": -71.0865922,
+ "rotation": -6.0,
+ "size": 246.0,
+ "asked": {
+  "lat": 42.3625,
+  "lon": -71.0866
+ },
+ "moved_m": 6.1,
+ "famous_inside": [
+  "Boston Marriott Cambridge",
+  "The Kendall Hotel",
+  "relation/20779869",
+  "relation/20779871",
+  "way/1307837143",
+  "way/1524505563",
+  "way/1524505564"
+ ],
+ "famous_cut": [],
+ "keep_missing": [],
+ "place": "",
+ "osm_base": "2026-11-22T03:49:21Z"
+}

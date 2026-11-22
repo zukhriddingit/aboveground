@@ -1,0 +1,21 @@
+{
+ "lat": 42.3533577,
+ "lon": -71.0647674,
+ "rotation": -4,
+ "size": 220.0,
+ "asked": {
+  "lat": 42.353,
+  "lon": -71.0646
+ },
+ "moved_m": 41.9,
+ "famous_inside": [
+  "Boylston",
+  "Grand Lodge of Masons of Massachusetts",
+  "Parkman Bandstand",
+  "The Parkside"
+ ],
+ "famous_cut": [],
+ "keep_missing": [],
+ "place": "",
+ "osm_base": "2026-11-22T03:46:17Z"
+}

@@ -1,0 +1,808 @@
+{
+  "name": "Park Street",
+  "title": "Park Street, Boston",
+  "region": "Boston · Boston Common",
+  "place": "Tremont Street × Park Street · Red & Green Lines",
+  "timezone": "America/New_York",
+  "level": 3.45,
+  "styles": {
+    "default": {
+      "facade": "brick",
+      "wall": [
+        "#a76551",
+        "#b27a62",
+        "#a57261",
+        "#ae8471"
+      ],
+      "trim": "#d5c2a9",
+      "frame": "#645651",
+      "glass": [
+        "#89a4a9",
+        "#a4b6b4",
+        "#9caeb1"
+      ],
+      "roof": "flat",
+      "flatRoof": [
+        "#777b7c",
+        "#8c8884"
+      ],
+      "roofColour": "#5a6269",
+      "roofTex": "slate",
+      "levels": 5,
+      "floor": 3.45,
+      "bay": 2.9,
+      "parapet": 0.35,
+      "shop": "poi",
+      "shopHeight": 3.65,
+      "awning": false,
+      "awningDepth": 0.85,
+      "stripes": false
+    },
+    "rules": [
+      {
+        "if": {
+          "mat": "brick"
+        },
+        "set": {
+          "facade": "brick",
+          "wall": [
+            "#b17056",
+            "#9f5846",
+            "#a66b53"
+          ],
+          "trim": "#ddc9ae"
+        }
+      },
+      {
+        "if": {
+          "mat": "stone"
+        },
+        "set": {
+          "facade": "civic",
+          "wall": [
+            "#c5baaa",
+            "#caba9f",
+            "#cfc6b4"
+          ],
+          "bay": 3.45
+        }
+      },
+      {
+        "if": {
+          "minLevels": 8
+        },
+        "set": {
+          "facade": "civic",
+          "wall": [
+            "#c8b6a5",
+            "#aa9380",
+            "#bead99"
+          ],
+          "bay": 3.3,
+          "frame": "#756e65",
+          "trim": "#d9cbb7"
+        }
+      },
+      {
+        "if": {
+          "type": "retail"
+        },
+        "set": {
+          "facade": "brick",
+          "shop": "poi",
+          "bay": 3.0
+        }
+      },
+      {
+        "if": {
+          "type": [
+            "service",
+            "roof"
+          ]
+        },
+        "set": {
+          "facade": "plain",
+          "levels": 1,
+          "rooftop": "none",
+          "shop": "none"
+        }
+      }
+    ]
+  },
+  "buildings": {
+    "w244539277": {
+      "wall": "#8f6958",
+      "trim": "#ddc8aa",
+      "facade": "brick",
+      "shop": "poi",
+      "fascia": [
+        "#41584c"
+      ]
+    },
+    "w244539279": {
+      "wall": "#ad6a54",
+      "facade": "brick",
+      "trim": "#e4cfaf",
+      "floor": 5.6,
+      "fascia": [
+        "#54515b"
+      ]
+    },
+    "w244539281": {
+      "wall": "#c3a177",
+      "facade": "civic",
+      "floor": 3.82
+    },
+    "w240317870": {
+      "wall": "#866a64",
+      "facade": "office",
+      "shop": "none"
+    },
+    "w240317871": {
+      "wall": "#995e4b",
+      "facade": "brick",
+      "shop": "none"
+    },
+    "w29739370": {
+      "facade": "civic",
+      "wall": "#beaa91",
+      "bay": 3.4,
+      "roof": "flat",
+      "trim": "#e2d4bc"
+    },
+    "w244539336": {
+      "facade": "civic",
+      "wall": "#ae795e",
+      "bay": 3.05,
+      "trim": "#d0b596",
+      "fascia": [
+        "#3a514e"
+      ]
+    },
+    "w244539330": {
+      "facade": "civic",
+      "wall": "#ae795e",
+      "fascia": [
+        "#4e6357"
+      ],
+      "shop": "poi"
+    }
+  },
+  "palette": {
+    "ground": "#ddcbb3",
+    "road": "#a6a3a0",
+    "pavement": "#c0b9ab",
+    "walk": "#d2c8b7",
+    "grass": "#a4c579",
+    "water": "#88b4ac",
+    "slab": "#c5ad91",
+    "marking": "#f7eed8",
+    "kerb": "#c7c1b7",
+    "paving": "#ac9f8f"
+  },
+  "paving": {
+    "style": "slabs",
+    "size": 0.85,
+    "colour": "#b5ac9e",
+    "stone": "#d4caba"
+  },
+  "lamp": {
+    "colour": "#3e4946",
+    "height": 5.3,
+    "head": "#f5e5c3",
+    "auto": false
+  },
+  "shops": {
+    "signs": [
+      ""
+    ],
+    "font": "Arial, sans-serif",
+    "fascias": [
+      "#365749",
+      "#664442",
+      "#4a5058",
+      "#965d46"
+    ],
+    "awnings": [
+      "#345d4a",
+      "#893e36",
+      "#e0cdab",
+      "#333e45"
+    ]
+  },
+  "cafes": {
+    "umbrellas": [
+      "#d7bc8c",
+      "#887d65",
+      "#49695a"
+    ],
+    "table": "#b48764",
+    "chair": "#625c52"
+  },
+  "trees": {
+    "default": {
+      "style": 2,
+      "colours": [
+        "#86ad64",
+        "#779c57",
+        "#95b86d"
+      ],
+      "height": 9.8,
+      "vary": 0.46,
+      "spring": "#a7c87c",
+      "autumn": "#d69643",
+      "mix": [
+        {
+          "share": 4,
+          "style": 2,
+          "autumn": "#dfa746"
+        },
+        {
+          "share": 3,
+          "style": 3,
+          "autumn": "#be7042"
+        },
+        {
+          "share": 2,
+          "style": 4,
+          "autumn": "#d9b952"
+        }
+      ]
+    }
+  },
+  "people": {
+    "skin": [
+      "#805445",
+      "#ba8668",
+      "#e0ad87",
+      "#b57b5e",
+      "#865d4f"
+    ],
+    "clothes": [
+      "#587982",
+      "#883e49",
+      "#bd8c51",
+      "#464858",
+      "#4f7059"
+    ],
+    "pants": [
+      "#48566c",
+      "#675d57",
+      "#45484d"
+    ],
+    "hair": [
+      "#49372d",
+      "#695144",
+      "#ad8359"
+    ],
+    "umbrellas": [
+      "#536578",
+      "#b85c50",
+      "#e7c66a"
+    ],
+    "bikes": [
+      "#3c759b",
+      "#485c56",
+      "#923e37"
+    ]
+  },
+  "vehicles": {
+    "kinds": [
+      "sedan",
+      "hatch",
+      "suv",
+      "mpv"
+    ],
+    "colours": [
+      "#e3ddd2",
+      "#434950",
+      "#7a8891",
+      "#a9554b",
+      "#c4c7c4"
+    ],
+    "plate": "#eeeae1",
+    "taxi": {
+      "share": 0.09,
+      "colours": [
+        "#f3eee1",
+        "#f6f4e9"
+      ],
+      "kind": "sedan",
+      "sign": "#f2e0b0"
+    }
+  },
+  "seasons": [
+    {
+      "id": "spring",
+      "label": "Spring",
+      "note": {
+        "text": "Boston Logan averages a daily high of 56.4°F in April.",
+        "source": "NOAA · Boston Logan normals",
+        "url": "https://www.ncei.noaa.gov/access/services/data/v1?dataset=normals-monthly-1991-2020&endDate=9996-12-31&format=pdf&startDate=0001-01-01&stations=USW00014739"
+      },
+      "leaves": "spring",
+      "wet": true,
+      "wx": "drizzle",
+      "umbrellas": true,
+      "cafes": "closed",
+      "grass": "#b1ce87"
+    },
+    {
+      "id": "summer",
+      "label": "Summer",
+      "note": {
+        "text": "Boston Logan averages a daily high of 82.1°F in July.",
+        "source": "NOAA · Boston Logan normals",
+        "url": "https://www.ncei.noaa.gov/access/services/data/v1?dataset=normals-monthly-1991-2020&endDate=9996-12-31&format=pdf&startDate=0001-01-01&stations=USW00014739"
+      },
+      "leaves": "summer",
+      "grass": "#99bf76"
+    },
+    {
+      "id": "fall",
+      "label": "Fall",
+      "note": {
+        "text": "The average October high at Boston Logan is 62.1°F.",
+        "source": "NOAA · Boston Logan normals",
+        "url": "https://www.ncei.noaa.gov/access/services/data/v1?dataset=normals-monthly-1991-2020&endDate=9996-12-31&format=pdf&startDate=0001-01-01&stations=USW00014739"
+      },
+      "leaves": "autumn",
+      "grass": "#b6ba78",
+      "icon": "autumn"
+    },
+    {
+      "id": "winter",
+      "label": "Winter",
+      "note": {
+        "text": "Boston Logan averages 14.3 inches of snow in January.",
+        "source": "NOAA · Boston Logan normals",
+        "url": "https://www.ncei.noaa.gov/access/services/data/v1?dataset=normals-monthly-1991-2020&endDate=9996-12-31&format=pdf&startDate=0001-01-01&stations=USW00014739"
+      },
+      "leaves": "bare",
+      "coats": true,
+      "snow": true,
+      "wx": "snow",
+      "cafes": false,
+      "crowd": 0.72,
+      "ice": true
+    }
+  ],
+  "occasions": [
+    {
+      "id": "piano",
+      "label": "Piano on the plaza",
+      "leaves": "summer",
+      "grass": "#9dbf76",
+      "crowd": 1.22,
+      "note": {
+        "text": "A portable piano brings lunchtime jazz to Brewer Fountain Plaza.",
+        "source": "Friends of the Public Garden",
+        "url": "https://friendsofthepublicgarden.org/what-we-do/capital-projects/brewer-fountain/"
+      }
+    },
+    {
+      "id": "lantern",
+      "label": "Lantern walk",
+      "leaves": "autumn",
+      "grass": "#b1b575",
+      "coats": true,
+      "cafes": false,
+      "crowd": 0.86,
+      "night": 0.82,
+      "litShare": 0.65,
+      "note": {
+        "text": "The Freedom Trail Foundation leads lantern tours from Boston Common after dark.",
+        "source": "Freedom Trail Foundation",
+        "url": "https://www.thefreedomtrail.org/sites/default/files/content/PDFs/Freedom%20Trail%20Brochure%202025.pdf"
+      }
+    }
+  ],
+  "months": [
+    "winter",
+    "winter",
+    "spring",
+    "spring",
+    "spring",
+    "summer",
+    "summer",
+    "summer",
+    "fall",
+    "fall",
+    "fall",
+    "winter"
+  ],
+  "cameras": {
+    "iso": {
+      "x": -1.1,
+      "y": -0.42,
+      "z": 6,
+      "yaw": -106,
+      "pitch": 31,
+      "zoom": 0.72
+    },
+    "bird": {
+      "x": 0,
+      "y": 0,
+      "z": 4,
+      "yaw": -109.4,
+      "pitch": 72,
+      "zoom": 0.54
+    }
+  },
+  "views": [
+    {
+      "id": "kiosks",
+      "label": "Granite headhouses",
+      "camera": {
+        "x": 3.35,
+        "y": -43.38,
+        "z": 2.9,
+        "yaw": 161.6,
+        "pitch": 23,
+        "zoom": 4.6
+      }
+    },
+    {
+      "id": "lift",
+      "label": "Glass elevator",
+      "camera": {
+        "x": -1.93,
+        "y": -64.23,
+        "z": 2.6,
+        "yaw": 140.6,
+        "pitch": 32,
+        "zoom": 6.8
+      }
+    },
+    {
+      "id": "stairs",
+      "label": "Tremont glass stairs",
+      "camera": {
+        "x": 16.96,
+        "y": -6.23,
+        "z": 2.1,
+        "yaw": -153.4,
+        "pitch": 23,
+        "zoom": 5.8
+      }
+    },
+    {
+      "id": "spire",
+      "label": "Brimstone Corner",
+      "camera": {
+        "x": -16.21,
+        "y": 10.42,
+        "z": 26,
+        "yaw": -53.4,
+        "pitch": 22,
+        "zoom": 1.84
+      }
+    },
+    {
+      "id": "granary",
+      "label": "Granary gate",
+      "camera": {
+        "x": -38.72,
+        "y": 79.41,
+        "z": 2.7,
+        "yaw": 21.6,
+        "pitch": 59,
+        "zoom": 6.65
+      }
+    },
+    {
+      "id": "stones",
+      "label": "Franklin obelisk",
+      "camera": {
+        "x": -73.9,
+        "y": 55.6,
+        "z": 4.8,
+        "yaw": -20,
+        "pitch": 50,
+        "zoom": 3.95
+      }
+    },
+    {
+      "id": "cathedral",
+      "label": "The nautilus",
+      "camera": {
+        "x": 63.6,
+        "y": -66.75,
+        "z": 8.0,
+        "yaw": -148.4,
+        "pitch": 19,
+        "zoom": 3.25
+      }
+    },
+    {
+      "id": "brewer",
+      "label": "Brewer Fountain",
+      "camera": {
+        "x": -3.53,
+        "y": -102.45,
+        "z": 2.85,
+        "yaw": 115.6,
+        "pitch": 29,
+        "zoom": 5.55
+      }
+    },
+    {
+      "id": "shops",
+      "label": "Tremont storefronts",
+      "camera": {
+        "x": 24.95,
+        "y": -5.15,
+        "z": 5,
+        "yaw": -142.4,
+        "pitch": 23,
+        "zoom": 4.0
+      }
+    },
+    {
+      "id": "hamilton",
+      "label": "Hamilton Place",
+      "camera": {
+        "x": 68.8,
+        "y": 51.42,
+        "z": 9.4,
+        "yaw": -149,
+        "pitch": 35,
+        "zoom": 4.6
+      }
+    },
+    {
+      "id": "lanternwalk",
+      "label": "Freedom Trail",
+      "camera": {
+        "x": -10.3,
+        "y": -19.52,
+        "z": 1.7,
+        "yaw": -111.4,
+        "pitch": 29,
+        "zoom": 5.8
+      }
+    }
+  ],
+  "legend": [
+    {
+      "name": "Granite headhouses",
+      "source": "Surveyed footprints",
+      "count": "2",
+      "icon": "buildings",
+      "camera": {
+        "x": 3.35,
+        "y": -43.38,
+        "z": 2.9,
+        "yaw": 161.6,
+        "pitch": 23,
+        "zoom": 4.6
+      }
+    },
+    {
+      "name": "Park Street steeple",
+      "source": "Freedom Trail Foundation",
+      "count": "217 ft",
+      "icon": "landmark",
+      "camera": {
+        "x": -16.21,
+        "y": 10.42,
+        "z": 26,
+        "yaw": -53.4,
+        "pitch": 22,
+        "zoom": 1.84
+      }
+    },
+    {
+      "name": "Granary entrance",
+      "source": "Boston Parks",
+      "count": "1840",
+      "icon": "streets",
+      "camera": {
+        "x": -38.72,
+        "y": 79.41,
+        "z": 2.7,
+        "yaw": 21.6,
+        "pitch": 59,
+        "zoom": 6.65
+      }
+    },
+    {
+      "name": "Brewer Fountain",
+      "source": "Friends of the Public Garden",
+      "count": "1868",
+      "icon": "water",
+      "camera": {
+        "x": -3.53,
+        "y": -102.45,
+        "z": 2.85,
+        "yaw": 115.6,
+        "pitch": 29,
+        "zoom": 5.55
+      }
+    }
+  ],
+  "credits": [
+    {
+      "label": "Progressive Architecture · wall section and plan, April 1991",
+      "url": "https://www.usmodernist.org/PA/PA-1991-04.pdf"
+    },
+    {
+      "label": "Boston Parks · granite and iron restoration",
+      "url": "https://www.boston.gov/sites/default/files/embed/h/historic-burying-ground-march.pdf"
+    },
+    {
+      "label": "Friends of the Public Garden · Brewer Fountain",
+      "url": "https://friendsofthepublicgarden.org/what-we-do/capital-projects/brewer-fountain/"
+    }
+  ],
+  "notes": [
+    {
+      "title": "Reading the block",
+      "text": "Two granite kiosks face the Common plaza. Look across Tremont for the glass-block stairs, or behind the granite pair for the smaller glass elevator. The street thresholds set the direction of the doors. A vendor’s parasol stands beside one kiosk in the warm-weather scenes.",
+      "links": [
+        {
+          "label": "Society of Architectural Historians",
+          "url": "https://sah-archipedia.org/buildings/MA-01-BD1"
+        },
+        {
+          "label": "Mmurphy6 · granite kiosk photograph",
+          "url": "https://commons.wikimedia.org/wiki/File:The_headhouse_to_Park_St._station.jpg"
+        },
+        {
+          "label": "Progressive Architecture · wall section and plan, April 1991",
+          "url": "https://www.usmodernist.org/PA/PA-1991-04.pdf"
+        },
+        {
+          "label": "Ethan Long · Tremont Street exits",
+          "url": "https://commons.wikimedia.org/wiki/File:MBTA_Station_Exits_on_Tremont_Street_(53829362764).jpg"
+        },
+        {
+          "label": "OpenStreetMap contributors",
+          "url": "https://www.openstreetmap.org/#map=19/42.356600/-71.061999"
+        },
+        {
+          "label": "Boston Common Master Plan · existing plaza",
+          "url": "https://www.boston.gov/sites/default/files/file/2023/05/bmcp-full-report.pdf"
+        }
+      ]
+    },
+    {
+      "title": "Brimstone Corner",
+      "text": "A brick clock tower carries Peter Banner’s white steeple to 217 feet. Its successive stages follow the mapped roof footprints. At sidewalk level, the red brick Freedom Trail turns beside the church.",
+      "links": [
+        {
+          "label": "Freedom Trail Foundation · Park Street Church",
+          "url": "https://www.thefreedomtrail.org/index.php/trail-sites/park-street-church"
+        },
+        {
+          "label": "Library of Congress · Park Street Church survey",
+          "url": "https://www.loc.gov/item/ma0913/"
+        },
+        {
+          "label": "Eric Kilby · Park Street at first light",
+          "url": "https://commons.wikimedia.org/wiki/File:Park_Street_headhouse_and_Park_Street_Church,_June_2008.jpg"
+        },
+        {
+          "label": "OpenStreetMap · Freedom Trail footways",
+          "url": "https://www.openstreetmap.org/relation/976514"
+        },
+        {
+          "label": "National Park Service · Freedom Trail brickwork",
+          "url": "https://www.nps.gov/places/freedom-trail-start.htm"
+        }
+      ]
+    },
+    {
+      "title": "Behind the granite gate",
+      "text": "Follow the path through the Egyptian Revival gate to the obelisk for Benjamin Franklin’s parents. The granite gate and cast-iron Tremont fence date from 1840. The square includes 99.7% of the mapped burying ground. A small rear corner continues beyond the edge.",
+      "links": [
+        {
+          "label": "Boston Parks · granite and iron restoration",
+          "url": "https://www.boston.gov/sites/default/files/embed/h/historic-burying-ground-march.pdf"
+        },
+        {
+          "label": "Boston Parks · Granary Burying Ground",
+          "url": "https://www.boston.gov/cemeteries/granary-burying-ground"
+        },
+        {
+          "label": "City of Boston · Granary survey plan",
+          "url": "https://www.boston.gov/sites/default/files/embed/m/most_recent_granary_map.pdf"
+        },
+        {
+          "label": "OpenStreetMap contributors",
+          "url": "https://www.openstreetmap.org/#map=19/42.356600/-71.061999"
+        }
+      ]
+    },
+    {
+      "title": "Six Ionic columns",
+      "text": "St Paul’s sandstone columns stand in front of a Quincy granite church. Donald Lipski’s chambered nautilus fills the blue pediment over the porch.",
+      "links": [
+        {
+          "label": "Cathedral Church of St Paul · building history",
+          "url": "https://stpaulboston.org/200-years-of-st-pauls/tag/architecture"
+        },
+        {
+          "label": "Episcopal Diocese of Massachusetts · pediment design",
+          "url": "https://www.diomass.org/diocesan-news/something-old-something-new-cathedral-church-st-paul-unveils-bold-proposal"
+        }
+      ]
+    },
+    {
+      "title": "Brewer Fountain Plaza",
+      "text": "Four bronze figures sit beneath the bowls. The Friends’ restoration brought granite paving, movable tables and a portable piano to the plaza. Choose Piano on the plaza to find the keyboard under its yellow canopy.",
+      "links": [
+        {
+          "label": "Friends of the Public Garden · sculpture on the Common",
+          "url": "https://friendsofthepublicgarden.org/our-parks/the-common/"
+        },
+        {
+          "label": "Friends of the Public Garden · Brewer Fountain",
+          "url": "https://friendsofthepublicgarden.org/what-we-do/capital-projects/brewer-fountain/"
+        },
+        {
+          "label": "Piano on the Plaza · performer’s photographs",
+          "url": "https://www.annalotte.com/blog/where-the-people-are"
+        }
+      ]
+    },
+    {
+      "title": "Along Tremont",
+      "text": "The law school’s bowed limestone front faces the Common. Hamilton Place leads to the Orpheum marquee. The Stearns corner retains the old department store’s metal canopy. Shop names are drawn from the supplied map extract.",
+      "links": [
+        {
+          "label": "David M. Owens · Sargent Hall",
+          "url": "https://www.dmowens.com/"
+        },
+        {
+          "label": "Methuen Memorial Music Hall · Boston Music Hall history and photographs",
+          "url": "https://mmmh.org/wp-content/uploads/2023/02/THE-BOSTON-MUSIC-HALL_-FROM-THEN-1.pdf"
+        },
+        {
+          "label": "Adam Gaffin · Stearns storefront photographs",
+          "url": "https://www.universalhub.com/2014/downtowns-other-lost-department-store"
+        },
+        {
+          "label": "Bynyalcin · Tremont crosswalk",
+          "url": "https://commons.wikimedia.org/wiki/File:Crosswalk_on_Tremont_Street_at_Park_Street_station,_September_2014.jpg"
+        },
+        {
+          "label": "OpenStreetMap contributors",
+          "url": "https://www.openstreetmap.org/#map=19/42.356600/-71.061999"
+        }
+      ]
+    },
+    {
+      "title": "After dark",
+      "text": "The Freedom Trail Foundation runs lantern tours led by a cloaked guide. In the Lantern walk scene, a small party gathers on the Park Street sidewalk. Its stopping point and group size are illustrative.",
+      "links": [
+        {
+          "label": "Freedom Trail Foundation · Lantern tour",
+          "url": "https://www.thefreedomtrail.org/tours/lantern"
+        },
+        {
+          "label": "Freedom Trail Foundation · tour brochure",
+          "url": "https://www.thefreedomtrail.org/sites/default/files/content/PDFs/Freedom%20Trail%20Brochure%202025.pdf"
+        }
+      ]
+    },
+    {
+      "title": "How to read the drawing",
+      "text": "The map supplies 68 building outlines and parts, 90 tree positions and the fountain basin. Five buildings or parts have neither mapped height nor floor count. Roof and window details, colours, individual grave markers, tree forms, clothing, vehicle trips, event placement and weather are illustrative. The climate figures are 1991–2020 normals from Logan Airport.",
+      "links": [
+        {
+          "label": "OpenStreetMap contributors",
+          "url": "https://www.openstreetmap.org/#map=19/42.356600/-71.061999"
+        },
+        {
+          "label": "City of Boston · Granary survey plan",
+          "url": "https://www.boston.gov/sites/default/files/embed/m/most_recent_granary_map.pdf"
+        },
+        {
+          "label": "NOAA · Boston Logan climate normals",
+          "url": "https://www.ncei.noaa.gov/access/services/data/v1?dataset=normals-monthly-1991-2020&endDate=9996-12-31&format=pdf&startDate=0001-01-01&stations=USW00014739"
+        }
+      ]
+    }
+  ]
+}

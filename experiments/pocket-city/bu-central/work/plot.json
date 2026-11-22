@@ -1,0 +1,20 @@
+{
+ "lat": 42.3505472,
+ "lon": -71.1077685,
+ "rotation": 17.0,
+ "size": 250.0,
+ "asked": {
+  "lat": 42.3505472,
+  "lon": -71.1077685
+ },
+ "moved_m": 0.0,
+ "famous_inside": [
+  "George Sherman Union",
+  "Marsh Chapel",
+  "Mugar Memorial Library"
+ ],
+ "famous_cut": [],
+ "keep_missing": [],
+ "place": "",
+ "osm_base": "2026-11-22T03:34:03Z"
+}

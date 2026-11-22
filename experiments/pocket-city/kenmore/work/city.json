@@ -1,0 +1,803 @@
+{
+  "name": "Kenmore Square",
+  "title": "Kenmore Square, Boston",
+  "region": "Boston · Fenway–Kenmore",
+  "place": "Beacon Street × Commonwealth Avenue · Green Line B, C, D",
+  "timezone": "America/New_York",
+  "level": 3.35,
+  "people": {
+    "skin": [
+      "#805445",
+      "#ba8668",
+      "#e0ad87",
+      "#b57b5e",
+      "#865d4f"
+    ],
+    "clothes": [
+      "#587982",
+      "#883e49",
+      "#bd8c51",
+      "#464858",
+      "#4f7059"
+    ],
+    "pants": [
+      "#48566c",
+      "#675d57",
+      "#45484d"
+    ],
+    "hair": [
+      "#49372d",
+      "#695144",
+      "#ad8359"
+    ],
+    "umbrellas": [
+      "#536578",
+      "#b85c50",
+      "#e7c66a"
+    ],
+    "bikes": [
+      "#3c759b",
+      "#485c56",
+      "#923e37"
+    ]
+  },
+  "vehicles": {
+    "kinds": [
+      "sedan",
+      "hatch",
+      "suv",
+      "mpv"
+    ],
+    "colours": [
+      "#e3ddd2",
+      "#434950",
+      "#7a8891",
+      "#a9554b",
+      "#c4c7c4"
+    ],
+    "plate": "#eeeae1",
+    "taxi": {
+      "share": 0.09,
+      "colours": [
+        "#f3eee1",
+        "#f6f4e9"
+      ],
+      "kind": "sedan",
+      "sign": "#f2e0b0"
+    }
+  },
+  "shops": {
+    "signs": [
+      ""
+    ],
+    "font": "Arial, sans-serif",
+    "fascias": [
+      "#365749",
+      "#664442",
+      "#4a5058",
+      "#965d46"
+    ],
+    "awnings": [
+      "#394a42",
+      "#624b46",
+      "#254655",
+      "#434943"
+    ]
+  },
+  "cafes": {
+    "umbrellas": [
+      "#d7bc8c",
+      "#887d65",
+      "#49695a"
+    ],
+    "table": "#b48764",
+    "chair": "#625c52"
+  },
+  "styles": {
+    "default": {
+      "facade": "brick",
+      "wall": [
+        "#a56e54",
+        "#a6614a",
+        "#bc8467",
+        "#ab7055"
+      ],
+      "trim": "#d1b89a",
+      "frame": "#605a50",
+      "glass": [
+        "#8faaaa",
+        "#a4b7ae",
+        "#78949c"
+      ],
+      "roof": "flat",
+      "roofColour": "#646661",
+      "flatRoof": [
+        "#83837d",
+        "#857e74",
+        "#8e8a80"
+      ],
+      "levels": 4,
+      "floor": 3.25,
+      "bay": 2.8,
+      "parapet": 0.32,
+      "shop": "poi",
+      "shopHeight": 3.45,
+      "awning": "some",
+      "stripes": false
+    },
+    "rules": [
+      {
+        "if": {
+          "type": "apartments"
+        },
+        "set": {
+          "facade": "apartment",
+          "bay": 2.55,
+          "wall": [
+            "#a56850",
+            "#bd8a6f",
+            "#a67558"
+          ]
+        }
+      },
+      {
+        "if": {
+          "type": "office"
+        },
+        "set": {
+          "facade": "civic",
+          "floor": 3.5,
+          "bay": 3.8,
+          "wall": [
+            "#d3c09b",
+            "#b78b6c"
+          ]
+        }
+      },
+      {
+        "if": {
+          "type": [
+            "house",
+            "dormitory",
+            "university"
+          ]
+        },
+        "set": {
+          "facade": "brick",
+          "bay": 2.15,
+          "shop": "none"
+        }
+      },
+      {
+        "if": {
+          "minArea": 750,
+          "unknownHeight": true
+        },
+        "set": {
+          "facade": "warehouse",
+          "levels": 4,
+          "wall": [
+            "#bdab96",
+            "#b7a38a"
+          ],
+          "bay": 3.6
+        }
+      }
+    ]
+  },
+  "buildings": {
+    "w29718583": {
+      "wall": "#ab634e",
+      "trim": "#e2c9ad",
+      "facade": "civic",
+      "floor": 3.0,
+      "bay": 3.2
+    },
+    "w29716750": {
+      "wall": "#b88e76",
+      "trim": "#d7c7af",
+      "bay": 2.65
+    },
+    "r9712515": {
+      "wall": "#94644d",
+      "bay": 2.55
+    },
+    "w485216314": {
+      "wall": "#ac785b",
+      "facade": "civic",
+      "bay": 3.55
+    },
+    "r11293728": {
+      "wall": "#b1896f",
+      "trim": "#d8c1a7",
+      "bay": 2.65
+    }
+  },
+  "palette": {
+    "ground": "#d6c1a8",
+    "road": "#aba8a5",
+    "pavement": "#c5a58f",
+    "walk": "#c3a08a",
+    "grass": "#a6bf72",
+    "water": "#79aaa6",
+    "slab": "#c2ab90",
+    "marking": "#f6ecdc",
+    "kerb": "#c8bdad",
+    "paving": "#a68b79",
+    "rail": "#797b77"
+  },
+  "paving": {
+    "style": "slabs",
+    "size": 0.38,
+    "colour": "#a38675",
+    "stone": "#c5a58e"
+  },
+  "lamp": {
+    "colour": "#414b46",
+    "height": 5.2,
+    "head": "#f0e2c5",
+    "auto": false
+  },
+  "trees": {
+    "default": {
+      "style": 2,
+      "height": 7.4,
+      "vary": 0.23,
+      "colours": [
+        "#7fa05b",
+        "#89ac60",
+        "#80a155"
+      ],
+      "spring": "#acd17c",
+      "autumn": "#dc9a42",
+      "mix": [
+        {
+          "style": 2,
+          "share": 4,
+          "autumn": "#cc8b3d"
+        },
+        {
+          "style": 3,
+          "share": 3,
+          "autumn": "#dfb549"
+        },
+        {
+          "style": 1,
+          "share": 1,
+          "autumn": "#bb6f43"
+        }
+      ]
+    },
+    "extra": [
+      [
+        -111,
+        23,
+        6,
+        "Street tree"
+      ],
+      [
+        -105,
+        -26.4,
+        6.8,
+        "Street tree"
+      ],
+      [
+        -83,
+        -28,
+        7.5,
+        "Street tree"
+      ],
+      [
+        -65,
+        -29.3,
+        6.3,
+        "Street tree"
+      ],
+      [
+        -33,
+        -26.7,
+        6.3,
+        "Street tree"
+      ],
+      [
+        -19.5,
+        -28,
+        6.7,
+        "Street tree"
+      ],
+      [
+        11,
+        -34.9,
+        6,
+        "Street tree"
+      ],
+      [
+        34,
+        -36.9,
+        6.5,
+        "Street tree"
+      ],
+      [
+        68,
+        -39.4,
+        6.7,
+        "Street tree"
+      ],
+      [
+        92,
+        -41.4,
+        7.1,
+        "Street tree"
+      ],
+      [
+        110,
+        -42.8,
+        6.4,
+        "Street tree"
+      ],
+      [
+        51,
+        21.8,
+        6.2,
+        "Street tree"
+      ],
+      [
+        75,
+        19.5,
+        6.4,
+        "Street tree"
+      ],
+      [
+        106,
+        16.8,
+        6.7,
+        "Street tree"
+      ],
+      [
+        -92,
+        26.8,
+        6.5,
+        "Street tree"
+      ],
+      [
+        -70,
+        31.95,
+        7,
+        "Street tree"
+      ],
+      [
+        -38,
+        39.8,
+        6.4,
+        "Street tree"
+      ]
+    ]
+  },
+  "seasons": [
+    {
+      "id": "spring",
+      "label": "Spring",
+      "leaves": "spring",
+      "wet": true,
+      "wx": "drizzle",
+      "umbrellas": true,
+      "cafes": "closed",
+      "grass": "#b3ca82",
+      "note": {
+        "text": "At Logan Airport, the average April high is 56.4°F.",
+        "source": "NOAA · Boston Logan normals",
+        "url": "https://www.ncei.noaa.gov/access/services/data/v1?dataset=normals-monthly-1991-2020&endDate=9996-12-31&format=pdf&startDate=0001-01-01&stations=USW00014739"
+      }
+    },
+    {
+      "id": "summer",
+      "label": "Summer",
+      "leaves": "summer",
+      "grass": "#98ba6b",
+      "note": {
+        "text": "At Logan Airport, July afternoons average a high of 82.1°F.",
+        "source": "NOAA · Boston Logan normals",
+        "url": "https://www.ncei.noaa.gov/access/services/data/v1?dataset=normals-monthly-1991-2020&endDate=9996-12-31&format=pdf&startDate=0001-01-01&stations=USW00014739"
+      }
+    },
+    {
+      "id": "fall",
+      "label": "Fall",
+      "icon": "autumn",
+      "leaves": "autumn",
+      "grass": "#b6b877",
+      "note": {
+        "text": "Boston’s average October high falls to 62.1°F at Logan Airport.",
+        "source": "NOAA · Boston Logan normals",
+        "url": "https://www.ncei.noaa.gov/access/services/data/v1?dataset=normals-monthly-1991-2020&endDate=9996-12-31&format=pdf&startDate=0001-01-01&stations=USW00014739"
+      }
+    },
+    {
+      "id": "winter",
+      "label": "Winter",
+      "leaves": "bare",
+      "coats": true,
+      "snow": true,
+      "wx": "snow",
+      "cafes": false,
+      "crowd": 0.77,
+      "note": {
+        "text": "January brings an average of 14.3 inches of snow to Logan Airport.",
+        "source": "NOAA · Boston Logan normals",
+        "url": "https://www.ncei.noaa.gov/access/services/data/v1?dataset=normals-monthly-1991-2020&endDate=9996-12-31&format=pdf&startDate=0001-01-01&stations=USW00014739"
+      }
+    }
+  ],
+  "months": [
+    "winter",
+    "winter",
+    "spring",
+    "spring",
+    "spring",
+    "summer",
+    "summer",
+    "summer",
+    "fall",
+    "fall",
+    "fall",
+    "winter"
+  ],
+  "occasionLabel": "Around the square",
+  "occasions": [
+    {
+      "id": "gameday",
+      "label": "Red Sox game day",
+      "leaves": "summer",
+      "crowd": 1.35,
+      "dress": {
+        "colours": [
+          "#984438",
+          "#444f65",
+          "#c7ba9f",
+          "#a94342"
+        ],
+        "share": 0.53
+      },
+      "note": {
+        "text": "The Red Sox send fans from Kenmore to Fenway Park by way of Brookline Avenue.",
+        "source": "Boston Red Sox",
+        "url": "https://www.mlb.com/redsox/ballpark/transportation/subway"
+      }
+    },
+    {
+      "id": "marathon",
+      "label": "Marathon · one mile to go",
+      "leaves": "spring",
+      "grass": "#abc57c",
+      "crowd": 1.4,
+      "dress": {
+        "colours": [
+          "#477b9a",
+          "#e7c153",
+          "#8d4d56",
+          "#508e77"
+        ],
+        "share": 0.47
+      },
+      "note": {
+        "text": "In Kenmore Square, the CITGO sign tells Boston Marathon runners they have one mile to go.",
+        "source": "Boston Athletic Association",
+        "url": "https://www.baa.org/partner/sponsor/citgo/"
+      }
+    },
+    {
+      "id": "night",
+      "label": "CITGO after dark",
+      "night": true,
+      "litShare": 0.68,
+      "leaves": "summer",
+      "crowd": 0.74,
+      "cafes": "closed",
+      "note": {
+        "text": "On its historic rooftop, the CITGO sign lit up each evening from dusk to midnight.",
+        "source": "Boston Landmarks Commission",
+        "url": "https://www.boston.gov/sites/default/files/imce-uploads/2018-09/citgo_sign_subcommittee_final_draft.pdf"
+      }
+    }
+  ],
+  "cameras": {
+    "iso": {
+      "yaw": 45,
+      "pitch": 35,
+      "zoom": 0.655,
+      "x": -1,
+      "y": 0,
+      "z": 5
+    },
+    "bird": {
+      "yaw": 33,
+      "pitch": 72,
+      "zoom": 0.505,
+      "x": 0,
+      "y": 0,
+      "z": 2
+    }
+  },
+  "views": [
+    {
+      "id": "sign",
+      "label": "660 Beacon",
+      "camera": {
+        "yaw": -143,
+        "pitch": 24,
+        "zoom": 2.43,
+        "x": -100,
+        "y": 43,
+        "z": 31
+      }
+    },
+    {
+      "id": "busway",
+      "label": "Under the canopy",
+      "camera": {
+        "yaw": 40,
+        "pitch": 26,
+        "zoom": 4.45,
+        "x": -64,
+        "y": -1,
+        "z": 3
+      }
+    },
+    {
+      "id": "hotel",
+      "label": "Hotel Commonwealth",
+      "camera": {
+        "yaw": 74,
+        "pitch": 23,
+        "zoom": 1.76,
+        "x": -62,
+        "y": -47,
+        "z": 11
+      }
+    },
+    {
+      "id": "north",
+      "label": "North stair",
+      "camera": {
+        "yaw": -145,
+        "pitch": 27,
+        "zoom": 5.45,
+        "x": -48,
+        "y": 36,
+        "z": 1.8
+      }
+    },
+    {
+      "id": "south",
+      "label": "Hotel entrance",
+      "camera": {
+        "yaw": 99,
+        "pitch": 21,
+        "zoom": 4.4,
+        "x": -54,
+        "y": -33,
+        "z": 2.9
+      }
+    },
+    {
+      "id": "beacon",
+      "label": "610 Beacon Street",
+      "camera": {
+        "yaw": -44,
+        "pitch": 34,
+        "zoom": 1.65,
+        "x": 51,
+        "y": 73,
+        "z": 13
+      }
+    }
+  ],
+  "legend": [
+    {
+      "name": "CITGO sign",
+      "source": "Boston Landmarks Commission",
+      "count": "660",
+      "icon": "landmark",
+      "camera": {
+        "yaw": -143,
+        "pitch": 24,
+        "zoom": 2.43,
+        "x": -100,
+        "y": 43,
+        "z": 31
+      }
+    },
+    {
+      "name": "Busway canopy",
+      "source": "Simpson Gumpertz & Heger",
+      "count": "9 ribs",
+      "icon": "streets",
+      "camera": {
+        "yaw": 40,
+        "pitch": 26,
+        "zoom": 4.45,
+        "x": -64,
+        "y": -1,
+        "z": 3
+      }
+    },
+    {
+      "name": "Hotel Commonwealth",
+      "source": "Schopfer Associates",
+      "count": "500",
+      "icon": "buildings",
+      "camera": {
+        "yaw": 74,
+        "pitch": 23,
+        "zoom": 1.76,
+        "x": -62,
+        "y": -47,
+        "z": 11
+      }
+    },
+    {
+      "name": "610 Beacon Street",
+      "source": "Boston University",
+      "count": "9 floors",
+      "icon": "buildings",
+      "camera": {
+        "yaw": -44,
+        "pitch": 34,
+        "zoom": 1.65,
+        "x": 51,
+        "y": 73,
+        "z": 13
+      }
+    }
+  ],
+  "notes": [
+    {
+      "title": "At the junction",
+      "text": "Follow Beacon Street into Commonwealth Avenue. Kenmore serves the Green Line’s B, C and D branches. The square ends before Brookline Avenue and Fenway Park.",
+      "links": [
+        {
+          "label": "OpenStreetMap",
+          "url": "https://www.openstreetmap.org/#map=19/42.348992/-71.094924"
+        },
+        {
+          "label": "Boston Red Sox",
+          "url": "https://www.mlb.com/redsox/ballpark/transportation/subway"
+        }
+      ]
+    },
+    {
+      "title": "Reading the rooftop",
+      "text": "Two 60-foot faces stand back to back. Three shades of red give the raised triangle its facets. This plate uses the old position on 660 Beacon documented in the city study and the supplied map. CITGO relit the repositioned sign in November 2026.",
+      "links": [
+        {
+          "label": "City study and photographs",
+          "url": "https://www.boston.gov/sites/default/files/imce-uploads/2018-09/citgo_sign_subcommittee_final_draft.pdf"
+        },
+        {
+          "label": "CITGO relighting announcement",
+          "url": "https://www.prnewswire.com/news-releases/bostons-iconic-sign-shines-again-over-kenmore-square-302947198.html"
+        },
+        {
+          "label": "Mapped sign",
+          "url": "https://www.openstreetmap.org/node/7599402961"
+        }
+      ]
+    },
+    {
+      "title": "Beneath the glass",
+      "text": "Nine arched steel trusses carry sheets of glass above the busway. The roof grows wider toward its east end. The open stair across the street and the lift beside the hotel entrance give two very different views of the T.",
+      "links": [
+        {
+          "label": "Structural engineer",
+          "url": "https://www.sgh.com/project/mbta-kenmore-square-bus-station-canopy/"
+        },
+        {
+          "label": "Station architect",
+          "url": "https://www.dimellashaffer.com/blog/seeing-is-believing/"
+        },
+        {
+          "label": "North stair photograph",
+          "url": "https://commons.wikimedia.org/wiki/File:North_entrance_to_Kenmore_station,_July_2019.JPG"
+        },
+        {
+          "label": "South entrance photograph",
+          "url": "https://commons.wikimedia.org/wiki/File:South_entrance_to_Kenmore_station,_July_2019.JPG"
+        }
+      ]
+    },
+    {
+      "title": "Two faces of the hotel",
+      "text": "The hotel’s shops and station entrance face the square beneath a mansard roof. Across the service lane, enclosed bridges lead to a newer wing of glass and metal facing the Turnpike.",
+      "links": [
+        {
+          "label": "Original architect",
+          "url": "https://www.schopferassociates.com/hospitality-hotel-commonwealth"
+        },
+        {
+          "label": "Society of Architectural Historians",
+          "url": "https://sah-archipedia.org/buildings/MA-01-WB1"
+        },
+        {
+          "label": "Expansion builder",
+          "url": "https://www.columbiacc.com/markets/portfolio/commonwealth-hotel-boston/"
+        }
+      ]
+    },
+    {
+      "title": "At the point of the block",
+      "text": "Boston University’s residence at 610 Beacon was once the Myles Standish Hotel. The pale roof follows the mapped light wells. Across Beacon, Chabad House occupies the narrow lot at 491 Commonwealth Avenue.",
+      "links": [
+        {
+          "label": "Boston University",
+          "url": "https://www.bu.edu/sustainability/projects/610-beacon-street/"
+        },
+        {
+          "label": "Renovation architect",
+          "url": "https://www.mds-bos.com/boston-university-610-beacon-street-renovation"
+        },
+        {
+          "label": "Chabad House",
+          "url": "https://www.chabadboston.org/templates/articlecco_cdo/aid/829228/jewish/Directions.htm"
+        },
+        {
+          "label": "Chabad House entrance photograph",
+          "url": "https://pluralism.org/chabad-greater-boston"
+        }
+      ]
+    },
+    {
+      "title": "Two ways through Kenmore",
+      "text": "Game-day fans head west from the hotel-side entrance. On Marathon Monday, runners head the other way on the mapped eastbound carriageway. Pennants, running kits, crowd sizes and the signs on the race barriers are illustrative.",
+      "links": [
+        {
+          "label": "Red Sox walking directions",
+          "url": "https://www.mlb.com/redsox/ballpark/transportation/subway"
+        },
+        {
+          "label": "B.A.A. course landmark",
+          "url": "https://www.baa.org/partner/sponsor/citgo/"
+        },
+        {
+          "label": "Mapped marathon route",
+          "url": "https://www.openstreetmap.org/relation/11680552"
+        },
+        {
+          "label": "B.A.A. course map",
+          "url": "https://www.baa.org/wp-content/uploads/2026/03/Race-Course.pdf"
+        }
+      ]
+    },
+    {
+      "title": "Reading this miniature",
+      "text": "The map supplies footprints, crossings, 24 tree positions and shop names. Of 75 buildings or parts, 60 lack both height and storey count. Other heights, façade bays, roof fittings, sign lighting, bus livery, trips, furniture and 17 additional sidewalk trees are illustrated from photographs.",
+      "links": [
+        {
+          "label": "OpenStreetMap",
+          "url": "https://www.openstreetmap.org/#map=19/42.348992/-71.094924"
+        },
+        {
+          "label": "Kenmore streetscape",
+          "url": "https://www.dimellashaffer.com/blog/seeing-is-believing/"
+        },
+        {
+          "label": "Busway photograph",
+          "url": "https://www.bostonplans.org/planning-zoning/planning-initiatives/fenway-transportation-action-plan"
+        }
+      ]
+    },
+    {
+      "title": "Weather over the square",
+      "text": "The weather chips illustrate a day in each Boston season. Their numbers are Logan Airport’s 1991–2020 normals. Foliage, tree species, coats, umbrellas, café activity and snow depth are illustrative.",
+      "links": [
+        {
+          "label": "Monthly climate normals",
+          "url": "https://www.ncei.noaa.gov/access/services/data/v1?dataset=normals-monthly-1991-2020&endDate=9996-12-31&format=pdf&startDate=0001-01-01&stations=USW00014739"
+        },
+        {
+          "label": "Station and street trees",
+          "url": "https://www.dimellashaffer.com/blog/seeing-is-believing/"
+        }
+      ]
+    }
+  ]
+}

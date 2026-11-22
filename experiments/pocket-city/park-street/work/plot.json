@@ -1,0 +1,26 @@
+{
+ "lat": 42.3566005,
+ "lon": -71.0619941,
+ "rotation": -63.1,
+ "size": 240.0,
+ "asked": {
+  "lat": 42.35660045544206,
+  "lon": -71.06199411191919
+ },
+ "moved_m": 0.0,
+ "famous_inside": [
+  "Cathedral Church of Saint Pauls",
+  "David J. Sargent Hall",
+  "Orpheum Theatre",
+  "Park Street Church",
+  "R. H. Stearns Building",
+  "way/24677664",
+  "way/24677688",
+  "way/818470230",
+  "way/818470232"
+ ],
+ "famous_cut": [],
+ "keep_missing": [],
+ "place": "",
+ "osm_base": "2026-11-22T03:47:08Z"
+}

@@ -14,6 +14,7 @@ import { distanceMeters, toLngLat } from "./geo";
 import MapAnchor from "./MapAnchor";
 import { MapOverlayContext, OverlayHub } from "./mapContext";
 import { StationInfoCard, TrainInfoCard } from "./MapInfoCard";
+import { PocketCityOverlay } from "./PocketCityOverlay";
 import { pickFlat, registerTransitIcons, setFlatStations, setFlatTrains } from "./flatTransit";
 import { createMapStyle, setBasemapMode, setTransitVisibility, WINDOW_IMAGES, windowTexture } from "./mapStyle";
 import { DemoRide, RIDE_COORDS, RIDE_STOPS } from "./rideRoute";
@@ -162,6 +163,8 @@ export default function TVerseMap(props: TVerseMapProps) {
   const [ride] = useState(() => new RideState());
   const [ready, setReady] = useState(false);
   const [info, setInfo] = useState<Info>(null);
+  /** Station whose Pocket City "Street view" is open over the map. */
+  const [streetView, setStreetView] = useState<StationId | null>(null);
 
   useEffect(() => {
     latest.current = props;
@@ -543,6 +546,7 @@ export default function TVerseMap(props: TVerseMapProps) {
                 onAlertClick={s => { setInfo(null); latest.current.onAlertClick?.(s); }}
                 signals={props.quickCheckSignals?.get(infoStation.id)}
                 onQuickCheckPoints={(points, kind) => latest.current.onQuickCheckPoints?.(points, kind)}
+                onStreetView={s => { setInfo(null); setStreetView(s.id); }}
                 onShowPickup={pickup => {
                   setInfo(null);
                   ride.gesture();
@@ -560,6 +564,7 @@ export default function TVerseMap(props: TVerseMapProps) {
           )}
         </div>
       </MapOverlayContext.Provider>
+      {streetView && <PocketCityOverlay stationId={streetView} onClose={() => setStreetView(null)} />}
     </div>
   );
 }

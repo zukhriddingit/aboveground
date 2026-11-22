@@ -1,0 +1,23 @@
+{
+ "lat": 42.3744551,
+ "lon": -71.1188376,
+ "rotation": -22,
+ "size": 240.0,
+ "asked": {
+  "lat": 42.3738,
+  "lon": -71.1188
+ },
+ "moved_m": 72.5,
+ "famous_inside": [
+  "Cambridge KiOSK",
+  "Harvard Hall",
+  "Holden Chapel",
+  "Massachusetts Hall",
+  "The First Parish in Cambridge",
+  "way/1366714342"
+ ],
+ "famous_cut": [],
+ "keep_missing": [],
+ "place": "",
+ "osm_base": "2026-11-22T03:48:21Z"
+}

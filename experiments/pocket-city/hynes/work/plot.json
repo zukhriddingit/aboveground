@@ -1,0 +1,24 @@
+{
+ "lat": 42.3480307,
+ "lon": -71.087945,
+ "rotation": 26.0,
+ "size": 236.0,
+ "asked": {
+  "lat": 42.3480307,
+  "lon": -71.087945
+ },
+ "moved_m": 0.0,
+ "famous_inside": [
+  "Berklee Books + Music",
+  "Boston Transit Building",
+  "Harvard Club of Boston",
+  "Hynes station footprint",
+  "Hynes station west-side access",
+  "Lyrik Back Bay",
+  "The Eliot Hotel"
+ ],
+ "famous_cut": [],
+ "keep_missing": [],
+ "place": "",
+ "osm_base": "2026-11-22T03:45:18Z"
+}

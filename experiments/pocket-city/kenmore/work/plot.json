@@ -1,0 +1,22 @@
+{
+ "lat": 42.3489922,
+ "lon": -71.0949241,
+ "rotation": 6.17,
+ "size": 240.0,
+ "asked": {
+  "lat": 42.3489922,
+  "lon": -71.0949241
+ },
+ "moved_m": 0.0,
+ "famous_inside": [
+  "Hotel Commonwealth",
+  "Myles Standish Hall",
+  "relation/9712516",
+  "way/832992981",
+  "way/835548607"
+ ],
+ "famous_cut": [],
+ "keep_missing": [],
+ "place": "",
+ "osm_base": "2026-11-22T03:44:10Z"
+}
