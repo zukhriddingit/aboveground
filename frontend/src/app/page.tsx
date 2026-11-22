@@ -272,6 +272,17 @@ export default function Home() {
     }
   }, []);
 
+  // Fix the T's 3D layer (cutaways, effects) follows the 2D/3D switch. The scene loads after the map, so wait for it.
+  useEffect(() => {
+    if (scene.current) return scene.current.setViewMode(view);
+    const timer = window.setInterval(() => {
+      if (!scene.current) return;
+      scene.current.setViewMode(view);
+      window.clearInterval(timer);
+    }, 250);
+    return () => window.clearInterval(timer);
+  }, [view]);
+
   // The map keeps the overview north-up in 2D.
   const recenter = useCallback(() => map.current?.resetView(), []);
 

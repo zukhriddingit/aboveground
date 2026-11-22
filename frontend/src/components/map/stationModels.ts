@@ -40,8 +40,10 @@ export const BESPOKE_STATIONS: ReadonlySet<StationId> = new Set<StationId>([
 ]);
 
 // Once the page has settled, fill the model cache in the background (underground / flaky Wi-Fi resilience).
+// Only models a stop actually draws: every stop mapped to headhouse_historic or surface_platform has its own
+// bespoke GLB, so those two only load on demand if a bespoke one fails. Chinatown and Airport use headhouse_modern.
 if (typeof window !== "undefined") {
-  warmModelCache(["alert_signal", ...BESPOKE_STATIONS, "headhouse_modern", "headhouse_historic", "surface_platform"]);
+  warmModelCache(["alert_signal", ...BESPOKE_STATIONS, "headhouse_modern"]);
 }
 
 /**

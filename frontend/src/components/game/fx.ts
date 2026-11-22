@@ -11,6 +11,14 @@ export class Sparks {
   private life: Float32Array;
   private floor: Float32Array;
   private next = 0;
+  /** Live particles after the last update (or emit); 0 = nothing to draw or upload. */
+  private alive = 0;
+  /** Particles changed since the GPU buffers were last uploaded. */
+  private dirty = false;
+
+  get active() {
+    return this.alive > 0;
+  }
 
   constructor(private max = 900) {
     this.pos = new Float32Array(max * 3).fill(-1e6);
@@ -46,9 +54,12 @@ export class Sparks {
       this.life[i] = 0.5 + Math.random() * 0.7;
       this.floor[i] = floor;
     }
+    if (count > 0) this.alive += count;
   }
 
   update(dt: number, gravity: number) {
+    if (!this.alive && !this.dirty) return;
+    let alive = 0;
     for (let i = 0; i < this.max; i++) {
       if (this.life[i] <= 0) continue;
       this.life[i] -= dt;
@@ -57,6 +68,7 @@ export class Sparks {
         this.pos[k + 1] = -1e6;
         continue;
       }
+      alive++;
       this.vel[k + 1] -= gravity * dt;
       this.pos[k] += this.vel[k] * dt;
       this.pos[k + 1] += this.vel[k + 1] * dt;
@@ -74,6 +86,9 @@ export class Sparks {
     }
     this.points.geometry.attributes.position.needsUpdate = true;
     this.points.geometry.attributes.color.needsUpdate = true;
+    // One more upload after the last particle dies, so its parked position reaches the GPU.
+    this.dirty = alive > 0;
+    this.alive = alive;
   }
 }
 
@@ -89,6 +104,12 @@ export class Puffs {
   private maxLife: Float32Array;
   private baseSize: Float32Array;
   private next = 0;
+  private alive = 0;
+  private dirty = false;
+
+  get active() {
+    return this.alive > 0;
+  }
 
   constructor(private max = 400) {
     this.pos = new Float32Array(max * 3).fill(-1e6);
@@ -146,14 +167,18 @@ export class Puffs {
     this.col.set([color.r, color.g, color.b], i * 3);
     this.life[i] = this.maxLife[i] = life * (0.7 + Math.random() * 0.6);
     this.baseSize[i] = sizePx * (0.7 + Math.random() * 0.6);
+    this.alive++;
   }
 
   update(dt: number, pixelRatio: number) {
+    if (!this.alive && !this.dirty) return;
+    let alive = 0;
     for (let i = 0; i < this.max; i++) {
       if (this.life[i] <= 0) {
         this.alpha[i] = 0;
         continue;
       }
+      alive++;
       this.life[i] -= dt;
       const k = i * 3;
       this.pos[k] += this.vel[k] * dt;
@@ -167,5 +192,8 @@ export class Puffs {
     g.attributes.position.needsUpdate = true;
     g.attributes.alpha.needsUpdate = true;
     g.attributes.size.needsUpdate = true;
+    // Dead puffs get alpha 0 on the next pass; upload that once, then go quiet.
+    this.dirty = alive > 0;
+    this.alive = alive;
   }
 }

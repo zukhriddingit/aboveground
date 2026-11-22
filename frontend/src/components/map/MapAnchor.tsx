@@ -31,21 +31,27 @@ export default function MapAnchor({ layer, lng, lat, altitude = 0, anchor = "bot
     target.current = { lng, lat, altitude, follow };
   });
 
+  // What place() last wrote, so a still camera costs no style writes (and no style recalc) per frame.
+  const applied = useRef({ visibility: "", transform: "" });
+
   useEffect(() => {
     if (!overlay || hidden) return;
+    applied.current = { visibility: "", transform: "" };
     const place = () => {
       const node = element.current;
       if (!node) return;
       const t = target.current;
       const live = t.follow ? t.follow() : [t.lng, t.lat, t.altitude];
       const point = live ? overlay.project(live[0], live[1], live[2] ?? t.altitude) : null;
+      const last = applied.current;
       if (!point || !point.visible) {
-        if (node.style.visibility !== "hidden") node.style.visibility = "hidden";
+        if (last.visibility !== "hidden") node.style.visibility = last.visibility = "hidden";
         return;
       }
-      if (overlay.viewMode === "2d" && (layer === "stories" || layer === "tourist")) point.y -= 16;
-      node.style.visibility = "visible";
-      node.style.transform = `translate3d(${point.x.toFixed(1)}px, ${point.y.toFixed(1)}px, 0)`;
+      const y = overlay.viewMode === "2d" && (layer === "stories" || layer === "tourist") ? point.y - 16 : point.y;
+      const transform = `translate3d(${point.x.toFixed(1)}px, ${y.toFixed(1)}px, 0)`;
+      if (transform !== last.transform) node.style.transform = last.transform = transform;
+      if (last.visibility !== "visible") node.style.visibility = last.visibility = "visible";
     };
     place();
     return overlay.subscribe(place);

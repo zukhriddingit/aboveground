@@ -6,7 +6,7 @@ import { MOCK_LINES, MOCK_STATIONS } from "@/lib/mockData";
 import type { Station, TLinesGeoJson, TrainVehicle, TranslatedAlert, TriggerAlertResponse, WorldResponse } from "@/types/tverse";
 import { demoAlert } from "./alertTranslator";
 import type { FeedSource, IncidentSim } from "./incidentSim";
-import { fetchVehicles } from "./mbtaV3";
+import { fetchVehicles, trackVehicles } from "./mbtaV3";
 
 const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? "").replace(/\/$/, "");
 const POLL_MS = 12000;
@@ -57,6 +57,7 @@ export function useWorldFeed(sim: IncidentSim): WorldFeed {
       const world = await fetchBackendWorld(controller.signal);
       if (world && world.stations.length > 0) {
         sim.setFeed(world.vehicles, POLL_MS + 500);
+        trackVehicles(world.vehicles);
         next = {
           stations: world.stations,
           alerts: Array.isArray(world.alerts) ? world.alerts : [],

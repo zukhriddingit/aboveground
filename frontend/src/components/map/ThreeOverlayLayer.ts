@@ -500,7 +500,18 @@ export class ThreeOverlayLayer implements CustomLayerInterface {
 
   private readonly v3 = new T.Vector3();
   private readonly v3b = new T.Vector3();
+  /** Scratch for project(), which callers outside render() use (MapAnchor), so it never clobbers v3/v3b. */
+  private readonly v3p = new T.Vector3();
   private readonly v4 = new T.Vector4();
+  /** Canvas CSS size, read once per render() and on map resize instead of per projected point. */
+  private viewW = 0;
+  private viewH = 0;
+  private readonly measure = () => {
+    const canvas = this.map?.getCanvas();
+    if (!canvas) return;
+    this.viewW = canvas.clientWidth;
+    this.viewH = canvas.clientHeight;
+  };
 
   constructor() {
     this.scene.add(this.sparks.points, this.avatar.root);
@@ -520,6 +531,9 @@ export class ThreeOverlayLayer implements CustomLayerInterface {
 
   onAdd(map: MapLibreMap, gl: WebGLRenderingContext | WebGL2RenderingContext) {
     this.map = map;
+    map.off("resize", this.measure);
+    map.on("resize", this.measure);
+    this.measure();
     // Whole-style replacement on the same map preserves the GL context and live scene.
     if (this.renderer) {
       this.scheduleBuildingMask();
@@ -555,6 +569,7 @@ export class ThreeOverlayLayer implements CustomLayerInterface {
     this.disposed = true;
     const map = this.map;
     this.map = undefined;
+    map?.off("resize", this.measure);
     if (this.maskFrame) cancelAnimationFrame(this.maskFrame);
     if (map?.isStyleLoaded()) {
       for (const id of ["buildings", "building-edges"]) {
@@ -580,6 +595,7 @@ export class ThreeOverlayLayer implements CustomLayerInterface {
     if (!this.renderer || !this.map || this.mode === "2d") return;
     const matrix = args.defaultProjectionData.mainMatrix as unknown as ArrayLike<number>;
     if (!matrix || matrix.length !== 16) return;
+    this.measure();
     this.localToClip.fromArray(matrix).multiply(MODEL_MATRIX);
     // Recover the actual eye and axes from MapLibre's projection. The pixel/metre
     // scale belongs in the projection so PBR view vectors and billboards use metres.
@@ -745,7 +761,8 @@ export class ThreeOverlayLayer implements CustomLayerInterface {
 
   private updateShuttle(node: StationNode, pin: ShuttleCurbPin) {
     pin.animate(this.zs, this.time + node.phase, this.camera);
-    if (!this.map) return;
+    // Nothing to dodge while story bubbles are hidden.
+    if (!this.map || !this.visible.stories) return;
     const bubble = this.projectLocal(this.v3.set(node.pos.x, 90, node.pos.z));
     const centre = this.projectLocal(pin.sign.getWorldPosition(this.v3));
     if (!bubble?.visible || !centre?.visible) return;
@@ -763,7 +780,7 @@ export class ThreeOverlayLayer implements CustomLayerInterface {
     }
     // In a near-overhead view the bubble can cover the curb itself. Lean the
     // sign out on its post, keeping the foot, ring and walking endpoint exact.
-    const width = this.map.getCanvas().clientWidth;
+    const width = this.viewW;
     const side = bubble.x < width - gap - 10 ? 1 : -1;
     const world = pin.sign.getWorldPosition(this.v3).project(this.camera);
     world.x += 2 * (bubble.x + side * gap - centre.x) / width;
@@ -931,7 +948,7 @@ export class ThreeOverlayLayer implements CustomLayerInterface {
       holo.sign.rotateOnWorldAxis(UP, -node.group.rotation.y);
       holo.sign.scale.setScalar((.36 + .26 * overview) * pop);
       holo.sign.position.set(0, ALERT_Y + Math.sin(t * 1.8) * 2, 0);
-      if (overview > 0) this.clearStoryBubble(node, overview);
+      if (overview > 0 && this.visible.stories) this.clearStoryBubble(node, overview);
       const beamDirection = this.v3.copy(holo.sign.position).sub(holo.beam.position);
       holo.beam.scale.y = Math.max(1, beamDirection.length() - 10);
       holo.beam.quaternion.setFromUnitVectors(UP, beamDirection.normalize());
@@ -971,7 +988,7 @@ export class ThreeOverlayLayer implements CustomLayerInterface {
   /** Leave a tappable lane beside the 72 px HTML bubble at overview zoom.
    * Move only the floating sign. The cabinet and the foot of its beam stay at the doorway. */
   private clearStoryBubble(node: StationNode, overview: number) {
-    if (!this.map) return;
+    if (!this.map || !this.visible.stories) return;
     const anchor = this.projectLocal(this.v3.set(node.pos.x, 90, node.pos.z));
     const sign = node.alert.sign;
     const world = sign.getWorldPosition(this.v3);
@@ -982,7 +999,7 @@ export class ThreeOverlayLayer implements CustomLayerInterface {
     const horizontal = 1 - T.MathUtils.smoothstep(Math.abs(dx), 52, 76);
     const vertical = 1 - T.MathUtils.smoothstep(Math.abs(dy + 26), 48, 75);
     if (!horizontal || !vertical) return;
-    const width = this.map.getCanvas().clientWidth;
+    const width = this.viewW;
     const side = anchor.x < 76 ? 1 : -1;
     world.project(this.camera);
     world.x += 2 * (side * 57 - dx) * horizontal * vertical * overview / width;
@@ -1371,9 +1388,9 @@ export class ThreeOverlayLayer implements CustomLayerInterface {
     if (!this.map) return null;
     const v = this.v4.set(p.x, p.y, p.z, 1).applyMatrix4(this.localToClip);
     if (v.w <= 0) return { x: -9999, y: -9999, visible: false };
-    const canvas = this.map.getCanvas();
-    const w = canvas.clientWidth;
-    const h = canvas.clientHeight;
+    if (!this.viewW) this.measure();
+    const w = this.viewW;
+    const h = this.viewH;
     const x = ((v.x / v.w + 1) / 2) * w;
     const y = ((1 - v.y / v.w) / 2) * h;
     return { x, y, visible: x > -80 && x < w + 80 && y > -80 && y < h + 80 };
@@ -1382,10 +1399,10 @@ export class ThreeOverlayLayer implements CustomLayerInterface {
   project(lng: number, lat: number, altitude = 0): ScreenPoint | null {
     if (this.mode === "2d" && this.map) {
       const p = this.map.project([lng, lat]);
-      const el = this.map.getContainer();
-      return { x: p.x, y: p.y, visible: p.x > -80 && p.x < el.clientWidth + 80 && p.y > -80 && p.y < el.clientHeight + 80 };
+      if (!this.viewW) this.measure();
+      return { x: p.x, y: p.y, visible: p.x > -80 && p.x < this.viewW + 80 && p.y > -80 && p.y < this.viewH + 80 };
     }
-    return this.projectLocal(toLocal(lng, lat, altitude, new T.Vector3()));
+    return this.projectLocal(toLocal(lng, lat, altitude, this.v3p));
   }
 
   /** What is under a screen point (CSS px), nearest first by priority. */
@@ -1400,8 +1417,8 @@ export class ThreeOverlayLayer implements CustomLayerInterface {
       if (d <= radius) candidates.push({ kind, id, d: d / radius });
     };
     if (!this.map) return null;
-    const canvas = this.map.getCanvas();
-    this.raycaster.setFromCamera(new T.Vector2(2 * x / canvas.clientWidth - 1, 1 - 2 * y / canvas.clientHeight), this.camera);
+    if (!this.viewW) this.measure();
+    this.raycaster.setFromCamera(new T.Vector2(2 * x / this.viewW - 1, 1 - 2 * y / this.viewH), this.camera);
     const hitBox = (object: T.Object3D, bounds: T.Box3) => {
       this.localRay.copy(this.raycaster.ray).applyMatrix4(this.localCamera.copy(object.matrixWorld).invert());
       return this.localRay.intersectsBox(bounds);
