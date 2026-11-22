@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CircleCheck, Info, TriangleAlert, X } from "lucide-react";
-import { FOCUS, MBTA_RED, PANEL } from "@/lib/ui";
+import { DANGER_TEXT, FOCUS, MBTA_RED, PANEL } from "@/lib/ui";
 
 export type ToastTone = "info" | "success" | "danger";
 
@@ -44,7 +44,7 @@ export function useToasts() {
 const TONE = {
   info: { icon: Info, bar: "#a1a1aa", text: "text-zinc-300" },
   success: { icon: CircleCheck, bar: "#34d399", text: "text-emerald-300" },
-  danger: { icon: TriangleAlert, bar: MBTA_RED, text: "text-[#ff6b5e]" },
+  danger: { icon: TriangleAlert, bar: MBTA_RED, text: DANGER_TEXT },
 } as const;
 
 export function ToastStack({ toasts, onDismiss }: { toasts: Toast[]; onDismiss: (id: number) => void }) {

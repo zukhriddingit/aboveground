@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { ChevronDown, TrainFront, X } from "lucide-react";
 import { countdownLabel, effectLabel, type Arrival, type LiveAlert } from "@/components/game";
-import { CONTROL, FOCUS, LABEL, MBTA_RED, PANEL } from "@/lib/ui";
+import { CONTROL, DANGER_TEXT, FOCUS, LABEL, MBTA_RED, PANEL, WARN_TEXT } from "@/lib/ui";
 import type { Station, StationId } from "@/types/tverse";
 import { LineBullet } from "./LineBullet";
 
@@ -17,7 +17,7 @@ function useNow(everyMs: number) {
 }
 
 /** Amber, like the LED countdown signs on MBTA platforms. */
-const COUNTDOWN = "font-mono text-[13px] font-semibold tabular-nums text-[#ffb547]";
+const COUNTDOWN = `font-mono text-[13px] font-semibold tabular-nums ${WARN_TEXT}`;
 
 /**
  * Live countdown for the next trains at one station (MBTA V3 predictions). A button on phones,
@@ -60,7 +60,7 @@ export function NextTrains({
         <TrainFront className="size-4 text-zinc-300" />
         <span className="font-semibold">{station.name}</span>
         {closures.length > 0 ? (
-          <span className="font-semibold text-[#ff6b5e]">{effectLabel(closures[0])}</span>
+          <span className={`font-semibold ${DANGER_TEXT}`}>{effectLabel(closures[0])}</span>
         ) : (
           next && <span className={COUNTDOWN}>{countdownLabel(next, now)}</span>
         )}
@@ -102,7 +102,7 @@ export function NextTrains({
               className={`mb-2 flex w-full items-start gap-2 rounded-lg border border-white/12 border-l-[3px] bg-white/[0.03] p-2 text-left text-[12px] text-zinc-100 hover:bg-white/[0.07] ${FOCUS}`}
               style={{ borderLeftColor: MBTA_RED }}
             >
-              <X className="mt-0.5 size-3.5 shrink-0 text-[#ff6b5e]" strokeWidth={3} />
+              <X className={`mt-0.5 size-3.5 shrink-0 ${DANGER_TEXT}`} strokeWidth={3} />
               <span className="line-clamp-2">{a.shortHeader}</span>
             </button>
           ))}
