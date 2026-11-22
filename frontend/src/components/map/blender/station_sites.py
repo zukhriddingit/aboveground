@@ -36,12 +36,57 @@ def palette():
         bsdf.inputs["Base Color"].default_value = (*linear(color), 1)
         bsdf.inputs["Alpha"].default_value = alpha
 
+    # Original seamless albedo tiles. Pixels are authored here, without photographic inputs.
+    def tile(name, rgb, metres, mode, seed, metal=0, rough=0.78):
+        n = 256
+        rng = np.random.default_rng(seed)
+        y, x = np.mgrid[0:n, 0:n]
+        grain = rng.normal(0, 2.8, (n, n))
+        grain += 1.7 * np.sin(x * 2 * pi / n * 7 + 2 * np.cos(y * 2 * pi / n * 3))
+        color = np.array(rgb, dtype=float)[None, None, :] + grain[:, :, None]
+        if mode in ("brick", "ashlar"):
+            rows, cols = (12, 4) if mode == "brick" else (4, 2)
+            row = y * rows // n
+            col = x * cols / n + (row % 2) * 0.5
+            shade = rng.uniform(-12, 12, (rows, cols))[row, col.astype(int) % cols]
+            edge = np.minimum(
+                np.minimum(col % 1, 1 - col % 1) * n / cols,
+                np.minimum(y * rows / n % 1, 1 - y * rows / n % 1) * n / rows,
+            )
+            color += shade[:, :, None]
+            mortar = (np.clip((1.8 - edge) / 1.5, 0, 1))[:, :, None]
+            joint = np.array([163, 147, 125] if mode == "brick" else [111, 103, 93])
+            if mode == "ashlar":
+                mortar *= 0.64
+            color = color * (1 - mortar) + (joint + grain[:, :, None]) * mortar
+        if mode == "copper":
+            weather = 7 * np.sin(x * 2 * pi / n * 3 + 1.8 * np.sin(y * 2 * pi / n))
+            color += weather[:, :, None] * np.array([0.2, 1, 0.85])
+        material(name, "ffffff", metal, rough)
+        mat = MATERIALS[name]
+        mat["tileMetres"] = metres
+        mat.diffuse_color = tuple((v / 255) ** 2.2 for v in rgb) + (1,)
+        img = bpy.data.images.new(name + " tile", n, n, alpha=False)
+        rgba = np.ones((n, n, 4), dtype=np.float32)
+        # An sRGB image datablock's pixel array accepts normalized encoded RGB.
+        rgba[:, :, :3] = np.clip(color / 255, 0, 1)
+        img.pixels.foreach_set(rgba.ravel())
+        img.file_format = "JPEG"
+        with tempfile.TemporaryDirectory() as tmp:
+            img.filepath_raw = str(Path(tmp) / (name + ".jpg"))
+            img.save()
+            img.pack()
+        node = mat.node_tree.nodes.new("ShaderNodeTexImage")
+        node.image = img
+        bsdf = next(n for n in mat.node_tree.nodes if n.type == "BSDF_PRINCIPLED")
+        mat.node_tree.links.new(node.outputs["Color"], bsdf.inputs["Base Color"])
+
+    tile("BostonGranite", (151, 145, 136), 3.4, "ashlar", 27)
+    tile("BrickBond", (144, 70, 54), 1.1, "brick", 81)
+    tile("Limestone", (169, 157, 144), 2, "granite", 52)
+    tile("DeckConcrete", (151, 150, 143), 2.4, "granite", 11)
+    tile("AgedCopper", (79, 114, 101), 1.9, "copper", 38, 0.37, 0.53)
     for name, color, metal, rough in [
-        ("BostonGranite", "9c9388", .02, .76),
-        ("BrickBond", "944836", .01, .8),
-        ("Limestone", "b6aa98", .02, .73),
-        ("DeckConcrete", "9a9790", .01, .82),
-        ("AgedCopper", "486c5d", .45, .51),
         ("CastIron", "23302c", 0.55, 0.46),
         ("Gunmetal", "46494a", 0.52, 0.48),
         ("CreamTile", "d8c9a9", 0.1, 0.32),
@@ -56,8 +101,6 @@ def palette():
         ("PlumPane", "805665", 0.16, 0.37),
     ]:
         material(name, color, metal, rough)
-    from station_surfaces import apply_surfaces
-    apply_surfaces(MATERIALS)
 
 
 def centroid(poly):
@@ -328,7 +371,7 @@ def hip_roof(a, length, width, eave, rise):
     ridge = max(0.10, hx - hy)
     corners = rect(length, width)
     pts = [(x, y, eave) for x, y in corners] + [(-ridge, 0, eave + rise), (ridge, 0, eave + rise)]
-    a.mesh("AgedCopper", pts, [(0, 1, 5, 4), (1, 2, 5), (2, 3, 4, 5), (3, 0, 4), (0, 3, 2, 1)])
+    a.mesh("Gunmetal", pts, [(0, 1, 5, 4), (1, 2, 5), (2, 3, 4, 5), (3, 0, 4), (0, 3, 2, 1)])
     for i, (x, y) in enumerate(corners):
         a.bar("CopperDeck", (x, y, eave), (ridge if x > 0 else -ridge, 0, eave + rise), 0.063)
     for side in (-1, 1):
