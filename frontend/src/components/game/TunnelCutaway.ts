@@ -564,6 +564,10 @@ export class TunnelCutaway extends TrackCorridor {
       }
     }
     const site = this.project(this.focus.x, this.focus.z)!.s;
+    // At a heavy-rail interlocking the upstream tripod can otherwise land inside
+    // the raised platform. Keep both tripods and their lead on the same floor.
+    const nearTower = train ? site - 12 * d : d * Math.max(this.platHalf + 2, site * d - 12);
+    const farTower = site + 14 * d;
     const kit = site + 5 * d;
     const bag = buildCrewTool("bag");
     const kitLat = train ? -18.4 : -15.3;
@@ -573,11 +577,11 @@ export class TunnelCutaway extends TrackCorridor {
     this.interior.add(bag);
     const cable: T.Vector3[] = [];
     for (let i = 0; i <= 18; i++) {
-      const s = site + (-12 + i * 26 / 18) * d;
+      const s = T.MathUtils.lerp(nearTower, farTower, i / 18);
       cable.push(this.at(this.sampleAt(s), kitLat - .44 + .24 * Math.sin(i * .85), kitY + .078));
     }
     this.mesh([new T.TubeGeometry(new T.CatmullRomCurve3(cable), 42, .079, 6, false)], lambert({ color: "#332e26" }));
-    for (const s of [site - 12 * d, site + 14 * d]) {
+    for (const s of [nearTower, farTower]) {
       const tower = buildLightTower();
       const p = this.sampleAt(s);
       tower.group.position.copy(this.at(p, kitLat, kitY));
