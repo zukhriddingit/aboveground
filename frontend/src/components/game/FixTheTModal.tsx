@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useEffectEvent, useId, useState } from "react";
-import { Bot, CircleCheck, Clock3, ExternalLink, Eye, RotateCcw, ShieldAlert, Users, Wrench, X, Zap } from "lucide-react";
-import type { Station, TranslatedAlert } from "@/types/tverse";
+import { useEffect, useEffectEvent, useId, useRef, useState } from "react";
+import { Bot, CircleCheck, Clock3, ExternalLink, Eye, RotateCcw, ShieldAlert, Users, Wrench, X } from "lucide-react";
+import type { RepairKind, Station, TranslatedAlert } from "@/types/tverse";
 import { AiSourceTag, useAlertTranslation } from "@/components/ai";
+import { BUTTON, BUTTON_PRIMARY, FOCUS, LABEL, MBTA_RED, PANEL } from "@/lib/ui";
 import { canPlay, gameFor, type GameKind } from "./alertTranslator";
 import { BreakerSequenceGame } from "./BreakerSequenceGame";
 import { GameStyles } from "./GameStyles";
@@ -18,54 +19,75 @@ import { WireMatchGame } from "./WireMatchGame";
 
 type GameProps = { onWin: (remainingMs: number) => void; onLose: () => void };
 
+/** The 15-second schematic repair step for each kind of fault, Behind-the-Scenes Disruption Visualizer style. */
 const GAMES: Record<GameKind, { title: string; hint: string; cta: string; done: string; fail: string; Game: (p: GameProps) => React.ReactNode }> = {
   WIRE_MATCH: {
     title: "Reconnect the 4 signal wires",
-    hint: "Land each tagged wire on its relay's terminal post before the timer runs out.",
-    cta: "Help Fix the Signal",
-    done: "Signal restored!",
-    fail: "The relay fried.",
+    hint: "Land each tagged wire on its relay's terminal post, the way a signal maintainer re-terminates a failed track circuit.",
+    cta: "Step through the signal repair",
+    done: "Signal relay reset",
+    fail: "The relay isn't latched yet.",
     Game: WireMatchGame,
   },
   TRACK_WELD: {
     title: "Thermite-weld the broken rail",
     hint: "Preheat the rail ends, pour the molten steel, grind the weld flush, then let it cool before trains cross.",
-    cta: "Help Weld the Track",
-    done: "Track welded!",
-    fail: "The joint cracked again.",
+    cta: "Step through the rail weld",
+    done: "Rail welded",
+    fail: "The weld didn't set in time.",
     Game: TrackWeldGame,
   },
   SWITCH_THROW: {
     title: "Line up the switches",
-    hint: "Throw the switches so the trolley reaches its destination, twice.",
-    cta: "Help Throw the Switch",
-    done: "Switch lined up!",
-    fail: "The trolley took the wrong track.",
+    hint: "Throw the switches so the trolley reaches its destination, twice: the route a dispatcher sets around a failed switch.",
+    cta: "Step through the switch repair",
+    done: "Route lined up",
+    fail: "The route isn't lined up yet.",
     Game: SwitchThrowGame,
   },
   BREAKER_SEQUENCE: {
     title: "Restore the power feed",
-    hint: "Watch the restoration order, then close the feeder breakers in the same order.",
-    cta: "Help Restore Power",
-    done: "Power restored!",
-    fail: "The feeder tripped again.",
+    hint: "Watch the restoration order, then close the feeder breakers in the same order, one section at a time.",
+    cta: "Step through the power restore",
+    done: "Power restored",
+    fail: "The feeder isn't energized yet.",
     Game: BreakerSequenceGame,
   },
   RESCUE_COUPLE: {
     title: "Tow the stalled train clear",
-    hint: "Couple up, connect the air line and charge the brakes, right on time.",
-    cta: "Help Clear the Train",
-    done: "Train towed clear!",
-    fail: "The coupler slipped.",
+    hint: "Couple up, connect the air line and charge the brakes, the way a rescue train clears a disabled one.",
+    cta: "Step through the train rescue",
+    done: "Train towed clear",
+    fail: "The coupling isn't made yet.",
     Game: RescueCoupleGame,
   },
   ICE_THAW: {
     title: "Thaw the frozen switch",
-    hint: "Torch the ice out of the switch point until it can close.",
-    cta: "Help Thaw the Switch",
-    done: "Switch thawed!",
-    fail: "The points froze solid.",
+    hint: "Torch the ice out of the switch points until they can close and lock.",
+    cta: "Step through the switch thaw",
+    done: "Switch thawed",
+    fail: "The points are still iced in.",
     Game: IceThawGame,
+  },
+};
+
+/** What crews physically do for each repair kind the backend tags on an alert (TranslatedAlert.repairKind). */
+const REPAIR_KINDS: Record<RepairKind, { label: string; work: string }> = {
+  SIGNAL_RELAY: {
+    label: "Signal relay · track circuit",
+    work: "Signal maintainers trace the track circuit that tells a signal its block is clear, swap or re-terminate the failed relay in the wayside signal room, then test it before trains get normal speed back.",
+  },
+  CATENARY: {
+    label: "Overhead power wire",
+    work: "Power is cut and the wire grounded, then crews check its tension and the contact points the train's pantograph rides on, re-tension or splice it, and re-energize one section at a time.",
+  },
+  SWITCH_CLEARANCE: {
+    label: "Switch clearance",
+    work: "Crews clear the switch points and check they close and lock fully while a disabled train is coupled and moved out of the way, so following trains can be routed around it.",
+  },
+  RAIL_FASTENER: {
+    label: "Rail fasteners · track",
+    work: "Track crews walk the section to find loose or broken clips, replace the fasteners, re-gauge the rail and let trains through slowly until it settles, with shuttle buses bridging the gap meanwhile.",
   },
 };
 
@@ -73,6 +95,9 @@ const GAMES: Record<GameKind, { title: string; hint: string; cta: string; done: 
 const WON_HOLD_MS = 9000;
 
 type Step = "brief" | "game" | "won" | "lost";
+
+/** A hairline section on the panel, like a block on a station information board. */
+const SECTION = "rounded-lg border border-white/12 bg-white/[0.03] p-3";
 
 export interface FixTheTModalProps {
   alert: TranslatedAlert | null;
@@ -83,13 +108,13 @@ export interface FixTheTModalProps {
   simulated: boolean;
   /** Name of the hat this fix unlocks, if any. */
   unlockName: string | null;
-  /** Staged from a live MBTA alert: the puzzle illustrates a repair for the published cause; real service is untouched. */
+  /** Staged from a live MBTA alert: the walkthrough illustrates a repair for the published cause; real service is untouched. */
   explore?: { game: GameKind; label: string } | null;
   onClose: () => void;
   onWin: (alert: TranslatedAlert) => void;
 }
 
-/** The AI plain-English delay card, then the 15-second repair mini-game. */
+/** Behind-the-Scenes Disruption Visualizer: the plain-English delay card, then a 15-second schematic repair step. */
 export function FixTheTModal(props: FixTheTModalProps) {
   if (!props.alert) return null;
   return <FixTheTDialog key={props.alert.id} {...props} alert={props.alert} />;
@@ -98,17 +123,30 @@ export function FixTheTModal(props: FixTheTModalProps) {
 function FixTheTDialog({ alert, station, stats, simulated, unlockName, explore, onClose, onWin }: FixTheTModalProps & { alert: TranslatedAlert }) {
   const [step, setStep] = useState<Step>("brief");
   const [attempt, setAttempt] = useState(0);
+  const [submitted, setSubmitted] = useState(false);
   const titleId = useId();
   const playable = canPlay(alert);
   const kind = explore?.game ?? gameFor(alert);
   const game = GAMES[kind];
   const real = REAL_REPAIRS[kind];
-  // Plain-English "what broke" from Gemini when it answers within 4 s; the alert's own text until then.
-  const ai = useAlertTranslation(explore ? null : alert);
+  const repairKind = alert.repairKind ? REPAIR_KINDS[alert.repairKind] : null;
+  // Plain-English translation from the AI when it answers within 4 s; the alert's own text until then.
+  // A live MBTA alert (explore) gets its real header translated too, plus the smartest alternate move.
+  const ai = useAlertTranslation(alert);
+  const aiArrived = ai.source !== "fallback";
+
+  // The 9 s auto-continue and the button can both fire: award the fix exactly once.
+  const done = useRef(false);
+  const finish = () => {
+    if (done.current) return;
+    done.current = true;
+    setSubmitted(true);
+    onWin(alert);
+  };
 
   // The page re-renders every half second while this is open and hands in a fresh onWin each time,
   // so the timer must not depend on it.
-  const continueToRepair = useEffectEvent(() => onWin(alert));
+  const continueToRepair = useEffectEvent(finish);
   useEffect(() => {
     if (step !== "won") return;
     const timer = setTimeout(continueToRepair, WON_HOLD_MS);
@@ -126,107 +164,136 @@ function FixTheTDialog({ alert, station, stats, simulated, unlockName, explore, 
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center p-3" role="presentation">
       <GameStyles />
-      <div className="absolute inset-0 bg-black/55 backdrop-blur-sm" onClick={() => step !== "won" && onClose()} />
+      <div className="absolute inset-0 bg-black/60" onClick={() => step !== "won" && onClose()} />
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="relative max-h-[92dvh] w-full max-w-lg animate-[fixt-pop_0.2s_ease-out] overflow-y-auto rounded-2xl border border-white/10 bg-slate-950/90 p-5 text-slate-100 shadow-[0_0_60px_rgba(255,42,61,0.25)] backdrop-blur-md"
+        className={`${PANEL} relative max-h-[92dvh] w-full max-w-lg animate-[fixt-pop_0.2s_ease-out] overflow-y-auto p-5`}
       >
         {step !== "won" && (
           <button
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="absolute top-3 right-3 rounded-lg p-1.5 text-slate-400 hover:bg-white/10 hover:text-white focus-visible:outline-2 focus-visible:outline-cyan-300"
+            className={`absolute top-3 right-3 rounded-lg p-1.5 text-zinc-400 hover:bg-white/10 hover:text-white ${FOCUS}`}
           >
             <X className="size-4" />
           </button>
         )}
 
         {step === "brief" && (
-          <div className="space-y-4">
+          <div className="space-y-3.5">
             <div className="flex flex-wrap items-center gap-2 pr-8">
               <span
-                className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold tracking-wide uppercase ${
-                  explore ? "bg-cyan-400/15 text-cyan-200" : simulated ? "bg-fuchsia-500/15 text-fuchsia-300" : "bg-red-500/15 text-red-300"
-                }`}
+                className="inline-flex items-center gap-1.5 rounded-md border border-white/12 border-l-[3px] bg-white/[0.04] px-2 py-1 text-[11px] font-semibold tracking-[0.06em] text-zinc-100 uppercase"
+                style={{ borderLeftColor: explore ? "#ffffff" : MBTA_RED }}
               >
                 <ShieldAlert className="size-3.5" />
-                {explore ? "Live alert · simulated repair" : simulated ? "Simulated delay" : "Service alert"}
+                {explore ? "Live MBTA alert · simulated repair" : simulated ? "Simulated delay" : "Service alert"}
               </span>
-              {station && <span className="text-xs text-slate-400">{station.name}</span>}
+              {station && <span className="text-xs text-zinc-400">{station.name}</span>}
             </div>
-            <h2 id={titleId} className="text-xl font-semibold tracking-tight text-white">
-              {alert.plainTitle}
-            </h2>
-
-            <div className="rounded-xl border border-white/10 bg-black/40 p-3">
-              <p className="mb-1.5 text-[11px] font-semibold tracking-widest text-slate-500 uppercase">{explore ? "What the MBTA is reporting now" : "What the MBTA said"}</p>
-              <p className="font-mono text-[13px] leading-relaxed text-slate-300">{alert.rawMbtaText}</p>
+            <div>
+              <p className={LABEL}>Behind-the-Scenes Disruption Visualizer</p>
+              <h2 id={titleId} className="mt-0.5 text-xl font-semibold tracking-tight text-white">
+                {alert.plainTitle}
+              </h2>
             </div>
 
-            <div className="rounded-xl border border-cyan-400/20 bg-cyan-400/5 p-3">
-              <p className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold tracking-widest text-cyan-300 uppercase">
+            <div className={`${SECTION} border-l-[3px]`} style={{ borderLeftColor: MBTA_RED }}>
+              <p className={`${LABEL} mb-1.5`}>{explore ? "What the MBTA is reporting now" : "What the MBTA said"}</p>
+              <p className="font-mono text-[13px] leading-relaxed text-zinc-300">{alert.rawMbtaText}</p>
+            </div>
+
+            {explore && (aiArrived || ai.pending) && (
+              <div className={SECTION}>
+                <p className={`${LABEL} mb-1.5 flex items-center gap-1.5`}>
+                  <Bot className="size-3.5" />
+                  What the MBTA is reporting, in plain English
+                  <AiSourceTag source={ai.source} pending={ai.pending} className="ml-auto" />
+                </p>
+                {aiArrived ? (
+                  <p className="text-[14px] leading-relaxed text-zinc-100">{ai.explanation}</p>
+                ) : (
+                  <p className="text-[13px] text-zinc-400">Translating the alert…</p>
+                )}
+                {aiArrived && ai.alternateMove && (
+                  <p className="mt-2 text-[13px] leading-relaxed text-zinc-300">
+                    <span className="font-semibold text-white">Smartest move: </span>
+                    {ai.alternateMove}
+                  </p>
+                )}
+              </div>
+            )}
+
+            <div className={SECTION}>
+              <p className={`${LABEL} mb-1.5 flex items-center gap-1.5`}>
                 <Bot className="size-3.5" />
                 {explore ? `What a ${explore.label} usually involves` : "What actually broke"}
                 {!explore && <AiSourceTag source={ai.source} pending={ai.pending} className="ml-auto" />}
               </p>
-              <p className="text-[15px] leading-relaxed text-slate-100">{explore ? alert.plainExplanation : ai.explanation}</p>
+              <p className="text-[15px] leading-relaxed text-zinc-100">{explore ? alert.plainExplanation : ai.explanation}</p>
               {!explore && ai.alternateMove && (
-                <p className="mt-2 text-[13px] leading-relaxed text-cyan-100/80">
-                  <span className="font-semibold text-cyan-200">Smartest move: </span>
+                <p className="mt-2 text-[13px] leading-relaxed text-zinc-300">
+                  <span className="font-semibold text-white">Smartest move: </span>
                   {ai.alternateMove}
                 </p>
               )}
             </div>
 
-            <div className="rounded-xl border border-amber-300/20 bg-amber-300/5 p-3">
-              <p className="mb-1.5 flex flex-wrap items-center gap-2 text-[11px] font-semibold tracking-widest text-amber-200 uppercase">
+            <div className={SECTION}>
+              <p className={`${LABEL} mb-1.5 flex flex-wrap items-center gap-2`}>
                 <Wrench className="size-3.5" />
                 Real-world crew context
-                <span className="rounded-full bg-amber-300/15 px-2 py-0.5 text-[11px] tracking-normal text-amber-100 normal-case">
+                <span className="rounded border border-white/12 px-1.5 py-0.5 text-[11px] font-medium tracking-normal text-zinc-200 normal-case">
                   Typical real repair: {real.typical}
                 </span>
               </p>
-              <p className="text-[13px] leading-relaxed text-slate-200">{real.detail}</p>
-              {real.examples[0] && <p className="mt-1.5 text-[12px] leading-relaxed text-slate-400 italic">{real.examples[0]}</p>}
-            </div>
-
-            {explore && (
-              <p className="rounded-xl border border-white/10 bg-white/5 p-3 text-[13px] leading-relaxed text-slate-300">
-                The puzzle shows how crews might handle a {explore.label}. Playing it doesn&apos;t change real service, and the alert stays up until the
-                MBTA clears it.
-              </p>
-            )}
-
-            <div className={`flex flex-wrap gap-2 text-xs ${explore ? "hidden" : ""}`}>
-              <span className="inline-flex items-center gap-1.5 rounded-lg bg-white/5 px-2.5 py-1.5 text-slate-300">
-                <Clock3 className="size-3.5 text-amber-300" />
-                {alert.estimatedFixMin > 0 ? `Crews need ~${alert.estimatedFixMin} min` : "Scheduled work"}
-              </span>
-              {!explore && stats && stats.heldTrains > 0 && (
-                <span className="inline-flex items-center gap-1.5 rounded-lg bg-red-500/10 px-2.5 py-1.5 text-red-200 tabular-nums">
-                  <Users className="size-3.5" />
-                  {stats.heldTrains} {stats.heldTrains === 1 ? "train" : "trains"} holding · ~{stats.ridersWaiting.toLocaleString()} riders ·{" "}
-                  {formatElapsed(stats.elapsedMs)}
-                </span>
+              <p className="text-[13px] leading-relaxed text-zinc-200">{real.detail}</p>
+              {real.examples[0] && <p className="mt-1.5 text-[12px] leading-relaxed text-zinc-400 italic">{real.examples[0]}</p>}
+              {repairKind && (
+                <div className="mt-2.5 border-t border-white/12 pt-2.5">
+                  <p className={`${LABEL} mb-1`}>What crews physically do · {repairKind.label}</p>
+                  <p className="text-[13px] leading-relaxed text-zinc-200">{repairKind.work}</p>
+                </div>
               )}
             </div>
 
+            {explore && (
+              <p className="text-[13px] leading-relaxed text-zinc-400">
+                This walkthrough shows how crews typically handle a {explore.label}. Stepping through it doesn&apos;t change real service, and the
+                alert stays up until the MBTA clears it.
+              </p>
+            )}
+
+            {!explore && (
+              <div className="flex flex-wrap gap-2 text-xs">
+                <span className="inline-flex items-center gap-1.5 rounded-md border border-white/12 px-2.5 py-1.5 text-zinc-300">
+                  <Clock3 className="size-3.5 text-zinc-400" />
+                  {alert.estimatedFixMin > 0 ? `Crews need ~${alert.estimatedFixMin} min` : "Scheduled work"}
+                </span>
+                {stats && stats.heldTrains > 0 && (
+                  <span
+                    className="inline-flex items-center gap-1.5 rounded-md border border-white/12 border-l-[3px] px-2.5 py-1.5 text-zinc-100 tabular-nums"
+                    style={{ borderLeftColor: MBTA_RED }}
+                  >
+                    <Users className="size-3.5" />
+                    {stats.heldTrains} {stats.heldTrains === 1 ? "train" : "trains"} holding · ~{stats.ridersWaiting.toLocaleString()} riders ·{" "}
+                    {formatElapsed(stats.elapsedMs)}
+                  </span>
+                )}
+              </div>
+            )}
+
             {playable ? (
-              <button
-                type="button"
-                autoFocus
-                onClick={() => setStep("game")}
-                className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-fuchsia-500 to-cyan-400 text-base font-semibold text-slate-950 transition hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
-              >
-                <Zap className="size-5" />
-                {explore ? `Explore a simulated ${explore.label}` : game.cta}
+              <button type="button" autoFocus onClick={() => setStep("game")} className={`${BUTTON_PRIMARY} h-12 w-full text-base ${FOCUS}`}>
+                <Wrench className="size-5" />
+                {explore ? `Step through a simulated ${explore.label}` : game.cta}
               </button>
             ) : (
-              <p className="rounded-xl bg-white/5 p-3 text-sm text-slate-300">
-                This one is for first responders, so there&apos;s no mini-game. Give them room and check back soon.
+              <p className={`${SECTION} text-sm text-zinc-300`}>
+                This one is for first responders, so there&apos;s no repair step to walk through. Give them room and check back soon.
               </p>
             )}
           </div>
@@ -235,10 +302,11 @@ function FixTheTDialog({ alert, station, stats, simulated, unlockName, explore, 
         {step === "game" && (
           <div className="space-y-3">
             <div className="pr-8">
-              <h2 id={titleId} className="text-lg font-semibold text-white">
+              <p className={LABEL}>15-second repair step</p>
+              <h2 id={titleId} className="mt-0.5 text-lg font-semibold text-white">
                 {game.title}
               </h2>
-              <p className="text-sm text-slate-400">{game.hint}</p>
+              <p className="text-sm text-zinc-400">{game.hint}</p>
             </div>
             <game.Game key={attempt} onWin={() => setStep("won")} onLose={() => setStep("lost")} />
           </div>
@@ -247,37 +315,45 @@ function FixTheTDialog({ alert, station, stats, simulated, unlockName, explore, 
         {step === "won" && (
           <div className="space-y-4 py-1" aria-live="polite">
             <div className="flex items-center gap-3">
-              <div className="flex size-12 shrink-0 items-center justify-center rounded-full bg-emerald-400/15 shadow-[0_0_30px_rgba(56,255,156,0.4)]">
+              <div className="flex size-12 shrink-0 items-center justify-center rounded-full border border-emerald-400/40 bg-emerald-400/10">
                 <CircleCheck className="size-7 text-emerald-300" />
               </div>
               <div>
                 <h2 id={titleId} className="text-xl font-semibold text-white">
                   {explore ? "Simulated repair complete" : game.done}
                 </h2>
-                <p className="text-sm text-slate-300">
+                <p className="text-sm text-zinc-300">
                   {explore ? "Real crews are still on it: the MBTA alert stays up until they clear it." : "Next, watch the crew finish it down in the tunnel."}
                 </p>
               </div>
             </div>
 
-            <div className="rounded-xl border border-amber-300/20 bg-amber-300/5 p-3.5">
-              <p className="mb-2 flex flex-wrap items-center gap-2 text-[11px] font-semibold tracking-widest text-amber-200 uppercase">
+            <div className={SECTION}>
+              <p className={`${LABEL} mb-2 flex flex-wrap items-center gap-2`}>
                 <Clock3 className="size-3.5" />
                 How long it really takes
-                <span className="rounded-full bg-amber-300/15 px-2 py-0.5 text-[11px] tracking-normal text-amber-100 normal-case">{real.typical}</span>
+                <span className="rounded border border-white/12 px-1.5 py-0.5 text-[11px] font-medium tracking-normal text-zinc-200 normal-case">
+                  {real.typical}
+                </span>
               </p>
-              <p className="text-[14px] leading-relaxed text-slate-100">{real.detail}</p>
-              <ul className="mt-2 space-y-1.5">
+              <p className="text-[14px] leading-relaxed text-zinc-100">{real.detail}</p>
+              <ul className="mt-2 divide-y divide-white/12 border-t border-white/12">
                 {real.examples.map((example) => (
-                  <li key={example} className="rounded-lg bg-black/30 p-2.5 text-[13px] leading-relaxed text-slate-300">
+                  <li key={example} className="py-2 text-[13px] leading-relaxed text-zinc-300">
                     {example}
                   </li>
                 ))}
               </ul>
-              <p className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-slate-400">
+              <p className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-zinc-400">
                 Sources:
                 {real.sources.map((src) => (
-                  <a key={src.url} href={src.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-cyan-300 underline-offset-2 hover:underline">
+                  <a
+                    key={src.url}
+                    href={src.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={`inline-flex items-center gap-1 rounded text-zinc-200 underline underline-offset-2 hover:text-white ${FOCUS}`}
+                  >
                     {src.label}
                     <ExternalLink className="size-3" />
                   </a>
@@ -285,17 +361,18 @@ function FixTheTDialog({ alert, station, stats, simulated, unlockName, explore, 
               </p>
             </div>
 
-            {unlockName && <p className="text-center text-sm text-fuchsia-200">New hat unlocked: {unlockName}</p>}
+            {unlockName && <p className="text-center text-sm font-medium text-white">New hat unlocked: {unlockName}</p>}
 
             <button
               type="button"
               autoFocus
-              onClick={() => onWin(alert)}
-              className="relative flex h-11 w-full items-center justify-center gap-2 overflow-hidden rounded-xl bg-emerald-400 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+              disabled={submitted}
+              onClick={finish}
+              className={`${BUTTON_PRIMARY} relative h-11 w-full overflow-hidden text-sm ${FOCUS}`}
             >
               <span
                 aria-hidden
-                className="absolute inset-y-0 left-0 bg-emerald-200/60 [animation-fill-mode:forwards] [animation-name:fixt-fill] [animation-timing-function:linear]"
+                className="absolute inset-y-0 left-0 bg-zinc-300/70 [animation-fill-mode:forwards] [animation-name:fixt-fill] [animation-timing-function:linear]"
                 style={{ animationDuration: `${WON_HOLD_MS}ms` }}
               />
               <Eye className="relative size-4" />
@@ -309,13 +386,11 @@ function FixTheTDialog({ alert, station, stats, simulated, unlockName, explore, 
             <h2 id={titleId} className="text-xl font-semibold text-white">
               {game.fail}
             </h2>
-            <p className="text-slate-300">{simulated && !explore ? "Trains are still holding. One more try?" : "Out of time. One more try?"}</p>
+            <p className="text-zinc-300">
+              {simulated && !explore ? "Trains are still holding. Walk through the repair step again?" : "Out of time. Walk through the repair step again?"}
+            </p>
             <div className="flex justify-center gap-2">
-              <button
-                type="button"
-                onClick={onClose}
-                className="rounded-xl border border-white/15 px-4 py-2 text-sm hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-cyan-300"
-              >
+              <button type="button" onClick={onClose} className={`${BUTTON} h-10 px-4 text-sm ${FOCUS}`}>
                 Close
               </button>
               <button
@@ -325,7 +400,7 @@ function FixTheTDialog({ alert, station, stats, simulated, unlockName, explore, 
                   setAttempt((a) => a + 1);
                   setStep("game");
                 }}
-                className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-fuchsia-500 to-cyan-400 px-4 py-2 text-sm font-semibold text-slate-950 focus-visible:outline-2 focus-visible:outline-white"
+                className={`${BUTTON_PRIMARY} h-10 px-4 text-sm ${FOCUS}`}
               >
                 <RotateCcw className="size-4" />
                 Try again
