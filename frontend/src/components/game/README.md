@@ -36,7 +36,9 @@ answers 406 without a key, so events come from comparing polls.)
 
 ### Simulated repairs from the published cause
 
-`scenarioFor(cause)` picks the puzzle from the alert's `cause`, never from guesses about the text:
+`scenarioFor(cause, header?)` picks the puzzle from the alert's `cause`. Only when the MBTA left the cause blank
+(`UNKNOWN_CAUSE` / `OTHER_CAUSE`) does it read the alert's own wording for a named repair ("signal problem",
+"overhead wire", "disabled train", "track work"; a bare "shuttle buses" reads as planned track work):
 
 | MBTA cause | Offered |
 | --- | --- |
@@ -46,7 +48,10 @@ answers 406 without a key, so events come from comparing polls.)
 | `DISABLED_TRAIN`, `MECHANICAL_PROBLEM` | disabled-train rescue (couple and tow) |
 | `SNOW`, `SLIPPERY_RAIL` | frozen-switch thaw |
 | `TRACK_PROBLEM`, `TRACK_WORK`, `RAIL_DEFECT`, `MAINTENANCE` | track repair (weld) |
-| medical, police, unknown, construction… | nothing to play |
+| medical, police, construction…, or unknown with no named repair | nothing to play |
+
+A train standing still between stations (`alertForStoppedTrain`) opens the same flow as a disabled-train
+rescue at the nearest modeled station on its line (within 1.5 km).
 
 It's only offered at one of the eight modeled stations the alert names (as an entity or in its text, like
 "at Copley"), or within 1.5 km of where it is, so the 3D scene never moves the problem somewhere the MBTA

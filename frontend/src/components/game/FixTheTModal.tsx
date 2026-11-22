@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useEffectEvent, useId, useState } from "react";
-import { Bot, CircleCheck, Clock3, ExternalLink, Eye, RotateCcw, ShieldAlert, Users, X, Zap } from "lucide-react";
+import { Bot, CircleCheck, Clock3, ExternalLink, Eye, RotateCcw, ShieldAlert, Users, Wrench, X, Zap } from "lucide-react";
 import type { Station, TranslatedAlert } from "@/types/tverse";
+import { AiSourceTag, useAlertTranslation } from "@/components/ai";
 import { canPlay, gameFor, type GameKind } from "./alertTranslator";
 import { BreakerSequenceGame } from "./BreakerSequenceGame";
 import { GameStyles } from "./GameStyles";
@@ -102,6 +103,8 @@ function FixTheTDialog({ alert, station, stats, simulated, unlockName, explore, 
   const kind = explore?.game ?? gameFor(alert);
   const game = GAMES[kind];
   const real = REAL_REPAIRS[kind];
+  // Plain-English "what broke" from Gemini when it answers within 4 s; the alert's own text until then.
+  const ai = useAlertTranslation(explore ? null : alert);
 
   // The page re-renders every half second while this is open and hands in a fresh onWin each time,
   // so the timer must not depend on it.
@@ -167,8 +170,27 @@ function FixTheTDialog({ alert, station, stats, simulated, unlockName, explore, 
               <p className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold tracking-widest text-cyan-300 uppercase">
                 <Bot className="size-3.5" />
                 {explore ? `What a ${explore.label} usually involves` : "What actually broke"}
+                {!explore && <AiSourceTag source={ai.source} pending={ai.pending} className="ml-auto" />}
               </p>
-              <p className="text-[15px] leading-relaxed text-slate-100">{alert.plainExplanation}</p>
+              <p className="text-[15px] leading-relaxed text-slate-100">{explore ? alert.plainExplanation : ai.explanation}</p>
+              {!explore && ai.alternateMove && (
+                <p className="mt-2 text-[13px] leading-relaxed text-cyan-100/80">
+                  <span className="font-semibold text-cyan-200">Smartest move: </span>
+                  {ai.alternateMove}
+                </p>
+              )}
+            </div>
+
+            <div className="rounded-xl border border-amber-300/20 bg-amber-300/5 p-3">
+              <p className="mb-1.5 flex flex-wrap items-center gap-2 text-[11px] font-semibold tracking-widest text-amber-200 uppercase">
+                <Wrench className="size-3.5" />
+                Real-world crew context
+                <span className="rounded-full bg-amber-300/15 px-2 py-0.5 text-[11px] tracking-normal text-amber-100 normal-case">
+                  Typical real repair: {real.typical}
+                </span>
+              </p>
+              <p className="text-[13px] leading-relaxed text-slate-200">{real.detail}</p>
+              {real.examples[0] && <p className="mt-1.5 text-[12px] leading-relaxed text-slate-400 italic">{real.examples[0]}</p>}
             </div>
 
             {explore && (

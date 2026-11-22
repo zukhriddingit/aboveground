@@ -5,7 +5,10 @@
 import { useContext, useEffect, useRef, type ReactNode } from "react";
 import { MapOverlayContext } from "./mapContext";
 
+import type { MapLayerVisibility } from "./types";
+
 export interface MapAnchorProps {
+  layer?: keyof MapLayerVisibility;
   lng: number;
   lat: number;
   /** Meters above the ground. */
@@ -18,8 +21,9 @@ export interface MapAnchorProps {
   children?: ReactNode;
 }
 
-export default function MapAnchor({ lng, lat, altitude = 0, anchor = "bottom", follow, className, children }: MapAnchorProps) {
+export default function MapAnchor({ layer, lng, lat, altitude = 0, anchor = "bottom", follow, className, children }: MapAnchorProps) {
   const overlay = useContext(MapOverlayContext);
+  const hidden = !!layer && overlay?.visibleLayers[layer] === false;
   const element = useRef<HTMLDivElement>(null);
   const target = useRef({ lng, lat, altitude, follow });
 
@@ -28,7 +32,7 @@ export default function MapAnchor({ lng, lat, altitude = 0, anchor = "bottom", f
   });
 
   useEffect(() => {
-    if (!overlay) return;
+    if (!overlay || hidden) return;
     const place = () => {
       const node = element.current;
       if (!node) return;
@@ -39,12 +43,15 @@ export default function MapAnchor({ lng, lat, altitude = 0, anchor = "bottom", f
         if (node.style.visibility !== "hidden") node.style.visibility = "hidden";
         return;
       }
+      if (overlay.viewMode === "2d" && (layer === "stories" || layer === "tourist")) point.y -= 16;
       node.style.visibility = "visible";
       node.style.transform = `translate3d(${point.x.toFixed(1)}px, ${point.y.toFixed(1)}px, 0)`;
     };
     place();
     return overlay.subscribe(place);
-  }, [overlay]);
+  }, [overlay, hidden, layer]);
+
+  if (hidden) return null;
 
   const shift = anchor === "center" ? "-translate-x-1/2 -translate-y-1/2" : "-translate-x-1/2 -translate-y-full";
   return (

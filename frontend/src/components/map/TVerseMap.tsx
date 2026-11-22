@@ -2,23 +2,23 @@
 // The 3D Boston map: MapLibre (OpenFreeMap tiles, dusk style, extruded buildings, glowing
 // T lines) with one Three.js custom layer for trains, station beacons, alert holograms,
 // tourist landmark beacons and the player's avatar. See ./types.ts for the public API.
-import { useEffect, useImperativeHandle, useRef, useState } from "react";
+import { useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 // Types only: MapLibre itself is imported in an effect so it never runs on the server.
 import type * as maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import type { FeatureCollection, LineString, Point } from "geojson";
+import type { FeatureCollection, LineString } from "geojson";
 import { MOCK_LINES } from "@/lib/mockData";
 import { BOSTON_CENTER } from "@/lib/theme";
-import type { Station, StationId } from "@/types/tverse";
-import { toLngLat } from "./geo";
+import type { StationId } from "@/types/tverse";
+import { distanceMeters, toLngLat } from "./geo";
 import MapAnchor from "./MapAnchor";
 import { MapOverlayContext, OverlayHub } from "./mapContext";
 import { StationInfoCard, TrainInfoCard } from "./MapInfoCard";
-import { createMapStyle, WINDOW_IMAGES, windowTexture } from "./mapStyle";
+import { pickFlat, registerTransitIcons, setFlatStations, setFlatTrains } from "./flatTransit";
+import { createMapStyle, setBasemapMode, setTransitVisibility, WINDOW_IMAGES, windowTexture } from "./mapStyle";
 import { DemoRide, RIDE_COORDS, RIDE_STOPS } from "./rideRoute";
-import { allowStationModel } from "./stationModels";
 import { ThreeOverlayLayer } from "./ThreeOverlayLayer";
-import type { FlyOptions, TVerseMapHandle, TVerseMapProps } from "./types";
+import { resolveMapLayers, type FlyOptions, type MapViewMode, type TVerseMapHandle, type TVerseMapProps } from "./types";
 
 const OVERVIEW = { center: BOSTON_CENTER, zoom: 14, pitch: 60, bearing: -15 };
 // Approach along the median, square, Common, or street facing the entrance.
@@ -42,8 +42,32 @@ const HOME_OFFSET = 70;
 /** Station models load once the camera is this close (zoom, and metres from the map centre). */
 const MODEL_ZOOM = 14.8;
 const MODEL_RADIUS = 1500;
+function allowNearbyModels(map: maplibregl.Map, layer: ThreeOverlayLayer | null, props: TVerseMapProps) {
+  if (!layer || props.viewMode === "2d" || map.getZoom() < MODEL_ZOOM) return;
+  const centre = map.getCenter().toArray();
+  for (const s of props.stations) {
+    if (distanceMeters(centre, [s.lng, s.lat]) < MODEL_RADIUS) layer.requestStationModel(s.id);
+  }
+}
+
 const STEP_OFF_S = 0.9;
 const smoothstep = (u: number) => u * u * (3 - 2 * u);
+
+const northUp = (mode?: MapViewMode) => mode === "2d" ? { pitch: 0, bearing: 0 } : {};
+
+function rotationControls(map: maplibregl.Map, flat: boolean) {
+  if (flat) {
+    map.dragRotate.disable();
+    map.touchPitch.disable();
+    map.touchZoomRotate.disableRotation();
+    map.keyboard.disableRotation();
+  } else {
+    map.dragRotate.enable();
+    map.touchPitch.enable();
+    map.touchZoomRotate.enableRotation();
+    map.keyboard.enableRotation();
+  }
+}
 
 type Info = { kind: "station"; id: string } | { kind: "train"; id: string } | null;
 
@@ -122,14 +146,19 @@ class RideState {
 export default function TVerseMap(props: TVerseMapProps) {
   const {
     ref, stations, vehicles, linesGeoJson, touristMode = false, demoRideActive = false,
-    avatarHat = "none", showInfoCards = true, className, children,
+    viewMode = "3d", visibleLayers, avatarHat = "none", showInfoCards = true, className, children,
   } = props;
 
+  const { trains, alerts, shuttles, stories, tourist } = visibleLayers ?? {};
+  const layers = useMemo(() => resolveMapLayers({ trains, alerts, shuttles, stories, tourist }),
+    [trains, alerts, shuttles, stories, tourist]);
+  const cameraMode = useRef<MapViewMode>(viewMode);
   const container = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const layerRef = useRef<ThreeOverlayLayer | null>(null);
   const latest = useRef(props);
   const [hub] = useState(() => new OverlayHub());
+  const overlay = useMemo(() => ({ project: hub.project, subscribe: hub.subscribe, visibleLayers: layers, viewMode }), [hub, layers, viewMode]);
   const [ride] = useState(() => new RideState());
   const [ready, setReady] = useState(false);
   const [info, setInfo] = useState<Info>(null);
@@ -152,24 +181,17 @@ export default function TVerseMap(props: TVerseMapProps) {
       layer.setAvatarLocal(home.x, home.z, null, false, 0);
     };
 
-    const syncStationLabels = (m: maplibregl.Map, list: Station[]) => {
-      const data: FeatureCollection<Point> = {
-        type: "FeatureCollection",
-        features: list.map(s => ({
-          type: "Feature", properties: { name: s.name, alert: s.hasActiveAlert },
-          geometry: { type: "Point", coordinates: [s.lng, s.lat] },
-        })),
-      };
-      m.getSource<maplibregl.GeoJSONSource>("stations")?.setData(data);
-    };
-
     void import("maplibre-gl").then(lib => {
       if (cancelled) return;
       lib.setWorkerUrl("/maplibre/maplibre-gl-worker.mjs");
+      const initial = latest.current.viewMode ?? "3d";
+      cameraMode.current = initial;
       const m = new lib.Map({
-        container: el, style: createMapStyle(), ...OVERVIEW, zoom: overviewZoom(el.clientWidth), maxPitch: 80,
+        container: el, style: createMapStyle(), ...OVERVIEW, ...northUp(initial), zoom: overviewZoom(el.clientWidth), maxPitch: initial === "2d" ? 0 : 80,
         canvasContextAttributes: { antialias: true }, attributionControl: { compact: true },
       });
+      if (initial === "2d") rotationControls(m, true);
+      m.on("render", hub.emit);
       map = m;
       mapRef.current = m;
       // Handy in the console while developing: __tverseMap.getZoom(), etc.
@@ -182,21 +204,21 @@ export default function TVerseMap(props: TVerseMapProps) {
       };
       m.setMissingStyleImageResolver(addWindows);
 
-      const allowNearbyModels = () => {
-        if (m.getZoom() < MODEL_ZOOM) return;
-        const centre = m.getCenter();
-        for (const s of latest.current.stations) {
-          if (centre.distanceTo(new lib.LngLat(s.lng, s.lat)) < MODEL_RADIUS) allowStationModel(s.id);
-        }
-      };
-      m.on("moveend", allowNearbyModels);
+      const loadNearby = () => allowNearbyModels(m, layerRef.current, latest.current);
+      m.on("moveend", loadNearby);
 
       m.on("style.load", () => {
         const p = latest.current;
         WINDOW_IMAGES.forEach(addWindows);
-        const layer = new ThreeOverlayLayer();
-        layer.frameListeners.add(hub.emit);
-        m.addLayer(layer, "station-names");
+        const mode = p.viewMode ?? "3d";
+        const visible = resolveMapLayers(p.visibleLayers);
+        registerTransitIcons(m);
+        setBasemapMode(m, mode);
+        setTransitVisibility(m, mode, visible, !!p.touristMode);
+        const previous = layerRef.current;
+        const layer = previous && !previous.isDisposed ? previous : new ThreeOverlayLayer();
+        if (!m.getLayer(layer.id)) m.addLayer(layer, "station-names");
+        layer.setPresentation(mode, visible);
         layerRef.current = layer;
         hub.connect((lng, lat, alt) => layer.project(lng, lat, alt));
         const lines = p.linesGeoJson?.features?.length ? p.linesGeoJson : MOCK_LINES;
@@ -207,13 +229,22 @@ export default function TVerseMap(props: TVerseMapProps) {
           features: [{ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: RIDE_COORDS } }],
         };
         m.getSource<maplibregl.GeoJSONSource>("ride")?.setData(rideLine);
-        syncStationLabels(m, p.stations);
+        setFlatStations(m, p.stations);
+        if (mode === "2d") setFlatTrains(m, p.vehicles);
         layer.setStations(p.stations);
-        allowNearbyModels();
+        loadNearby();
         layer.setVehicles(p.vehicles);
-        layer.setTouristMode(!!p.touristMode);
+        layer.setTouristMode(!!p.touristMode && visible.tourist);
         layer.setHat(p.avatarHat ?? "none", false);
-        placeHome(layer);
+        if (previous !== layer) {
+          const previousPosition = previous?.avatarLocal();
+          if (previousPosition) layer.setAvatarLocal(previousPosition.x, previousPosition.z, null, false);
+          else placeHome(layer);
+        }
+        if (ride.active) {
+          m.setPaintProperty("ride-glow", "line-opacity", .5);
+          m.setPaintProperty("ride-core", "line-opacity", .95);
+        }
         setReady(true);
         p.onReady?.();
       });
@@ -227,9 +258,11 @@ export default function TVerseMap(props: TVerseMapProps) {
       m.on("pitchstart", gesture);
       m.on("zoomstart", gesture);
 
+      const pick = (point: maplibregl.Point) => latest.current.viewMode === "2d"
+        ? pickFlat(m, point) : layerRef.current?.pick(point.x, point.y);
       m.on("click", e => {
         const layer = layerRef.current;
-        const hit = layer?.pick(e.point.x, e.point.y);
+        const hit = pick(e.point);
         const p = latest.current;
         if (!hit) {
           setInfo(null);
@@ -274,7 +307,7 @@ export default function TVerseMap(props: TVerseMapProps) {
       m.on("mousemove", e => {
         cancelAnimationFrame(hoverFrame);
         hoverFrame = requestAnimationFrame(() => {
-          const hit = layerRef.current?.pick(e.point.x, e.point.y);
+          const hit = pick(e.point);
           m.getCanvas().style.cursor = hit ? "pointer" : "";
         });
       });
@@ -285,6 +318,7 @@ export default function TVerseMap(props: TVerseMapProps) {
       cancelAnimationFrame(hoverFrame);
       ride.cancel();
       hub.connect(null);
+      layerRef.current?.onRemove();
       layerRef.current = null;
       mapRef.current = null;
       map?.remove();
@@ -295,18 +329,16 @@ export default function TVerseMap(props: TVerseMapProps) {
 
   useEffect(() => {
     layerRef.current?.setStations(stations);
-    mapRef.current?.getSource<maplibregl.GeoJSONSource>("stations")?.setData({
-      type: "FeatureCollection",
-      features: stations.map(s => ({
-        type: "Feature", properties: { name: s.name, alert: s.hasActiveAlert },
-        geometry: { type: "Point", coordinates: [s.lng, s.lat] },
-      })),
-    });
+    if (mapRef.current) {
+      setFlatStations(mapRef.current, stations);
+      allowNearbyModels(mapRef.current, layerRef.current, latest.current);
+    }
   }, [stations, ready]);
 
   useEffect(() => {
     layerRef.current?.setVehicles(vehicles);
-  }, [vehicles, ready]);
+    if (viewMode === "2d" && mapRef.current) setFlatTrains(mapRef.current, vehicles);
+  }, [vehicles, ready, viewMode]);
 
   useEffect(() => {
     const lines = linesGeoJson?.features?.length ? linesGeoJson : MOCK_LINES;
@@ -315,8 +347,33 @@ export default function TVerseMap(props: TVerseMapProps) {
   }, [linesGeoJson, ready]);
 
   useEffect(() => {
-    layerRef.current?.setTouristMode(touristMode);
-  }, [touristMode, ready]);
+    const m = mapRef.current;
+    if (!m || !ready) return;
+    layerRef.current?.setPresentation(viewMode, layers);
+    layerRef.current?.setTouristMode(touristMode && layers.tourist);
+    setTransitVisibility(m, viewMode, layers, touristMode);
+    hub.emit();
+  }, [viewMode, layers, touristMode, ready, hub]);
+
+  useEffect(() => {
+    const m = mapRef.current;
+    if (!m || !ready || cameraMode.current === viewMode) return;
+    cameraMode.current = viewMode;
+    const flat = viewMode === "2d";
+    ride.gesture();
+    m.stop();
+    setBasemapMode(m, viewMode);
+    rotationControls(m, flat);
+    const lock = () => {
+      if (latest.current.viewMode !== "2d") return;
+      m.setMaxPitch(0);
+      if (m.getBearing() !== 0) m.setBearing(0);
+    };
+    if (flat) m.once("moveend", lock);
+    else m.setMaxPitch(80);
+    m.easeTo({ pitch: flat ? 0 : 60, bearing: flat ? 0 : -15, duration: flat ? 700 : 850 });
+    return () => { m.off("moveend", lock); };
+  }, [viewMode, ready, ride]);
 
   useEffect(() => {
     layerRef.current?.setHat(avatarHat, true);
@@ -351,6 +408,8 @@ export default function TVerseMap(props: TVerseMapProps) {
     rideGlow(true);
     const tick = (now: number) => {
       if (!ride.active) return;
+      const layer = layerRef.current;
+      if (!layer) return;
       const { elapsed, dt } = ride.step(now);
       const s = ride.sampler.sample(elapsed);
       const hop = ride.hopOn(elapsed);
@@ -374,7 +433,7 @@ export default function TVerseMap(props: TVerseMapProps) {
           center: [c.lng + (lng - c.lng) * k, c.lat + (lat - c.lat) * k],
           zoom: m.getZoom() + (RIDE_CAMERA.zoom - m.getZoom()) * k,
           pitch: m.getPitch() + (RIDE_CAMERA.pitch - m.getPitch()) * k,
-          bearing: bearing + (targetBearing - bearing) * kb,
+          bearing: bearing + (targetBearing - bearing) * kb, ...northUp(latest.current.viewMode),
         });
       }
       if (off.finished) {
@@ -382,7 +441,7 @@ export default function TVerseMap(props: TVerseMapProps) {
         layer.setAvatarLocal(x, z, null, false, 0);
         rideGlow(false);
         const [lng, lat] = toLngLat(x, z);
-        m.easeTo({ center: [lng, lat], zoom: 15.3, pitch: 60, duration: 1600 });
+        m.easeTo({ center: [lng, lat], zoom: 15.3, pitch: 60, ...northUp(latest.current.viewMode), duration: 1600 });
         latest.current.onDemoRideEnd?.();
         return;
       }
@@ -418,7 +477,7 @@ export default function TVerseMap(props: TVerseMapProps) {
       ride.gesture(); // let the fly finish even mid-ride
       m.flyTo({
         center: [lng, lat], zoom: o.zoom ?? 15.6, pitch: o.pitch ?? 62,
-        bearing: o.bearing ?? m.getBearing(), duration: o.duration ?? 1800, essential: true,
+        bearing: o.bearing ?? m.getBearing(), duration: o.duration ?? 1800, essential: true, ...northUp(latest.current.viewMode),
       });
     };
     return {
@@ -426,13 +485,14 @@ export default function TVerseMap(props: TVerseMapProps) {
       flyToStation(id, o) {
         const s = latest.current.stations.find(st => st.id === id);
         if (s) {
-          const [lng, lat] = layerRef.current?.entranceLngLat(id) ?? [s.lng, s.lat];
+          const [lng, lat] = (latest.current.viewMode === "2d" ? null : layerRef.current?.entranceLngLat(id)) ?? [s.lng, s.lat];
           fly(lng, lat, { ...ENTRANCE_VIEWS[id], ...o });
         }
       },
       resetView() {
         const m = mapRef.current;
-        m?.flyTo({ ...OVERVIEW, zoom: overviewZoom(m.getContainer().clientWidth), duration: 1800, essential: true });
+        ride.gesture();
+        m?.flyTo({ ...OVERVIEW, ...northUp(latest.current.viewMode), zoom: overviewZoom(m.getContainer().clientWidth), duration: 1800, essential: true });
       },
       startDemoRide: () => actions.current.startRide(),
       stopDemoRide: () => actions.current.stopRide(),
@@ -451,6 +511,7 @@ export default function TVerseMap(props: TVerseMapProps) {
   const trainId = infoTrain?.id;
   const followTrain = () => {
     if (!trainId) return null;
+    if (viewMode === "2d" && infoTrain) return [infoTrain.lng, infoTrain.lat, 0] as [number, number, number];
     const at = layerRef.current?.trainLngLat(trainId);
     const zs = layerRef.current?.zoomScale ?? 1;
     return at ? ([at[0], at[1], 30 * zs] as [number, number, number]) : null;
@@ -459,11 +520,11 @@ export default function TVerseMap(props: TVerseMapProps) {
   return (
     <div className={`${/\b(absolute|fixed|relative|sticky)\b/.test(className ?? "") ? "" : "relative"} overflow-hidden bg-[#070b1a] ${className ?? "h-full w-full"}`}>
       {/* Inline position: MapLibre's CSS sets .maplibregl-map { position: relative }, which beats a class. */}
-      <div ref={container} style={{ position: "absolute", inset: 0 }} aria-label="3D map of Boston with live T trains" />
-      <MapOverlayContext.Provider value={hub}>
+      <div ref={container} style={{ position: "absolute", inset: 0 }} aria-label="Boston transit map with live T trains" />
+      <MapOverlayContext.Provider value={overlay}>
         <div className="pointer-events-none absolute inset-0 z-10">
-          {touristMode && stations.filter(s => s.landmark).map(s => (
-            <MapAnchor key={`lm-${s.id}`} lng={s.lng} lat={s.lat}
+          {viewMode === "3d" && touristMode && layers.tourist && stations.filter(s => s.landmark).map(s => (
+            <MapAnchor layer="tourist" key={`lm-${s.id}`} lng={s.lng} lat={s.lat}
               follow={() => layerRef.current?.landmarkAnchor(s.id) ?? null}>
               <button type="button" onClick={() => latest.current.onLandmarkClick?.(s)}
                 className="flex items-center gap-1.5 whitespace-nowrap rounded-full border border-amber-300/40 bg-slate-950/80 px-2.5 py-1 text-[11px] font-semibold text-amber-100 shadow-[0_0_18px_#ffc94a55] backdrop-blur-md hover:border-amber-200">
@@ -487,13 +548,13 @@ export default function TVerseMap(props: TVerseMapProps) {
                   ride.gesture();
                   mapRef.current?.flyTo({
                     center: [pickup.lng, pickup.lat], zoom: 17.6, pitch: 62,
-                    bearing: mapRef.current.getBearing(), duration: 1600, essential: true,
+                    bearing: mapRef.current.getBearing(), ...northUp(latest.current.viewMode), duration: 1600, essential: true,
                   });
                 }} />
             </MapAnchor>
           )}
           {showInfoCards && infoTrain && (
-            <MapAnchor key={`info-${infoTrain.id}`} lng={infoTrain.lng} lat={infoTrain.lat} follow={followTrain}>
+            <MapAnchor layer="trains" key={`info-${infoTrain.id}`} lng={infoTrain.lng} lat={infoTrain.lat} follow={followTrain}>
               <TrainInfoCard train={infoTrain} onClose={() => setInfo(null)} />
             </MapAnchor>
           )}

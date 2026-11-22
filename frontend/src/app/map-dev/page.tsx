@@ -5,7 +5,7 @@ import MapAnchor from "@/components/map/MapAnchor";
 import TVerseMap from "@/components/map/TVerseMap";
 import { fetchLiveVehicles } from "@/components/map/mbtaLive";
 import { createTrainSim } from "@/components/map/trainSim";
-import type { TVerseMapHandle } from "@/components/map/types";
+import { DEFAULT_MAP_LAYERS, type MapLayerVisibility, type MapViewMode, type TVerseMapHandle } from "@/components/map/types";
 import { MOCK_LINES, MOCK_STATIONS, MOCK_STORIES, MOCK_WORLD } from "@/lib/mockData";
 import { LINE_GLOW, STORY_CATEGORIES } from "@/lib/theme";
 import type { AvatarHat, StationId, WorldResponse } from "@/types/tverse";
@@ -28,6 +28,8 @@ export default function MapDevPage() {
   const [world, setWorld] = useState<WorldResponse>(initialSim);
   const [note, setNote] = useState("");
   const [expanded, setExpanded] = useState(true);
+  const [mode, setMode] = useState<MapViewMode>("3d");
+  const [layers, setLayers] = useState(DEFAULT_MAP_LAYERS);
   const [tourist, setTourist] = useState(false);
   const [riding, setRiding] = useState(false);
   const [hat, setHat] = useState<AvatarHat>("none");
@@ -125,7 +127,7 @@ export default function MapDevPage() {
       <TVerseMap
         ref={map} className="absolute inset-0 h-full w-full"
         stations={stations} vehicles={world.vehicles} linesGeoJson={world.linesGeoJson}
-        touristMode={tourist} demoRideActive={riding} avatarHat={hat}
+        viewMode={mode} visibleLayers={layers} touristMode={tourist} demoRideActive={riding} avatarHat={hat}
         onApproachStation={id => log(`Approaching ${stations.find(s => s.id === id)?.name ?? MOCK_STATIONS.find(s => s.id === id)?.name ?? "station"}`)}
         onStationClick={s => log(`Station · ${s.name}`)}
         quickCheckSignals={signals}
@@ -141,7 +143,7 @@ export default function MapDevPage() {
           const stories = MOCK_STORIES.filter(story => story.stationId === station.id);
           if (!stories.length) return null;
           return (
-            <MapAnchor key={station.id} lng={station.lng} lat={station.lat} altitude={90}>
+            <MapAnchor layer="stories" key={station.id} lng={station.lng} lat={station.lat} altitude={90}>
               <button
                 className="pointer-events-auto cursor-pointer rounded-full border border-white/25 bg-slate-950/75 px-2 py-1 text-xs font-bold text-white backdrop-blur-md hover:border-cyan-300"
                 aria-label={`${stories.length} stories at ${station.name}`}
@@ -178,6 +180,18 @@ export default function MapDevPage() {
             <button className={button} disabled={riding} onClick={() => setRiding(true)}>{riding ? "Riding..." : "Demo Ride"}</button>
             {riding && <button className={button} onClick={() => setRiding(false)}>Stop</button>}
           </div>
+          <fieldset>
+            <legend className="mb-1 text-slate-400">Map view</legend>
+            <div className="grid grid-cols-2 gap-1">{(["2d", "3d"] as const).map(value =>
+              <button key={value} className={button} aria-pressed={mode === value}
+                onClick={() => setMode(value)}>{value.toUpperCase()}</button>)}</div>
+          </fieldset>
+          <fieldset>
+            <legend className="mb-1 text-slate-400">Visible layers</legend>
+            <div className="flex flex-wrap gap-1">{(Object.keys(DEFAULT_MAP_LAYERS) as (keyof MapLayerVisibility)[]).map(key =>
+              <button key={key} className={`${button} capitalize`} aria-pressed={layers[key]}
+                onClick={() => setLayers(old => ({ ...old, [key]: !old[key] }))}>{key}</button>)}</div>
+          </fieldset>
           <label className="flex items-center gap-2">Avatar hat
             <select className={select} value={hat} onChange={e => setHat(e.target.value as AvatarHat)}>
               {Object.entries(hats).map(([value, name]) => <option key={value} value={value}>{name}</option>)}
