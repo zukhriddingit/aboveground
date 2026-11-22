@@ -1,0 +1,5 @@
+# AboveGround backend (main.py): world/MBTA, Stories, alerts, T-Feed, Quick-Check and Gemini routes.
+fastapi>=0.110
+uvicorn[standard]>=0.29
+pydantic>=2.6
+google-genai>=1.0
