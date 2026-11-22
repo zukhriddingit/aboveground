@@ -12,5 +12,6 @@ Read `README.md` first: it has the product, the folder ownership table and the A
 4. Never crash on a missing backend: fall back to `mockData.ts`. Never block the demo on an AI call:
    use a fallback template first, upgrade with AI text only if it arrives quickly.
 5. Before pushing frontend work: `cd frontend && npx tsc --noEmit && npm run lint`.
-6. UI look: dark glassmorphic cyberpunk (`bg-slate-950/75 backdrop-blur-md border border-white/10`), keep the
-   centre of the 3D map clear.
+6. UI look: MBTA wayfinding, not neon. Use the tokens in `frontend/src/lib/ui.ts` (matte `bg-zinc-950/88 backdrop-blur-xl`
+   panels, 1 px `border-white/12`, official line colours on white type, white as the only accent, MBTA red for delays,
+   no coloured glows). Floating panels end `bottom-24` above the dock. Keep the centre of the 3D map clear.
