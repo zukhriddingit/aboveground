@@ -44,7 +44,45 @@ dialog{color:var(--ink);background:var(--panel);border:1px solid #afb5a5;border-
 #wxNote[hidden]{display:none}
 #nightBtn svg{color:#6c6890}
 @media(min-width:761px){#wxRow{margin-top:6px}}
-</style></head><body>
+
+/* AboveGround embed (add_embed.py): the in-app look, only under ?embed=1 */
+html.embed{--paper:#0b0c0f;--panel:rgba(9,9,11,.88);--ink:#f4f4f5;--muted:#a1a1aa;--rule:rgba(255,255,255,.12);--rust:#fca5a5;--green:#fafafa}
+html.embed body{background:#0b0c0f;color:#f4f4f5}
+html.embed .top{display:none}
+html.embed .workspace{height:calc(100% - 33px);background:radial-gradient(ellipse 58% 52% at calc(50% + 140px) 52%,#2a2d34 0%,#17191e 48%,#0b0c0f 100%)}
+html.embed .workspace:after{display:none}
+html.embed .paper,html.embed .tools,html.embed .views{background:rgba(9,9,11,.88);border:1px solid rgba(255,255,255,.12);box-shadow:none;-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px)}
+html.embed .info>*:not(.season-box){display:none}
+html.embed .info{padding:14px 14px 12px}
+html.embed .season-box{border-top:0;margin-top:0;padding-top:0}
+html.embed .subhead,html.embed .key-toggle{color:#a1a1aa;font:600 10px var(--mono);letter-spacing:.08em;text-transform:uppercase}
+html.embed .chip{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);color:#e4e4e7}
+html.embed .chip:hover{background:rgba(255,255,255,.1)}
+html.embed .chip[aria-pressed=true]{background:#fafafa;border-color:#fafafa;color:#09090b}
+html.embed .select-wrap{border:1px solid rgba(255,255,255,.12);border-style:solid;color:#e4e4e7}
+html.embed .select-wrap select{color:#e4e4e7}
+html.embed .select-wrap option{color:#111;background:#fff}
+html.embed .events .on{background:rgba(255,255,255,.12);border-style:solid}
+html.embed .note{color:#d4d4d8}
+html.embed .note a,html.embed .foot,html.embed .foot a,html.embed .scale,html.embed .gesture,html.embed .zoom-value,html.embed .loading{color:#a1a1aa}
+html.embed .row{color:#e4e4e7}
+html.embed .row:hover{background:rgba(255,255,255,.06)}
+html.embed .row small{color:#a1a1aa}
+html.embed .tool{color:#e4e4e7}
+html.embed .tool:hover{background:rgba(255,255,255,.08)}
+html.embed .tool[aria-pressed=true]{background:rgba(255,255,255,.14)}
+html.embed .play{background:#fafafa;color:#09090b}
+html.embed .play:hover{background:#e4e4e7}
+html.embed .divider{background:rgba(255,255,255,.12)}
+html.embed .vbtn{color:#d4d4d8}
+html.embed .vbtn[aria-pressed=true]{background:#fafafa;color:#09090b}
+html.embed .foot{background:transparent;border-top:1px solid rgba(255,255,255,.08)}
+html.embed .compass circle:first-child{fill:#17191e;fill-opacity:.85}
+html.embed .mark{display:none}
+html.embed #wxNote,html.embed #note{font-size:12.5px}
+html.embed .embed-notes{font:9px var(--mono);letter-spacing:.015em;color:#a1a1aa;text-decoration:underline;margin-right:auto;padding:0}
+@media(max-width:760px){html.embed .workspace{height:calc(100% - 24px)}}
+</style><script>/* AboveGround embed (add_embed.py) */if(/[?&]embed=1(&|$)/.test(location.search))document.documentElement.classList.add('embed')</script></head><body>
 
 
 <header class="top"><div class="identity"><span class="brand-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" aria-hidden="true" focusable="false" stroke-linecap="round" stroke-linejoin="round"><g stroke="#507968" stroke-width="1.25"><path d="m2.7 28.8 11.5-5.4 12.3 2.7 10.6-4.4 8.2 10.6-12.6 7.2-12.3-2.7-10.2 4Z" fill="#a9ccaa"/><path d="m14.2 23.4 6.2 13.4 12.3 2.7-6.2-13.4Z" fill="#e9ddad"/><path d="m5.5 33.4 10.1-4.1 11.8 2.2 13.8-5.6" stroke="#6a9d95" stroke-width="2.3"/></g><g stroke="#774638" stroke-width="1.25"><path d="m24.8 30.9 8.9-4.8V13.8l-8.9 3.4Z" fill="#c98353"/><path d="m15.2 27.7 9.6 3.2V17.2l-2-.7v-2.3l-2-.7v-2.2l-2.7-.9v2.1l-1.9-.6v2.5l-1-.3Z" fill="#e8ac68"/><path d="m24.8 17.2 8.9-3.4-5.9-5.7-7 3.2 1 2.2 2 .7v2.3Z" fill="#985b49"/><path d="m11.6 32.8 8.9 3.6V17.7l-2.1-.8v-2.6l-2.2-.8v-2.7l-2.8-1.1v2.6l-2-.8v2.8l-1.8-.6v2.8l-1.4-.6v15.6Z" fill="#db7153"/><path d="m20.5 17.7 5.7-3-6-7.7-4 3.8v2.7l2.2.8v2.6Z" fill="#b35545"/><path d="m20.5 36.4 5.7-3.3V14.7l-5.7 3Z" fill="#a65548"/></g><g fill="#fceac8"><path d="m10.4 18.8 2.1.8v3.6l-2.1-.8Zm5 1.9 2.2.9v3.5l-2.2-.8Zm-5 4.4 2.1.8v3.6l-2.1-.8Z"/></g><path d="m15.4 33.9 2.2.8v-6.4l-2.2-.8Z" fill="#41584f"/><path d="m28.4 17 .1 3.3m2.6-4.6v3.2" stroke="#fcdfaa" stroke-width="1.65"/></svg></span><span class="wordmark">Pocket City</span></div><nav class="city-nav" aria-label="Place"><a aria-current="page" id="placeTab" href="#"></a></nav><div class="topnav"><div class="status" id="status"><i></i><span>Simulation live</span></div><button id="notesBtn" aria-label="Field notes" class="button" aria-haspopup="dialog"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 6c-2-2-5-3-9-2v15c4-1 7 0 9 2 2-2 5-3 9-2V4c-4-1-7 0-9 2v15"/></svg><span>Field notes</span></button></div></header>
@@ -2963,7 +3001,7 @@ let extraWorker=null,workers=[],generation=0,seq=0,shown=0,lastKey='',lastReques
 const screen=canvas.getContext('2d',{alpha:true});
 function display(frame,g){
   if(frame.seq<=shown || g!==generation){frame.bitmap.close?.();return}
-  shown=frame.seq;const img=frame.bitmap;if(extraWorker)setTimeout(()=>extraWorker&&extraWorker(),1500);
+  shown=frame.seq;if(!self.__pcReady){self.__pcReady=1;try{parent.postMessage({type:'pocket-city:ready',angle:frame.angle},'*')}catch(e){}}const img=frame.bitmap;if(extraWorker)setTimeout(()=>extraWorker&&extraWorker(),1500);
   if(canvas.width!==img.width||canvas.height!==img.height){canvas.width=img.width;canvas.height=img.height}
   screen.clearRect(0,0,canvas.width,canvas.height);screen.drawImage(img,0,0);img.close?.();
   $('loading').hidden=true;$('needle').setAttribute('transform','rotate('+frame.angle+' 34 39)');$('scaleLine').style.width=frame.scale+'px';
@@ -3109,6 +3147,7 @@ setInterval(()=>{if(wxChoice==='live')wxApply()},60*1000);                      
 document.addEventListener('visibilitychange',()=>{if(!document.hidden&&wxChoice==='live')wxRefresh()});
 $('chips').addEventListener('click',()=>setTimeout(wxUi));$('event').addEventListener('change',()=>setTimeout(wxUi));
 wxSet(wxChoice);
+if(document.documentElement.classList.contains('embed')){const b=document.createElement('button');b.type='button';b.className='embed-notes';b.textContent='Field notes';b.onclick=()=>$('notes').showModal();document.querySelector('.foot').prepend(b)}
 selectSeason(season);setPlay(playing);requestAnimationFrame(tick);
 wxUi();
 
