@@ -1,12 +1,15 @@
 "use client";
 // The T-Verse page (Member 4): Member 2's 3D map + Member 3's Stories and Tourist Mode + Fix the T,
 // with live MBTA V3 data: trains, alerts (closure X, notifications), predictions and cause-driven repairs.
+//
+// Layout: the header (rider badge, alerts, data source) sits at the top; under it the left rail
+// (next trains) and the right rail (map controls, alerts panel, telemetry) both end 6rem above the
+// bottom dock, so nothing floats over the dock on laptop screens. The map draws the 2D/3D view and
+// hides its own layers (viewMode, visibleLayers); the overlays below follow the same switches.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { ChevronLeft, ChevronRight, LogOut } from "lucide-react";
 import type { MapLayerVisibility, MapViewMode, TVerseMapHandle } from "@/components/map";
-
-const ALL_LAYERS: MapLayerVisibility = { trains: true, stories: true, alerts: true, shuttles: true, tourist: true };
 import {
   PostStoryModal,
   StationStoryBubbles,
@@ -21,6 +24,7 @@ import {
   IncidentSim,
   IncidentTag,
   LiveMarkers,
+  alertForStoppedTrain,
   describeEvent,
   effectLabel,
   faultForGame,
@@ -29,37 +33,45 @@ import {
   gameFor,
   isServiceAlert,
   scenarioFor,
-  alertForStoppedTrain,
   shortName,
   translateForGame,
   translateLocally,
   triggerDelay,
   useLiveMbta,
   useWorldFeed,
+  type FeedSource,
   type GameKind,
   type LiveAlert,
   type LiveEvent,
   type TunnelView,
 } from "@/components/game";
 import {
+  DEFAULT_LAYERS,
   DemoBar,
   GameHUD,
   HAT_INFO,
-  HAT_ORDER,
   IncidentBanner,
   LiveAlertsButton,
   LiveAlertsPanel,
+  MapControls,
   NextTrains,
   SourceBadge,
+  TRoundel,
+  TelemetryCard,
   ToastStack,
+  XP_REWARDS,
+  hatUnlockedBetween,
+  rankOfLevel,
   useProgress,
   useTicker,
   useToasts,
+  type GainResult,
 } from "@/components/hud";
 import { CommunityDrawer, FeedStopPins, TFeedButton, flyToFeedStop, useCommunityFeed } from "@/components/community";
 import { useStationSignals } from "@/components/quickcheck";
 import { useBranchGaps, withTransitData } from "@/components/transit";
-import { BOSTON_CENTER } from "@/lib/theme";
+import { DEFAULT_RIDER_NAME, setRiderPerks, useRiderProfile } from "@/lib/riderProfile";
+import { PANEL } from "@/lib/ui";
 import type { FixTheTScene } from "@/components/game/FixTheTScene";
 import type { AvatarHat, Station, StationId, StationStory, TranslatedAlert } from "@/types/tverse";
 
@@ -71,6 +83,8 @@ const flagKey = (id: StationId) => `flag:${id}`;
 const liveKey = (alert: LiveAlert) => `live-${alert.id}`;
 const NOTIFY_KEY = "tverse-notify-closures";
 const VIEW_KEY = "tverse-map-view";
+const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? "").replace(/\/$/, "");
+const SOURCE_LABEL: Record<FeedSource, string> = { backend: "Backend", live: "MBTA", sim: "Simulated" };
 
 interface Staged {
   live: LiveAlert;
@@ -85,7 +99,8 @@ export default function Home() {
   const [sim] = useState(() => new IncidentSim());
   const world = useWorldFeed(sim);
   const { storiesByStation, addStory } = useStationStories();
-  const { progress, awardFix, equip, addPoints } = useProgress();
+  const { progress, rank, next: nextRankUp, rankFraction, gain, awardFix, equip, addPoints, setDemoMode, toggleDemoMode, jumpToLevel } = useProgress();
+  const rider = useRiderProfile();
   // T-Feed (community feed by line) + the report's P0/P1 rider data on the station card.
   const feed = useCommunityFeed();
   const [feedOpen, setFeedOpen] = useState(false);
@@ -98,6 +113,13 @@ export default function Home() {
   const [alertsOpen, setAlertsOpen] = useState(false);
   const [alertFocus, setAlertFocus] = useState<string | null>(null);
   const [nextStation, setNextStation] = useState<StationId>("place-boyls");
+  /** 2D Clean: a flat, north-up transit map; 3D World: the tilted dusk city. */
+  const [view, setView] = useState<MapViewMode>("3d");
+  /** Map layers the rider has switched on (the HUD's Layers popover sets these); trains and alerts on first load. */
+  const [layers, setLayers] = useState<MapLayerVisibility>(DEFAULT_LAYERS);
+  /** Pro Telemetry readout (HUD only), shown once the rank unlocks it. */
+  const [telemetry, setTelemetry] = useState(false);
+  const telemetryUnlocked = rank.level >= 3;
   /** A simulated repair staged from a live MBTA alert, while its card or repair is up. */
   const [explore, setExplore] = useState<{ id: string; game: GameKind; label: string } | null>(null);
   // Read lazily: the toggle only renders inside the alerts panel, which starts closed, so SSR never shows it.
@@ -105,6 +127,11 @@ export default function Home() {
   const [notifyOn, setNotifyOn] = useState(
     () => typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted" && window.localStorage.getItem(NOTIFY_KEY) === "1",
   );
+
+  // Rank perks that live outside the HUD (the T-Feed rider badge needs Line Scout).
+  useEffect(() => {
+    setRiderPerks({ feedBadge: rank.level >= 2 });
+  }, [rank.level]);
 
   /** Live alerts whose published cause maps to a repair at a station the alert itself names. */
   const staged = useMemo(() => {
@@ -133,26 +160,22 @@ export default function Home() {
 
   /** Alerts raised here with "Simulate T Delay" (their trains are held by the engine). */
   const [simAlerts, setSimAlerts] = useState<TranslatedAlert[]>([]);
-  /** Alerts fixed here. The backend has no resolve endpoint yet, so we hide them locally. */
+  /** Alerts fixed here, hidden locally (the backend also hears about it, best effort). */
   const [cleared, setCleared] = useState<Set<string>>(() => new Set());
   const [fixAlert, setFixAlert] = useState<TranslatedAlert | null>(null);
   const [repairing, setRepairing] = useState<StationId | null>(null);
   const [hatHold, setHatHold] = useState<AvatarHat | null>(null);
   const [riding, setRiding] = useState(false);
-  const [touristMode, setTouristMode] = useState(false);
   const [approaching, setApproaching] = useState<Station | null>(null);
   const [delayStation, setDelayStation] = useState<StationId>("place-boyls");
   const [simulating, setSimulating] = useState(false);
   const [viewer, setViewer] = useState<StationStory[] | null>(null);
   const [posting, setPosting] = useState(false);
-  /** 2D: a flat, north-up map without 3D buildings (lighter); 3D: the tilted city. */
-  const [view, setView] = useState<MapViewMode>("3d");
-  /** Map layers the rider has switched on (the HUD's Layers popover sets these). */
-  const [layers, setLayers] = useState<MapLayerVisibility>(ALL_LAYERS);
   /** Station whose platform we're standing on (walk-in view), if any. */
   const [inside, setInside] = useState<StationId | null>(null);
   const tunnelHost = useRef<HTMLDivElement>(null);
   const tunnelView = useRef<TunnelView | null>(null);
+  const touristMode = layers.tourist;
 
   const alerts = useMemo(() => {
     const fromWorld = world.alerts.filter((a) => !cleared.has(a.id) && !simAlerts.some((s) => s.id === a.id));
@@ -174,6 +197,7 @@ export default function Home() {
     // Branch gaps, next usable train, planned closures (shuttle pin) and the stale-ETA flag.
     return withTransitData(base, gaps, signals.byStation);
   }, [world.stations, world.alerts, alerts, liveOnly, cleared, live.nextMinutes, gaps, signals.byStation]);
+
   const openStopFeed = useCallback((id: StationId) => {
     setFeedStation(id);
     setFeedOpen(true);
@@ -188,6 +212,7 @@ export default function Home() {
 
   /** Look down into the opened street at a station (falls back to a plain fly-to). */
   const viewTunnel = useCallback((id: StationId, duration = 1800) => {
+    // The cutaway and the repair only exist in the 3D world.
     setView("3d");
     const view = scene.current?.cutawayView(id);
     if (view) map.current?.flyTo(view.center[0], view.center[1], { zoom: view.zoom, pitch: view.pitch, bearing: view.bearing, duration });
@@ -238,15 +263,27 @@ export default function Home() {
     [showOnMap],
   );
 
-  const toggleView = useCallback(() => {
-    const next = view === "3d" ? "2d" : "3d";
-    setView(next);
+  const changeView = useCallback((mode: MapViewMode) => {
+    setView(mode);
     try {
-      window.localStorage.setItem(VIEW_KEY, next);
+      window.localStorage.setItem(VIEW_KEY, mode);
     } catch {
       // private windows may block storage; the choice just won't stick
     }
-  }, [view]);
+  }, []);
+
+  // The map keeps the overview north-up in 2D.
+  const recenter = useCallback(() => map.current?.resetView(), []);
+
+  /** The Layers popover's setter: setLayers, plus unlocking speech when Tourist Beacons turn on. */
+  const changeLayers = useCallback(
+    (next: MapLayerVisibility) => {
+      // Tourist beacons narrate on the Demo Ride; Safari only allows speech after a tap like this one.
+      if (next.tourist && !layers.tourist) primeSpeech();
+      setLayers(next);
+    },
+    [layers.tourist],
+  );
 
   useEffect(
     () => () => {
@@ -349,6 +386,8 @@ export default function Home() {
     if (!station) return;
     const existing = alerts.find((a) => a.stationId === station.id);
     if (existing) return openAnyAlert(existing);
+    // A simulated delay is the demo: make sure its alert layer is showing.
+    setLayers((l) => (l.alerts ? l : { ...l, alerts: true }));
     setSimulating(true);
     try {
       const { alert } = await triggerDelay(station);
@@ -370,11 +409,55 @@ export default function Home() {
     }
   }, [alerts, delayStation, openAnyAlert, push, riding, sim, stationById, viewTunnel, walkInWhenOpen]);
 
+  /** XP from Quick-Checks and T-Feed: a toast and a sparkle on the avatar when it reaches a new rank. */
+  const announceGain = useCallback(
+    (result: GainResult) => {
+      if (!result.levelUp) return;
+      const hat = result.unlockedHat;
+      push(`Level ${result.levelUp.level} · ${result.levelUp.name}`, {
+        tone: "success",
+        description: hat ? `${HAT_INFO[hat].name} unlocked and on your avatar.` : `Unlocked: ${result.levelUp.perks.join(", ")}.`,
+        durationMs: 5500,
+      });
+      map.current?.celebrate();
+    },
+    [push],
+  );
+  const earn = useCallback((points: number) => announceGain(addPoints(points)), [addPoints, announceGain]);
+
+  const changeDemoMode = useCallback(
+    (on: boolean) => {
+      const next = setDemoMode(on);
+      push(next.demo ? "Judge Demo Mode on" : "Judge Demo Mode off", {
+        description: next.demo
+          ? `${rankOfLevel(4).name}: every level and feature unlocked. Jump to any level from your profile; Shift+D turns it off.`
+          : "Back to your real XP and unlocks.",
+      });
+    },
+    [push, setDemoMode],
+  );
+
+  // Shift+D toggles Judge Demo Mode (never while typing, where Shift+D is just a capital D).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!e.shiftKey || e.metaKey || e.ctrlKey || e.altKey || e.key.toLowerCase() !== "d" || e.repeat) return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+      e.preventDefault();
+      const next = toggleDemoMode();
+      push(next.demo ? "Judge Demo Mode on" : "Judge Demo Mode off", {
+        description: next.demo ? "Every level and feature unlocked. Shift+D again restores your real XP." : "Back to your real XP and unlocks.",
+      });
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [push, toggleDemoMode]);
+
   const handleWin = useCallback(
     async (alert: TranslatedAlert) => {
       setFixAlert(null);
       const previousHat = progress.equipped;
-      const { unlockedHat } = awardFix();
+      const { unlockedHat, levelUp } = awardFix();
       if (unlockedHat) setHatHold(previousHat);
       const station = stationById(alert.stationId);
       const name = station ? shortName(station) : "the station";
@@ -382,13 +465,19 @@ export default function Home() {
       const fault = sim.incidents.get(alert.id)?.fault ?? faultForGame(gameFor(alert));
 
       const reveal = async () => {
-        if (!unlockedHat) return;
+        if (!unlockedHat) {
+          if (levelUp) push(`Level ${levelUp.level} · ${levelUp.name}`, { tone: "success", description: `Unlocked: ${levelUp.perks.join(", ")}.` });
+          return;
+        }
         const [lng, lat] = map.current?.getAvatarLngLat() ?? [0, 0];
         map.current?.flyTo(lng, lat, { zoom: 16.4, pitch: 62, duration: 1500 });
         await wait(1600);
         setHatHold(null);
         map.current?.celebrate();
-        push(`${HAT_INFO[unlockedHat].name} unlocked!`, { tone: "success", description: "It just popped onto your avatar." });
+        push(levelUp ? `Level ${levelUp.level} · ${levelUp.name}` : `${HAT_INFO[unlockedHat].name} unlocked!`, {
+          tone: "success",
+          description: `${HAT_INFO[unlockedHat].name} just popped onto your avatar.`,
+        });
       };
 
       setRiding(false);
@@ -411,6 +500,9 @@ export default function Home() {
         }
         setCleared((set) => new Set(set).add(alert.id).add(flagKey(alert.stationId)));
         setSimAlerts((list) => list.filter((a) => a.id !== alert.id));
+        if (!alert.id.startsWith("local-")) {
+          void fetch(`${API_URL}/api/alerts/${encodeURIComponent(alert.id)}/resolve`, { method: "POST", signal: AbortSignal.timeout(4000) }).catch(() => {});
+        }
         push(`Service restored at ${name}`, {
           tone: "success",
           description:
@@ -497,7 +589,7 @@ export default function Home() {
   }, [live.events, names, notifyOn, push, staged]);
 
   const activeSim = simAlerts.find((a) => sim.incidents.has(a.id)) ?? null;
-  useTicker(500, !!activeSim || !!fixAlert);
+  useTicker(500, !!activeSim || !!fixAlert || (telemetry && telemetryUnlocked));
 
   /** The station whose street is open right now (offers "Go inside"). */
   const [openTunnel, setOpenTunnel] = useState<StationId | null>(null);
@@ -508,10 +600,14 @@ export default function Home() {
     }, 400);
     return () => window.clearInterval(timer);
   }, [activeStation]);
-  const nextHat = HAT_ORDER.find((h) => !progress.unlocked.includes(h)) ?? null;
+
+  const fixUnlock = hatUnlockedBetween(progress.points, progress.points + XP_REWARDS.fix);
+  const riderName = rider.name.trim() || DEFAULT_RIDER_NAME;
+  const getZoom = () => map.current?.getMap()?.getZoom() ?? 14;
+  const reportsNow = Object.values(signals.byStation).reduce((n, s) => n + (s?.total ?? 0), 0);
 
   return (
-    <main className="relative h-dvh w-full overflow-hidden bg-[#070b1a] text-slate-100">
+    <main className="relative h-dvh w-full overflow-hidden bg-[#070b1a] text-zinc-100">
       <FixTheTMap
         ref={map}
         sim={sim}
@@ -539,11 +635,11 @@ export default function Home() {
         onStationClick={(station) => {
           setNextStation(station.id);
           const stories = storiesByStation[station.id];
-          if (stories?.length) setViewer(stories);
+          if (stories?.length && layers.stories) setViewer(stories);
         }}
-        onAvatarClick={() => push("That's you, Charlie.", { description: "Ride the Green Line or fix a delay to earn a 3D hat." })}
+        onAvatarClick={() => push(`That's you, ${riderName}.`, { description: "Quick-Checks, T-Feed posts and Fix the T earn XP toward your next rank and 3D hat." })}
         quickCheckSignals={signals}
-        onQuickCheckPoints={(n) => addPoints(n)}
+        onQuickCheckPoints={(n) => earn(n)}
       >
         {layers.stories && <FeedStopPins posts={feed.posts} stations={world.stations} onOpenStop={openStopFeed} />}
         {layers.stories && (
@@ -556,43 +652,42 @@ export default function Home() {
             }}
           />
         )}
-        {layers.alerts && alerts.map((alert) => {
-          const station = stationById(alert.stationId);
-          if (!station) return null;
-          return (
-            <IncidentTag
-              key={alert.id}
-              station={station}
-              alert={alert}
-              sim={sim}
-              repairing={repairing === alert.stationId}
-              live={staged.has(alert.id)}
-              getZoom={() => map.current?.getMap()?.getZoom() ?? 14}
-              onOpen={openAnyAlert}
-            />
-          );
-        })}
-        {layers.alerts && (
-          <ClosureMarkers closures={live.closures} getZoom={() => map.current?.getMap()?.getZoom() ?? 14} onOpen={showAlertDetails} />
-        )}
-        {layers.alerts && (
-        <LiveMarkers
-          alerts={[...liveOnly].flatMap(([id, alert]) => {
-            const station = stationById(id);
-            return station ? [{ station, alert }] : [];
+        {layers.alerts &&
+          alerts.map((alert) => {
+            const station = stationById(alert.stationId);
+            if (!station) return null;
+            return (
+              <IncidentTag
+                key={alert.id}
+                station={station}
+                alert={alert}
+                sim={sim}
+                repairing={repairing === alert.stationId}
+                live={staged.has(alert.id)}
+                getZoom={getZoom}
+                onOpen={openAnyAlert}
+              />
+            );
           })}
-          stopped={live.stopped}
-          getZoom={() => map.current?.getMap()?.getZoom() ?? 14}
-          onOpenAlert={showAlertDetails}
-          onOpenTrain={(train) => {
-            // A train standing still near a modeled station opens the disabled-train rescue walkthrough.
-            const rescue = alertForStoppedTrain(train, stationsRef.current);
-            if (rescue && !repairing) return exploreLive(rescue);
-            setAlertFocus(null);
-            setAlertsOpen(true);
-            map.current?.flyTo(train.lng, train.lat, { zoom: 15.8, pitch: 55, duration: 1600 });
-          }}
-        />
+        {layers.alerts && <ClosureMarkers closures={live.closures} getZoom={getZoom} onOpen={showAlertDetails} />}
+        {layers.alerts && (
+          <LiveMarkers
+            alerts={[...liveOnly].flatMap(([id, alert]) => {
+              const station = stationById(id);
+              return station ? [{ station, alert }] : [];
+            })}
+            stopped={live.stopped}
+            getZoom={getZoom}
+            onOpenAlert={showAlertDetails}
+            onOpenTrain={(train) => {
+              // A train standing still near a modeled station opens the disabled-train rescue walkthrough.
+              const rescue = alertForStoppedTrain(train, stationsRef.current);
+              if (rescue && !repairing) return exploreLive(rescue);
+              setAlertFocus(null);
+              setAlertsOpen(true);
+              map.current?.flyTo(train.lng, train.lat, { zoom: 15.8, pitch: 55, duration: 1600 });
+            }}
+          />
         )}
       </FixTheTMap>
 
@@ -602,8 +697,8 @@ export default function Home() {
       />
 
       {inside && (
-        <div className="pointer-events-none absolute inset-x-0 bottom-[150px] z-30 flex justify-center px-3">
-          <div className="pointer-events-auto flex items-center gap-1.5 rounded-2xl border border-white/10 bg-slate-950/80 p-1.5 pl-3 text-xs text-slate-200 shadow-lg backdrop-blur-md">
+        <div className="pointer-events-none absolute inset-x-0 bottom-[10.5rem] z-30 flex justify-center px-3">
+          <div className={`${PANEL} pointer-events-auto flex items-center gap-1.5 p-1.5 pl-3 text-xs text-zinc-200`}>
             <span className="mr-1 hidden sm:inline">
               On the platform at <span className="font-semibold text-white">{shortName(stationById(inside) ?? { id: inside, name: "the station" })}</span> · drag to look around
             </span>
@@ -615,7 +710,7 @@ export default function Home() {
                 onPointerDown={() => tunnelView.current?.walk(dir)}
                 onPointerUp={() => tunnelView.current?.walk(0)}
                 onPointerLeave={() => tunnelView.current?.walk(0)}
-                className="flex size-9 items-center justify-center rounded-xl bg-white/5 hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-cyan-300"
+                className="flex size-9 items-center justify-center rounded-lg border border-white/12 bg-white/[0.05] hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-white"
               >
                 {dir < 0 ? <ChevronLeft className="size-4" /> : <ChevronRight className="size-4" />}
               </button>
@@ -623,7 +718,7 @@ export default function Home() {
             <button
               type="button"
               onClick={() => void exitTunnel()}
-              className="flex h-9 items-center gap-1.5 rounded-xl bg-white/10 px-3 font-semibold text-white hover:bg-white/15 focus-visible:outline-2 focus-visible:outline-cyan-300"
+              className="flex h-9 items-center gap-1.5 rounded-lg bg-white px-3 font-semibold text-zinc-950 hover:bg-zinc-200 focus-visible:outline-2 focus-visible:outline-white"
             >
               <LogOut className="size-4" />
               Back to street
@@ -632,15 +727,25 @@ export default function Home() {
         </div>
       )}
 
-      <header className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-2 p-3 sm:p-4">
-        <div className="pointer-events-auto flex items-center gap-2">
-          <div className="hidden h-14 flex-col justify-center rounded-2xl border border-white/10 bg-slate-950/75 px-4 shadow-lg backdrop-blur-md lg:flex">
-            <p className="bg-gradient-to-r from-cyan-300 via-white to-fuchsia-300 bg-clip-text text-base font-black tracking-[0.28em] text-transparent">
-              ABOVEGROUND
-            </p>
-            <p className="text-[10px] tracking-wide text-slate-400">T-Verse · Boston&apos;s living 3D T</p>
+      <header className="pointer-events-none absolute inset-x-0 top-0 z-30 flex items-start justify-between gap-2 p-3 sm:p-4">
+        <div className="pointer-events-auto flex items-start gap-2">
+          <div className={`${PANEL} hidden h-14 items-center gap-2.5 px-3 lg:flex`}>
+            <TRoundel size={30} />
+            <div className="leading-tight">
+              <p className="text-[15px] font-semibold tracking-tight text-white">AboveGround</p>
+              <p className="text-[10px] text-zinc-400">T-Verse · Boston&apos;s live T</p>
+            </div>
           </div>
-          <GameHUD progress={progress} onEquip={equip} />
+          <GameHUD
+            progress={progress}
+            rank={rank}
+            next={nextRankUp}
+            fraction={rankFraction}
+            gain={gain}
+            onEquip={equip}
+            onDemoModeChange={changeDemoMode}
+            onJumpToLevel={jumpToLevel}
+          />
         </div>
         <div className="pointer-events-auto flex shrink-0 flex-col-reverse items-end gap-2 sm:flex-row sm:items-center">
           <LiveAlertsButton
@@ -657,7 +762,40 @@ export default function Home() {
         </div>
       </header>
 
-      <div className="pointer-events-none absolute top-[72px] right-3 z-40 flex justify-end sm:top-[76px] sm:right-4">
+      {/* Right rail: map controls, and Pro telemetry under them. Ends 6rem above the dock. */}
+      <div className="pointer-events-none absolute top-[7.25rem] right-3 bottom-24 z-20 flex flex-col items-end gap-2 sm:top-[4.25rem] sm:right-4">
+        <div className="pointer-events-auto">
+          <MapControls
+            viewMode={view}
+            onViewModeChange={changeView}
+            layers={layers}
+            onLayersChange={changeLayers}
+            telemetry={telemetry}
+            onTelemetryChange={setTelemetry}
+            telemetryLockedHint={telemetryUnlocked ? null : `Unlocks at Lvl 3 · ${rankOfLevel(3).name}`}
+            onRecenter={recenter}
+            onOpen={() => setAlertsOpen(false)}
+          />
+        </div>
+        {telemetry && telemetryUnlocked && (
+          <div className="pointer-events-auto hidden sm:block">
+            <TelemetryCard
+              updatedAt={live.updatedAt}
+              stats={[
+                { label: "Trains on map", value: layers.trains ? sim.trainCount : "hidden" },
+                { label: "Train feed", value: world.source ? SOURCE_LABEL[world.source] : "…" },
+                { label: "Alerts in effect", value: live.alerts.length },
+                { label: "Closures", value: live.closures.length, alert: live.closures.length > 0 },
+                { label: "Standing trains", value: live.stopped.length, alert: live.stopped.length > 0 },
+                { label: "Rider reports", value: reportsNow },
+              ]}
+            />
+          </div>
+        )}
+      </div>
+
+      {/* Alerts panel: left of the map controls on desktop, full width on phones; ends above the dock. */}
+      <div className="pointer-events-none absolute inset-x-3 top-[7.25rem] bottom-24 z-40 flex items-start justify-end sm:inset-x-auto sm:top-[4.25rem] sm:right-[4.5rem]">
         <LiveAlertsPanel
           open={alertsOpen}
           onClose={() => setAlertsOpen(false)}
@@ -675,8 +813,9 @@ export default function Home() {
         />
       </div>
 
+      {/* Left rail: next trains (a button under the rider badge on phones, bottom-left from lg). */}
       {!inside && stationById(nextStation) && (
-        <div className="pointer-events-none absolute top-[72px] left-3 z-20 lg:top-auto lg:bottom-4 lg:left-4">
+        <div className="pointer-events-none absolute top-[5.25rem] bottom-24 left-3 z-20 flex flex-col items-start lg:top-[5.75rem] lg:left-4 lg:justify-end">
           <NextTrains
             station={stationById(nextStation)!}
             stations={stations}
@@ -692,12 +831,12 @@ export default function Home() {
         </div>
       )}
 
-      <div className="pointer-events-none absolute inset-x-3 top-[124px] z-30 flex justify-end sm:inset-x-auto sm:top-[76px] sm:right-4">
+      <div className="pointer-events-none absolute top-[7.75rem] right-[4.25rem] left-3 z-30 flex justify-end sm:top-20 sm:right-auto sm:left-1/2 sm:-translate-x-1/2 sm:justify-center">
         <ToastStack toasts={toasts} onDismiss={dismiss} />
       </div>
 
       {activeSim && stationById(activeSim.stationId) && (
-        <div className="pointer-events-none absolute inset-x-0 bottom-[84px] z-20 flex justify-center px-3">
+        <div className="pointer-events-none absolute inset-x-0 bottom-24 z-20 flex justify-center px-3">
           <div className="pointer-events-auto max-w-[min(94vw,460px)]">
             <IncidentBanner
               alert={activeSim}
@@ -719,20 +858,12 @@ export default function Home() {
             stations={stations}
             riding={riding}
             onToggleRide={() => setRiding((r) => !r)}
-            touristMode={touristMode}
-            onToggleTourist={() => {
-              primeSpeech();
-              setTouristMode((t) => !t);
-            }}
             onPostStory={() => setPosting(true)}
             delayStation={delayStation}
             onDelayStationChange={setDelayStation}
             onSimulateDelay={() => void simulateDelay()}
             simulating={simulating}
             delayDisabledReason={repairing ? "A repair is in progress" : null}
-            onOverview={() => (view === "2d" ? map.current?.getMap()?.easeTo({ center: BOSTON_CENTER, zoom: 13.4, bearing: 0, duration: 1200 }) : map.current?.resetView())}
-            view={view}
-            onToggleView={toggleView}
             extra={
               <TFeedButton
                 className="shrink-0"
@@ -753,7 +884,7 @@ export default function Home() {
         stationId={feedStation}
         onStationChange={setFeedStation}
         onJumpToStation={(id) => flyToFeedStop(map.current, id, world.stations)}
-        onPointsAwarded={(n) => addPoints(n)}
+        onPointsAwarded={(n) => earn(n)}
       />
 
       <FixTheTModal
@@ -761,7 +892,7 @@ export default function Home() {
         station={fixAlert ? stationById(fixAlert.stationId) : null}
         stats={fixAlert && sim.incidents.has(fixAlert.id) ? sim.stats(fixAlert.id) : null}
         simulated={!!fixAlert && sim.incidents.has(fixAlert.id)}
-        unlockName={nextHat ? HAT_INFO[nextHat].name : null}
+        unlockName={fixUnlock ? HAT_INFO[fixUnlock].name : null}
         explore={explore && fixAlert?.id === explore.id ? explore : null}
         onClose={closeFix}
         onWin={handleWin}
@@ -774,6 +905,7 @@ export default function Home() {
         stations={stations}
         onPosted={(draft) => {
           push("Story posted", { tone: "success", description: `Live on ${stationById(draft.stationId)?.name ?? "the map"}.` });
+          if (!layers.stories) setLayers((l) => ({ ...l, stories: true }));
           map.current?.flyToStation(draft.stationId, { zoom: 16 });
         }}
       />
