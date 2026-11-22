@@ -20,6 +20,8 @@ import {
 import {
   ClosureMarkers,
   closureScenario,
+  closureStatus,
+  closureTiming,
   IncidentSim,
   IncidentTag,
   LiveMarkers,
@@ -134,7 +136,7 @@ export default function Home() {
   }, [mapReady, theme]);
   const telemetryUnlocked = rank.level >= 3;
   /** A simulated repair staged from a live MBTA alert, while its card or repair is up. */
-  const [explore, setExplore] = useState<{ id: string; game: GameKind; label: string } | null>(null);
+  const [explore, setExplore] = useState<{ id: string; game: GameKind; label: string; alert: LiveAlert } | null>(null);
   // Read lazily: the toggle only renders inside the alerts panel, which starts closed, so SSR never shows it.
   const [notifySupported] = useState(() => typeof window !== "undefined" && "Notification" in window);
   const [notifyOn, setNotifyOn] = useState(
@@ -408,7 +410,7 @@ export default function Home() {
       if (busy) return openAlert(busy);
       const id = liveKey(a);
       setAlertsOpen(false);
-      setExplore({ id, ...scenario });
+      setExplore({ id, ...scenario, alert: a });
       setFixAlert(staged.get(id)?.alert ?? translateForGame(station, a.header, id, scenario.game));
       if (!sim.incidents.has(id)) sim.startIncident(id, station.id, { holds: false, fault: faultForGame(scenario.game) });
       viewTunnel(station.id);
@@ -574,12 +576,16 @@ export default function Home() {
       const before = sim.stats(alert.id);
       const heldBefore = sim.incidents.has(alert.id) ? before.heldTrains : 0;
 
+      const closed = explore?.id === alert.id && explore.alert.closure ? explore.alert : null;
       const restore = () => {
         sim.resolveIncident(alert.id);
         if (simulatedOnly) {
           push("Simulated repair complete", {
             tone: "success",
-            description: `That's roughly how crews handle it. The real MBTA alert near ${name} stays up until they clear it.`,
+            description: closed
+              ? `${name} is still ${closureStatus(closed)} in real life. ${closureTiming(closed).long.split(/(?<=\.)\s/)[0]}`
+              : `That's roughly how crews handle it. The real MBTA alert near ${name} stays up until they clear it.`,
+            durationMs: closed ? 7000 : undefined,
           });
           return;
         }
@@ -608,7 +614,7 @@ export default function Home() {
         void finish();
       }
     },
-    [awardFix, exitTunnel, progress.equipped, push, sim, stationById, viewTunnel],
+    [awardFix, exitTunnel, explore, progress.equipped, push, sim, stationById, viewTunnel],
   );
 
   const toggleNotify = useCallback(async () => {
