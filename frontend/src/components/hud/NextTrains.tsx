@@ -5,7 +5,7 @@ import { ChevronDown, TrainFront, TriangleAlert, X } from "lucide-react";
 import { countdownLabel, effectLabel, type Arrival, type LiveAlert } from "@/components/game";
 import { StaleEtaBadge } from "@/components/quickcheck";
 import { branchLabel } from "@/components/transit";
-import { CONTROL, FOCUS, LABEL, PANEL } from "@/lib/ui";
+import { CONTROL, DANGER_TEXT, FOCUS, LABEL, PANEL, WARN_TEXT } from "@/lib/ui";
 import type { Station, StationId } from "@/types/tverse";
 import { LineBullet } from "./LineBullet";
 
@@ -19,7 +19,7 @@ function useNow(everyMs: number) {
 }
 
 /** Amber, like the LED countdown signs on MBTA platforms. */
-const COUNTDOWN = "font-mono text-[13px] font-semibold tabular-nums text-[#ffb547]";
+const COUNTDOWN = `font-mono text-[13px] font-semibold tabular-nums ${WARN_TEXT}`;
 
 /** Amber for "riders don't trust this number", matching the station card's stale-ETA and branch-gap badges. */
 
@@ -68,7 +68,7 @@ export function NextTrains({
         <TrainFront className="size-4 text-zinc-300" />
         <span className="font-semibold">{station.name}</span>
         {closures.length > 0 ? (
-          <span className="font-semibold text-[#ff6b5e]">{effectLabel(closures[0])}</span>
+          <span className={`font-semibold ${DANGER_TEXT}`}>{effectLabel(closures[0])}</span>
         ) : (
           next && <span className={`${COUNTDOWN} ${stale ? "line-through decoration-amber-400/70 opacity-70" : ""}`}>{countdownLabel(next, now)}</span>
         )}
@@ -134,7 +134,7 @@ export function NextTrains({
               onClick={() => onOpenAlert(a)}
               className={`mb-2 flex w-full items-start gap-2 rounded-lg border border-[#DA291C]/45 bg-[#DA291C]/[0.06] p-2 text-left text-[12px] text-zinc-100 hover:bg-[#DA291C]/[0.12] ${FOCUS}`}
             >
-              <X className="mt-0.5 size-3.5 shrink-0 text-[#ff6b5e]" strokeWidth={3} />
+              <X className={`mt-0.5 size-3.5 shrink-0 ${DANGER_TEXT}`} strokeWidth={3} />
               <span className="line-clamp-2">{a.shortHeader}</span>
             </button>
           ))}

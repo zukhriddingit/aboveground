@@ -68,7 +68,7 @@ export function DemoBar({
             onClick={onSimulateDelay}
             disabled={simulating || !!delayDisabledReason}
             title={delayDisabledReason ?? "Demo: break something at this station"}
-            className={`${pill} rounded-none pr-2.5 text-white hover:bg-black/15`}
+            className={`${pill} rounded-none pr-2.5 text-[#fff] hover:bg-black/15`}
           >
             {simulating ? <Loader2 className="size-4 animate-spin" /> : <Zap className="size-4 fill-current" />}
             <span className="hidden sm:inline">Simulate T Delay</span>
@@ -82,7 +82,7 @@ export function DemoBar({
               id="delay-station"
               value={delayStation}
               onChange={(e) => onDelayStationChange(e.target.value as StationId)}
-              className={`h-11 max-w-[6.5rem] cursor-pointer appearance-none sm:max-w-32 bg-transparent pr-7 pl-2.5 text-xs font-medium text-white hover:bg-black/15 ${FOCUS}`}
+              className={`h-11 max-w-[6.5rem] cursor-pointer appearance-none sm:max-w-32 bg-transparent pr-7 pl-2.5 text-xs font-medium text-[#fff] hover:bg-black/15 ${FOCUS}`}
             >
               {stations.map((s) => (
                 <option key={s.id} value={s.id} className="bg-zinc-900 text-zinc-100">
@@ -90,7 +90,7 @@ export function DemoBar({
                 </option>
               ))}
             </select>
-            <ChevronDown aria-hidden className="pointer-events-none absolute right-2 size-3.5 text-white/80" />
+            <ChevronDown aria-hidden className="pointer-events-none absolute right-2 size-3.5 text-[#fff]/80" />
           </span>
         </div>
       </div>

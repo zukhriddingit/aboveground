@@ -1,400 +1,514 @@
 "use client";
+// A signal relay case in 3D: field wires come up from the cable on the left, each tagged for the relay
+// it feeds (track relays 1TR and 2TR, the home and distant signal relays HR and DR). Drag each wire's
+// ring lug onto its relay's brass terminal post; the nut runs down, the relay picks up behind its clear
+// cover and its lamp lights. With all four landed the track circuit clears and the signal goes green.
+import { useEffect, useRef, useState } from "react";
+import * as T from "three";
+import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
+import { ArenaGauge, ArenaShell, type ArenaMessage } from "./arena/ArenaShell";
+import { Sparks } from "./arena/fx";
+import { blackPlastic, brass, clearCover, copper, glow, insulation, labelPlate, labelTexture, paintedSteel, phenolic, rubber } from "./arena/materials";
+import { sfx } from "./arena/sfx";
+import type { Stage } from "./arena/Stage";
+import { nextMessageKey, useArena } from "./arena/useArena";
+import type { MiniGameProps } from "./miniGame";
 
-import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type PointerEvent } from "react";
-import { TimerBar, useCountdown } from "./useCountdown";
-
-// A signal relay case: field wires come in on the left, each tagged for the relay it feeds
-// (track relays 1TR and 2TR, the home and distant signal relays HR and DR). Land each wire on its
-// relay's terminal post; the post is tightened, the relay picks up and its lamp lights.
 const WIRES = [
-  { id: "1TR", label: "1 T R", color: "#e5484d", core: "#ff8a8d" },
-  { id: "2TR", label: "2 T R", color: "#f08c28", core: "#ffc078" },
-  { id: "HR", label: "H R", color: "#2fbf71", core: "#8cf0b8" },
-  { id: "DR", label: "D R", color: "#3d7bf0", core: "#9cbcff" },
+  { id: "1TR", name: "Track relay 1", color: "#c8302e" },
+  { id: "2TR", name: "Track relay 2", color: "#e07a1f" },
+  { id: "HR", name: "Home signal relay", color: "#1f9a52" },
+  { id: "DR", name: "Distant signal relay", color: "#2a62d4" },
 ] as const;
-
 type WireId = (typeof WIRES)[number]["id"];
-type Side = "L" | "R";
-type Terminal = { side: Side; id: WireId };
 
-const W = 360;
-const H = 300;
-const LEFT_X = 74;
-const RIGHT_X = 246;
-const rowY = (i: number) => 78 + i * 56;
-// Whole row bands count as the terminal, so a drop "near enough" always lands.
-const HIT_HALF_HEIGHT = 28;
-const HIT_LEFT_MAX_X = 150;
-const HIT_RIGHT_MIN_X = 196;
-const DRAG_THRESHOLD = 8;
-const WRONG_PENALTY_MS = 1000;
-let seq = 0;
+const rowY = (i: number) => 0.2 - i * 0.135;
+const POST_X = 0.07;
+const PARK_X = -0.29;
+const CABLE_END = new T.Vector3(-0.42, -0.34, 0.07);
+const DRAG_Z = 0.075;
+const SNAP = 0.045;
 
 function shuffled(): WireId[] {
   const ids = WIRES.map((w) => w.id) as WireId[];
   let out = ids;
-  while (out.every((id, i) => id === ids[i])) {
-    out = [...ids].sort(() => Math.random() - 0.5);
-  }
+  while (out.every((id, i) => id === ids[i])) out = [...ids].sort(() => Math.random() - 0.5);
   return out;
 }
 
-/** A hanging wire: a quadratic curve that sags more the longer it is. */
-function sagPath(x1: number, y1: number, x2: number, y2: number) {
-  const sag = 10 + Math.hypot(x2 - x1, y2 - y1) * 0.14;
-  return `M ${x1} ${y1} Q ${(x1 + x2) / 2} ${(y1 + y2) / 2 + sag} ${x2} ${y2}`;
+interface Relay {
+  id: WireId;
+  post: T.Vector3;
+  nut: T.Mesh;
+  armature: T.Object3D;
+  lamp: T.MeshStandardMaterial;
+  light: T.PointLight;
+  up: number;
+  flash: number;
 }
 
-function Wire({ d, color, core, live, ghost }: { d: string; color: string; core: string; live?: boolean; ghost?: boolean }) {
-  return (
-    <g pointerEvents="none" opacity={ghost ? 0.8 : 1}>
-      <path d={d} stroke="#05070d" strokeWidth={9} fill="none" strokeLinecap="round" opacity={0.85} />
-      <path d={d} stroke={color} strokeWidth={6.5} fill="none" strokeLinecap="round" />
-      <path d={d} stroke={core} strokeWidth={1.6} fill="none" strokeLinecap="round" opacity={0.75} transform="translate(0 -1.6)" />
-      {live && <path d={d} stroke="#fff7d6" strokeWidth={1.6} fill="none" strokeLinecap="round" strokeDasharray="2 16" className="animate-[fixt-current_0.7s_linear_infinite]" />}
-    </g>
+interface Wire {
+  id: WireId;
+  color: string;
+  rest: T.Vector3;
+  lug: T.Group;
+  hit: T.Mesh;
+  tube: T.Mesh;
+  at: T.Vector3;
+  goal: T.Vector3;
+  landed: boolean;
+}
+
+class RelayCaseScene {
+  private readonly relays: Relay[] = [];
+  private readonly wires: Wire[] = [];
+  private readonly sparks = new Sparks(400, -0.45, -6);
+  private readonly redLens: T.MeshStandardMaterial;
+  private readonly greenLens: T.MeshStandardMaterial;
+  private readonly signalLight: T.PointLight;
+  private readonly plane = new T.Plane(new T.Vector3(0, 0, 1), -DRAG_Z);
+  private carry: { wire: Wire; pointer: number; downX: number; downY: number; moved: boolean; sticky: boolean } | null = null;
+  private hover: Relay | null = null;
+  private clear = false;
+  private readonly off: () => void;
+
+  constructor(
+    private readonly stage: Stage,
+    order: WireId[],
+    private readonly report: { landed: (id: WireId) => void; wrong: (wire: WireId, relay: WireId) => void; picked: (id: WireId | null) => void },
+  ) {
+    const { scene } = stage;
+    stage.frame({ x: -0.04, y: -0.04, z: 0.05 }, 0.5, { x: 0.12, y: 0.18, z: 1 });
+
+    // Case interior: back panel, sides, top, a mounting channel.
+    const back = new T.Mesh(new T.BoxGeometry(1.2, 1.0, 0.02), paintedSteel("#6f746e", "case"));
+    back.position.set(0, -0.02, -0.01);
+    back.receiveShadow = true;
+    scene.add(back);
+    for (const x of [-0.6, 0.6]) {
+      const side = new T.Mesh(new T.BoxGeometry(0.02, 1.0, 0.36), paintedSteel("#5b605a", "caseSide"));
+      side.position.set(x, -0.02, 0.17);
+      side.receiveShadow = side.castShadow = true;
+      scene.add(side);
+    }
+    const top = new T.Mesh(new T.BoxGeometry(1.22, 0.02, 0.36), paintedSteel("#5b605a", "caseSide"));
+    top.position.set(0, 0.48, 0.17);
+    top.castShadow = top.receiveShadow = true;
+    scene.add(top);
+    const floor = top.clone();
+    floor.position.y = -0.52;
+    scene.add(floor);
+
+    // Terminal board under the posts, and the parking strip where the loose wires hang.
+    const board = new T.Mesh(new RoundedBoxGeometry(0.1, 0.6, 0.016, 2, 0.004), phenolic());
+    board.position.set(POST_X, rowY(1.5), 0.012);
+    board.castShadow = board.receiveShadow = true;
+    scene.add(board);
+    const strip = new T.Mesh(new RoundedBoxGeometry(0.07, 0.6, 0.012, 2, 0.003), phenolic());
+    strip.position.set(PARK_X, rowY(1.5), 0.01);
+    strip.receiveShadow = true;
+    scene.add(strip);
+    const plate = labelPlate("FIELD", 0.08, 0.026, { bg: "#e9e4d6", fg: "#1b1b1b", w: 192, h: 64 });
+    plate.position.set(PARK_X, 0.33, 0.02);
+    scene.add(plate);
+    const plate2 = labelPlate("RELAY TERMINALS", 0.2, 0.026, { bg: "#e9e4d6", fg: "#1b1b1b", w: 512, h: 64 });
+    plate2.position.set(0.2, 0.33, 0.02);
+    scene.add(plate2);
+
+    // Relays, in the shuffled order down the rack.
+    order.forEach((id, i) => this.relays.push(this.buildRelay(id, i)));
+
+    // Field cable and its four conductors.
+    const cable = new T.Mesh(
+      new T.TubeGeometry(new T.CatmullRomCurve3([new T.Vector3(-0.47, -0.62, 0.1), new T.Vector3(-0.45, -0.5, 0.09), CABLE_END.clone()]), 24, 0.022, 14),
+      rubber(),
+    );
+    cable.castShadow = true;
+    scene.add(cable);
+    const boot = new T.Mesh(new T.CylinderGeometry(0.026, 0.023, 0.04, 16), blackPlastic());
+    boot.position.copy(CABLE_END).add({ x: 0, y: 0.01, z: 0 });
+    scene.add(boot);
+    WIRES.forEach((w, i) => this.wires.push(this.buildWire(w.id, w.color, i)));
+
+    this.signalLight = new T.PointLight("#ff3020", 0.6, 0.6, 2);
+    const head = this.buildSignalHead();
+    this.redLens = head.red;
+    this.greenLens = head.green;
+    scene.add(head.group);
+    this.signalLight.position.set(-0.06, 0.34, 0.12);
+    scene.add(this.signalLight);
+
+    // A work lamp from the upper left, a cool fill and a little bounce.
+    const key = new T.SpotLight("#ffe2bc", 3, 5, 0.55, 0.6, 2);
+    key.position.set(-0.7, 0.9, 1.2);
+    key.target.position.set(0, -0.05, 0);
+    key.castShadow = true;
+    key.shadow.mapSize.set(2048, 2048);
+    key.shadow.bias = -0.0004;
+    key.shadow.normalBias = 0.004;
+    key.shadow.camera.near = 0.3;
+    key.shadow.camera.far = 3;
+    key.shadow.radius = 4;
+    scene.add(key, key.target);
+    const fill = new T.DirectionalLight("#8fa8cc", 0.18);
+    fill.position.set(1, 0.4, 1);
+    scene.add(fill);
+    scene.add(new T.HemisphereLight("#c9d4e6", "#1d1a17", 0.08));
+    scene.add(this.sparks.object);
+
+    const canvas = stage.canvas;
+    canvas.addEventListener("pointerdown", this.onDown);
+    window.addEventListener("pointermove", this.onMove);
+    window.addEventListener("pointerup", this.onUp);
+    this.off = stage.onFrame(this.tick);
+    // Development only, for the recorded demo: where to drag each wire still loose (client pixels).
+    if (process.env.NODE_ENV !== "production") (window as unknown as { __wireTargets?: () => unknown }).__wireTargets = () => this.targets();
+  }
+
+  private targets() {
+    const rect = this.stage.canvas.getBoundingClientRect();
+    const client = (p: T.Vector3) => {
+      const v = this.stage.toScreen(p);
+      return [Math.round(rect.left + v.x), Math.round(rect.top + v.y)];
+    };
+    return this.wires
+      .filter((w) => !w.landed)
+      .map((w) => {
+        const relay = this.relays.find((r) => r.id === w.id)!;
+        return { id: w.id, from: client(w.hit.getWorldPosition(new T.Vector3())), to: client(new T.Vector3(relay.post.x, relay.post.y, DRAG_Z)) };
+      });
+  }
+
+  private buildRelay(id: WireId, i: number): Relay {
+    const scene = this.stage.scene;
+    const y = rowY(i);
+    const g = new T.Group();
+    g.position.set(0.26, y, 0);
+    const base = new T.Mesh(new RoundedBoxGeometry(0.2, 0.11, 0.05, 2, 0.006), blackPlastic());
+    base.position.z = 0.025;
+    base.castShadow = base.receiveShadow = true;
+    g.add(base);
+    // Inside the clear cover: the coil, the armature that picks up, contact fingers.
+    const coil = new T.Mesh(new T.CylinderGeometry(0.018, 0.018, 0.06, 20), copper());
+    coil.rotation.z = Math.PI / 2;
+    coil.position.set(-0.04, 0.005, 0.08);
+    g.add(coil);
+    const pivot = new T.Group();
+    pivot.position.set(0.0, -0.02, 0.08);
+    const arm = new T.Mesh(new T.BoxGeometry(0.06, 0.006, 0.03), paintedSteel("#7d8288", "armature"));
+    arm.position.x = 0.03;
+    pivot.add(arm);
+    pivot.rotation.z = -0.18;
+    g.add(pivot);
+    for (let k = 0; k < 3; k++) {
+      const finger = new T.Mesh(new T.BoxGeometry(0.004, 0.035, 0.004), paintedSteel("#d9dde2", "silver"));
+      finger.position.set(0.035 + k * 0.012, 0.02, 0.07);
+      g.add(finger);
+    }
+    const cover = new T.Mesh(new RoundedBoxGeometry(0.17, 0.095, 0.075, 3, 0.01), clearCover());
+    cover.position.set(-0.008, 0, 0.088);
+    cover.renderOrder = 2;
+    g.add(cover);
+    const name = new T.Mesh(
+      new T.PlaneGeometry(0.044, 0.018),
+      new T.MeshStandardMaterial({ map: labelTexture(id, { bg: "#f1ecdd", fg: "#111111", w: 192, h: 84 }), roughness: 0.6 }),
+    );
+    name.position.set(-0.05, -0.03, 0.0505);
+    g.add(name);
+    const lamp = glow("#3a0a0a", 0.6);
+    const lens = new T.Mesh(new T.SphereGeometry(0.008, 16, 12), lamp);
+    lens.position.set(0.075, -0.025, 0.054);
+    g.add(lens);
+    const light = new T.PointLight("#3dff8f", 0, 0.25, 2);
+    light.position.set(0.075, -0.025, 0.08);
+    g.add(light);
+    scene.add(g);
+
+    // Brass binding post on the terminal board, wired to the relay, with its designation tag above it.
+    const post = new T.Vector3(POST_X, y, 0.022);
+    const tag = labelPlate(id, 0.062, 0.024, { bg: "#ece6d4", fg: "#111111", w: 224, h: 88, border: "#8c8574" });
+    tag.position.set(POST_X, y + 0.04, 0.0215);
+    scene.add(tag);
+    const stud = new T.Mesh(new T.CylinderGeometry(0.0065, 0.0065, 0.04, 16), brass());
+    stud.rotation.x = Math.PI / 2;
+    stud.position.copy(post).add({ x: 0, y: 0, z: 0.02 });
+    stud.castShadow = true;
+    scene.add(stud);
+    const washer = new T.Mesh(new T.CylinderGeometry(0.014, 0.014, 0.002, 24), brass());
+    washer.rotation.x = Math.PI / 2;
+    washer.position.copy(post).add({ x: 0, y: 0, z: 0.004 });
+    scene.add(washer);
+    // Its own material: the nut glows faintly while a wire hovers over its post.
+    const nut = new T.Mesh(new T.CylinderGeometry(0.0115, 0.0115, 0.009, 6), brass().clone());
+    nut.rotation.x = Math.PI / 2;
+    nut.position.copy(post).add({ x: 0, y: 0, z: 0.036 });
+    nut.castShadow = true;
+    scene.add(nut);
+    const jumper = new T.Mesh(
+      new T.TubeGeometry(new T.QuadraticBezierCurve3(post.clone().add({ x: 0.01, y: 0, z: 0.008 }), new T.Vector3(0.13, y - 0.035, 0.03), new T.Vector3(0.17, y - 0.02, 0.03)), 16, 0.0028, 8),
+      insulation("#161616"),
+    );
+    scene.add(jumper);
+    return { id, post, nut, armature: pivot, lamp, light, up: 0, flash: 0 };
+  }
+
+  private buildWire(id: WireId, color: string, i: number): Wire {
+    const scene = this.stage.scene;
+    const rest = new T.Vector3(PARK_X, rowY(i), 0.035);
+    const lug = new T.Group();
+    const ring = new T.Mesh(new T.TorusGeometry(0.0085, 0.0028, 10, 24), paintedSteel("#c7ccd2", "tin"));
+    const barrel = new T.Mesh(new T.CylinderGeometry(0.0045, 0.0045, 0.022, 12), paintedSteel("#c7ccd2", "tin"));
+    barrel.position.set(-0.019, 0, 0);
+    barrel.rotation.z = Math.PI / 2;
+    const sleeve = new T.Mesh(new T.CylinderGeometry(0.0058, 0.0058, 0.014, 12), insulation(color));
+    sleeve.position.set(-0.034, 0, 0);
+    sleeve.rotation.z = Math.PI / 2;
+    const tag = new T.Mesh(
+      new T.PlaneGeometry(0.05, 0.025),
+      new T.MeshStandardMaterial({ map: labelTexture(id, { bg: "#f4efe2", fg: "#141414", w: 160, h: 80, border: "#9b9485" }), roughness: 0.8, side: T.DoubleSide }),
+    );
+    tag.position.set(-0.046, 0.024, 0.004);
+    tag.rotation.z = 0.12;
+    ring.castShadow = barrel.castShadow = sleeve.castShadow = tag.castShadow = true;
+    lug.add(ring, barrel, sleeve, tag);
+    const hit = new T.Mesh(new T.SphereGeometry(0.035, 8, 6), new T.MeshBasicMaterial({ visible: false }));
+    hit.userData.wire = id;
+    lug.add(hit);
+    lug.position.copy(rest);
+    scene.add(lug);
+    const tube = new T.Mesh(new T.BufferGeometry(), insulation(color));
+    tube.castShadow = true;
+    scene.add(tube);
+    const w: Wire = { id, color, rest, lug, hit, tube, at: rest.clone(), goal: rest.clone(), landed: false };
+    this.shapeWire(w);
+    return w;
+  }
+
+  /** Re-hang the conductor from the cable end to the lug, sagging with its length. */
+  private shapeWire(w: Wire) {
+    const i = WIRES.findIndex((x) => x.id === w.id);
+    const start = CABLE_END.clone().add({ x: (i - 1.5) * 0.008, y: 0.02, z: 0 });
+    const end = w.lug.position.clone().add({ x: -0.04, y: 0, z: 0 });
+    const len = start.distanceTo(end);
+    const mid = start.clone().lerp(end, 0.5).add({ x: -0.03, y: -0.05 - len * 0.18, z: 0.03 + len * 0.05 });
+    const curve = new T.CatmullRomCurve3([start, start.clone().add({ x: 0.0, y: 0.05, z: 0.01 }), mid, end.clone().add({ x: -0.02, y: 0, z: 0 }), end]);
+    w.tube.geometry.dispose();
+    w.tube.geometry = new T.TubeGeometry(curve, 48, 0.0042, 10);
+  }
+
+  private buildSignalHead() {
+    const g = new T.Group();
+    g.position.set(-0.06, 0.34, 0.06);
+    const housing = new T.Mesh(new RoundedBoxGeometry(0.075, 0.13, 0.05, 3, 0.012), blackPlastic());
+    housing.castShadow = true;
+    g.add(housing);
+    const red = glow("#ff1a0a", 2.4);
+    const green = glow("#0a2a14", 0.3);
+    for (const [y, mat] of [[0.03, red], [-0.03, green]] as const) {
+      const lens = new T.Mesh(new T.CircleGeometry(0.019, 28), mat);
+      lens.position.set(0, y, 0.0255);
+      g.add(lens);
+      const visor = new T.Mesh(new T.CylinderGeometry(0.024, 0.024, 0.03, 20, 1, true, -Math.PI / 2, Math.PI), blackPlastic());
+      visor.rotation.x = Math.PI / 2;
+      visor.position.set(0, y + 0.002, 0.04);
+      g.add(visor);
+    }
+    return { group: g, red, green };
+  }
+
+  private relayNear(p: T.Vector3) {
+    let best: Relay | null = null;
+    let d = SNAP;
+    for (const r of this.relays) {
+      if (this.wires.some((w) => w.landed && w.id === r.id)) continue;
+      const dd = Math.hypot(r.post.x - p.x, r.post.y - p.y);
+      if (dd < d) {
+        d = dd;
+        best = r;
+      }
+    }
+    return best;
+  }
+
+  private onDown = (e: PointerEvent) => {
+    if (this.clear) return;
+    if (this.carry?.sticky) {
+      // Carrying after a tap: this click lands it, or puts it back.
+      this.drop(this.carry.wire, e);
+      return;
+    }
+    const hit = this.stage.pick(e, this.wires.filter((w) => !w.landed).map((w) => w.hit));
+    const wire = hit && this.wires.find((w) => w.id === hit.object.userData.wire);
+    if (!wire) return;
+    this.carry = { wire, pointer: e.pointerId, downX: e.clientX, downY: e.clientY, moved: false, sticky: false };
+    this.report.picked(wire.id);
+    sfx.click();
+  };
+
+  private onMove = (e: PointerEvent) => {
+    const c = this.carry;
+    if (!c) return;
+    if (!c.sticky && e.pointerId !== c.pointer) return;
+    if (Math.hypot(e.clientX - c.downX, e.clientY - c.downY) > 6) c.moved = true;
+    const p = this.stage.toPlane(e, this.plane);
+    if (!p) return;
+    p.x = Math.max(-0.5, Math.min(0.5, p.x));
+    p.y = Math.max(-0.45, Math.min(0.42, p.y));
+    this.hover = this.relayNear(p);
+    c.wire.goal.copy(this.hover ? this.hover.post.clone().add({ x: 0, y: 0, z: 0.05 }) : p);
+  };
+
+  private onUp = (e: PointerEvent) => {
+    const c = this.carry;
+    if (!c || c.sticky || e.pointerId !== c.pointer) return;
+    if (!c.moved) {
+      // A tap picks the wire up; the next click places it.
+      c.sticky = true;
+      return;
+    }
+    this.drop(c.wire, e);
+  };
+
+  private drop(w: Wire, e: PointerEvent) {
+    this.carry = null;
+    this.report.picked(null);
+    const p = this.stage.toPlane(e, this.plane);
+    const target = p ? this.relayNear(p) : null;
+    this.hover = null;
+    if (!target) {
+      w.goal.copy(w.rest);
+      return;
+    }
+    if (target.id === w.id) {
+      w.landed = true;
+      w.goal.copy(target.post).add({ x: 0, y: 0, z: 0.03 });
+      setTimeout(() => {
+        sfx.click();
+        target.up = 0.0001;
+      }, 220);
+      this.report.landed(w.id);
+      return;
+    }
+    const at = target.post.clone().add({ x: 0, y: 0, z: 0.04 });
+    this.sparks.emit(at, { x: 0, y: 0.4, z: 1 }, 70, 0.9, [0.6, 2.2], [0.25, 0.7]);
+    target.flash = 1;
+    this.stage.shake(0.6);
+    sfx.zap();
+    sfx.buzz();
+    w.goal.copy(w.rest);
+    this.report.wrong(w.id, target.id);
+  }
+
+  private tick = (dt: number, t: number) => {
+    for (const w of this.wires) {
+      const before = w.lug.position.clone();
+      w.lug.position.lerp(w.goal, 1 - Math.exp(-dt * (this.carry?.wire === w ? 22 : 9)));
+      if (this.carry?.wire === w) w.lug.position.z = Math.max(w.lug.position.z, DRAG_Z - 0.01);
+      w.lug.rotation.z = this.carry?.wire === w ? Math.sin(t * 3) * 0.08 : 0;
+      if (before.distanceToSquared(w.lug.position) > 1e-9) this.shapeWire(w);
+    }
+    for (const r of this.relays) {
+      const landed = this.wires.some((w) => w.landed && w.id === r.id);
+      if (r.up > 0) r.up = Math.min(1, r.up + dt * 6);
+      // Nut runs down onto the lug, armature picks up, lamp goes green.
+      if (landed) {
+        r.nut.rotation.y += dt * 18 * (1 - r.up);
+        r.nut.position.z = r.post.z + 0.036 - 0.016 * r.up;
+      }
+      r.armature.rotation.z = -0.18 + 0.2 * r.up;
+      const hot = this.hover === r && this.carry ? 0.5 + Math.sin(t * 10) * 0.2 : 0;
+      r.flash = Math.max(0, r.flash - dt * 2.2);
+      if (r.up > 0) {
+        r.lamp.emissive.set("#2bff7a");
+        r.lamp.emissiveIntensity = 3.2;
+        r.light.color.set("#3dff8f");
+        r.light.intensity = 0.25;
+      } else if (r.flash > 0) {
+        r.lamp.emissive.set("#ff2a1a");
+        r.lamp.emissiveIntensity = Math.sin(t * 40) > 0 ? 5 : 0.5;
+        r.light.color.set("#ff3a2a");
+        r.light.intensity = r.flash * 0.4;
+      } else {
+        r.lamp.emissive.set(hot ? "#ffd27a" : "#3a0a0a");
+        r.lamp.emissiveIntensity = hot ? 2 + hot : 0.6;
+        r.light.intensity = 0;
+      }
+      (r.nut.material as T.MeshStandardMaterial).emissive?.set(hot ? "#3a2a08" : "#000000");
+    }
+    if (!this.clear && this.relays.every((r) => r.up >= 1)) {
+      this.clear = true;
+      this.redLens.emissiveIntensity = 0.25;
+      this.redLens.emissive.set("#2a0a06");
+      this.greenLens.emissive.set("#2bff7a");
+      this.greenLens.emissiveIntensity = 5;
+      this.signalLight.color.set("#3dff8f");
+      this.signalLight.position.y = 0.31;
+    }
+    this.signalLight.intensity = this.clear ? 0.9 : 0.6;
+    this.sparks.update(dt);
+  };
+
+  dispose() {
+    this.off();
+    delete (window as unknown as { __wireTargets?: () => unknown }).__wireTargets;
+    this.stage.canvas.removeEventListener("pointerdown", this.onDown);
+    window.removeEventListener("pointermove", this.onMove);
+    window.removeEventListener("pointerup", this.onUp);
+  }
+}
+
+/** Signal relay: drag each tagged wire onto the relay terminal with the same tag. */
+export function WireMatchGame({ onWin, onExit, place }: MiniGameProps) {
+  const [order] = useState(shuffled);
+  const [landed, setLanded] = useState<WireId[]>([]);
+  const [holding, setHolding] = useState<WireId | null>(null);
+  const [message, setMessage] = useState<ArenaMessage | null>(null);
+  const won = landed.length === WIRES.length;
+  const { hostRef } = useArena(
+    (stage) =>
+      new RelayCaseScene(stage, order, {
+        landed: (id) => {
+          setLanded((list) => (list.includes(id) ? list : [...list, id]));
+          setMessage({ text: `${id} landed · relay picked up`, tone: "good", key: nextMessageKey() });
+        },
+        wrong: (wire, relay) => setMessage({ text: `That post feeds ${relay}. This wire is tagged ${wire}.`, tone: "warn", key: nextMessageKey() }),
+        picked: setHolding,
+      }),
+    { background: "#050608", envIntensity: 0.12, exposure: 1 },
   );
-}
 
-/** Brass terminal post with a hex nut; `tight` spins the nut down once a wire is landed. */
-function Post({ x, y, tight, glow }: { x: number; y: number; tight?: boolean; glow?: boolean }) {
-  return (
-    <g>
-      <circle cx={x} cy={y} r={11} fill="#2a2416" stroke={glow ? "#ffffff" : "#6b5a2e"} strokeWidth={glow ? 2.5 : 1.5} />
-      <g style={{ transformBox: "fill-box", transformOrigin: "center" }} className={tight ? "animate-[fixt-tighten_0.45s_ease-out]" : ""}>
-        <polygon points={hex(x, y, 7.5)} fill={tight ? "#e8c45a" : "#b8963c"} stroke="#5c4a1c" strokeWidth={1} />
-      </g>
-      <circle cx={x} cy={y} r={2.6} fill="#5c4a1c" />
-    </g>
-  );
-}
-
-const hex = (x: number, y: number, r: number) =>
-  Array.from({ length: 6 }, (_, k) => `${x + r * Math.cos((k * Math.PI) / 3 + Math.PI / 6)},${y + r * Math.sin((k * Math.PI) / 3 + Math.PI / 6)}`).join(" ");
-
-/** Signal relay: drag (or tap) each tagged wire onto the relay with the same tag. */
-export function WireMatchGame({
-  durationMs = 16000,
-  onWin,
-  onLose,
-}: {
-  durationMs?: number;
-  onWin: (remainingMs: number) => void;
-  onLose: () => void;
-}) {
-  const [right] = useState(shuffled);
-  const [selected, setSelected] = useState<Terminal | null>(null);
-  const [connected, setConnected] = useState<WireId[]>([]);
-  const [wrong, setWrong] = useState<{ from: Terminal; to: Terminal; key: number } | null>(null);
-  const [sparks, setSparks] = useState<Array<{ key: number; y: number }>>([]);
-  const [pointer, setPointer] = useState<{ x: number; y: number } | null>(null);
-  const [lost, setLost] = useState(false);
-  const drag = useRef<{ id: number; x: number; y: number; moved: boolean } | null>(null);
-  const svgRef = useRef<SVGSVGElement>(null);
-  const won = connected.length === WIRES.length;
-  const { remaining, penalize } = useCountdown(durationMs, !won && !lost, () => {
-    setLost(true);
-    onLose();
-  });
-  const finish = useRef({ onWin, remaining });
+  const finish = useRef(onWin);
   useEffect(() => {
-    finish.current = { onWin, remaining };
+    finish.current = onWin;
   });
-
   useEffect(() => {
     if (!won) return;
-    const t = setTimeout(() => finish.current.onWin(finish.current.remaining), 1100);
+    sfx.success();
+    const t = setTimeout(() => finish.current(), 2600);
     return () => clearTimeout(t);
   }, [won]);
 
-  const wireOf = (id: WireId) => WIRES.find((w) => w.id === id)!;
-  const yOf = (t: Terminal) => (t.side === "L" ? rowY(WIRES.findIndex((w) => w.id === t.id)) : rowY(right.indexOf(t.id)));
-
-  const attempt = (a: Terminal, b: Terminal) => {
-    const from = a.side === "L" ? a : b;
-    const to = a.side === "L" ? b : a;
-    setSelected(null);
-    if (from.id === to.id) {
-      setConnected((list) => (list.includes(from.id) ? list : [...list, from.id]));
-      setSparks((s) => [...s.slice(-3), { key: ++seq, y: yOf(to) }]);
-      navigator.vibrate?.(25);
-    } else {
-      penalize(WRONG_PENALTY_MS);
-      setWrong({ from, to, key: ++seq });
-      setTimeout(() => setWrong(null), 650);
-    }
-  };
-
-  const choose = (t: Terminal) => {
-    if (won || lost || connected.includes(t.id)) return;
-    if (!selected || selected.side === t.side) {
-      setSelected(selected && selected.side === t.side && selected.id === t.id ? null : t);
-      return;
-    }
-    attempt(selected, t);
-  };
-
-  const toLocal = (e: PointerEvent<SVGSVGElement>) => {
-    const rect = svgRef.current!.getBoundingClientRect();
-    return { x: ((e.clientX - rect.left) / rect.width) * W, y: ((e.clientY - rect.top) / rect.height) * H };
-  };
-
-  const hit = (p: { x: number; y: number }, side?: Side): Terminal | null => {
-    const s: Side | null = p.x <= HIT_LEFT_MAX_X ? "L" : p.x >= HIT_RIGHT_MIN_X ? "R" : null;
-    if (!s || (side && s !== side)) return null;
-    const ids = s === "L" ? WIRES.map((w) => w.id) : right;
-    const i = ids.findIndex((_, k) => Math.abs(p.y - rowY(k)) <= HIT_HALF_HEIGHT);
-    if (i < 0 || connected.includes(ids[i])) return null;
-    return { side: s, id: ids[i] };
-  };
-
-  const opposite = selected ? (selected.side === "L" ? "R" : "L") : undefined;
-  const snap = selected && pointer ? hit(pointer, opposite) : null;
-
-  const onPointerDown = (e: PointerEvent<SVGSVGElement>) => {
-    if (won || lost) return;
-    const p = toLocal(e);
-    setPointer(p);
-    const t = hit(p);
-    if (!t) {
-      setSelected(null);
-      return;
-    }
-    if (selected && selected.side !== t.side) {
-      attempt(selected, t);
-      return;
-    }
-    setSelected(t);
-    drag.current = { id: e.pointerId, x: p.x, y: p.y, moved: false };
-    e.currentTarget.setPointerCapture?.(e.pointerId);
-  };
-
-  const onPointerMove = (e: PointerEvent<SVGSVGElement>) => {
-    const p = toLocal(e);
-    setPointer(p);
-    const d = drag.current;
-    if (d && d.id === e.pointerId && Math.hypot(p.x - d.x, p.y - d.y) > DRAG_THRESHOLD) d.moved = true;
-  };
-
-  const onPointerUp = (e: PointerEvent<SVGSVGElement>) => {
-    const d = drag.current;
-    drag.current = null;
-    if (!d || d.id !== e.pointerId || !selected) return;
-    const target = hit(toLocal(e), selected.side === "L" ? "R" : "L");
-    if (target) attempt(selected, target);
-    else if (d.moved) setSelected(null);
-  };
-
-  const activate = (t: Terminal) => (e: MouseEvent) => {
-    // Pointer input is handled on the board; this path is for keyboard and screen-reader clicks.
-    if (e.detail === 0) choose(t);
-  };
-
-  const onKey = (t: Terminal) => (e: KeyboardEvent) => {
-    if (e.key === "Enter" || e.key === " ") {
-      e.preventDefault();
-      choose(t);
-    }
-  };
-
-  let preview: { d: string; id: WireId } | null = null;
-  if (selected) {
-    const selY = yOf(selected);
-    const from = selected.side === "L" ? { x: LEFT_X, y: selY } : { x: RIGHT_X, y: selY };
-    const to = snap ? { x: snap.side === "L" ? LEFT_X : RIGHT_X, y: yOf(snap) } : pointer ?? { x: from.x + (selected.side === "L" ? 40 : -40), y: selY + 20 };
-    preview = { d: sagPath(from.x, from.y, to.x, to.y), id: selected.id };
-  }
-
   return (
-    <div className="space-y-3">
-      <TimerBar remaining={remaining} total={durationMs} />
-      <svg
-        ref={svgRef}
-        viewBox={`0 0 ${W} ${H}`}
-        className="w-full touch-none select-none rounded-xl border border-slate-600/40 bg-[#1b2026]"
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
-        onPointerCancel={() => {
-          drag.current = null;
-        }}
-        onPointerLeave={() => !drag.current && setPointer(null)}
-      >
-        <defs>
-          {/* User-space region: a bounding-box region collapses to nothing for a perfectly straight wire. */}
-          <filter id="fixt-wire-glow" filterUnits="userSpaceOnUse" x={-20} y={-20} width={W + 40} height={H + 40}>
-            <feGaussianBlur stdDeviation="3.5" result="b" />
-            <feMerge>
-              <feMergeNode in="b" />
-              <feMergeNode in="SourceGraphic" />
-            </feMerge>
-          </filter>
-          <linearGradient id="fixt-case" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0" stopColor="#2c333b" />
-            <stop offset="1" stopColor="#181c21" />
-          </linearGradient>
-          <linearGradient id="fixt-relay" x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0" stopColor="#11161c" />
-            <stop offset="0.5" stopColor="#222a33" />
-            <stop offset="1" stopColor="#11161c" />
-          </linearGradient>
-          <pattern id="fixt-perf" width="10" height="10" patternUnits="userSpaceOnUse">
-            <circle cx="5" cy="5" r="1.2" fill="#0d1014" />
-          </pattern>
-        </defs>
-
-        {/* Case back panel and the two boards. */}
-        <rect width={W} height={H} fill="url(#fixt-case)" />
-        <rect x={10} y={44} width={104} height={H - 54} rx={6} fill="#20262d" stroke="#39424d" />
-        <rect x={10} y={44} width={104} height={H - 54} rx={6} fill="url(#fixt-perf)" opacity={0.6} />
-        <rect x={196} y={44} width={154} height={H - 54} rx={6} fill="#20262d" stroke="#39424d" />
-
-        {/* Signal head: red until every circuit is live. */}
-        <g>
-          <rect x={W / 2 - 13} y={8} width={26} height={30} rx={6} fill="#0b0d10" stroke="#39424d" />
-          <circle cx={W / 2} cy={17} r={5.5} fill={won ? "#3a0d0d" : "#ff3b30"} filter={won ? undefined : "url(#fixt-wire-glow)"} />
-          <circle cx={W / 2} cy={30} r={5.5} fill={won ? "#38ff9c" : "#0f2a1c"} filter={won ? "url(#fixt-wire-glow)" : undefined} />
-        </g>
-        <text x={62} y={30} textAnchor="middle" className="fill-slate-400 font-mono text-[9px] tracking-widest">
-          FIELD CABLE
-        </text>
-        <text x={273} y={30} textAnchor="middle" className={`font-mono text-[9px] tracking-widest ${won ? "fill-emerald-300" : "fill-slate-400"}`} aria-live="polite">
-          {won ? "TRACK CIRCUIT CLEAR" : `RELAYS UP ${connected.length}/${WIRES.length}`}
-        </text>
-
-        {/* The cable bundle feeding the field-side wires. */}
-        <path d={`M 0 ${H - 18} Q 22 ${H - 24} 26 ${rowY(3) + 30}`} stroke="#0b0d10" strokeWidth={16} fill="none" strokeLinecap="round" />
-        {WIRES.map((wire, i) => (
-          <path key={wire.id} d={`M 24 ${rowY(3) + 34} C 26 ${rowY(i) + 20}, 34 ${rowY(i)}, ${LEFT_X - 10} ${rowY(i)}`} stroke={wire.color} strokeWidth={5} fill="none" strokeLinecap="round" opacity={0.9} />
-        ))}
-
-        {/* Relays: clear-cover plug-in relays with an armature that picks up when energized. */}
-        {right.map((id, i) => {
-          const y = rowY(i);
-          const up = connected.includes(id);
-          const shaking = wrong?.to.id === id;
-          return (
-            <g key={`relay-${id}`} style={{ transformBox: "fill-box", transformOrigin: "center" }} className={shaking ? "animate-[fixt-shake_0.35s_ease-in-out]" : ""}>
-              <rect x={266} y={y - 22} width={58} height={44} rx={5} fill="url(#fixt-relay)" stroke={shaking ? "#ff2b4a" : "#4a5562"} strokeWidth={shaking ? 2 : 1} />
-              <rect x={272} y={y - 17} width={28} height={34} rx={3} fill="#0d1a24" stroke="#5d7486" strokeWidth={0.8} opacity={0.9} />
-              <rect x={276} y={y - 13} width={6} height={26} rx={1} fill="#7a5a2e" />
-              <line
-                x1={284}
-                y1={y + 10}
-                x2={296}
-                y2={up ? y - 8 : y + 6}
-                stroke="#d9dee3"
-                strokeWidth={2}
-                strokeLinecap="round"
-                style={{ transition: "all 160ms ease-out" }}
-              />
-              <circle cx={296} cy={y - 9} r={1.8} fill={up ? "#e8c45a" : "#5a6470"} />
-              <text x={312} y={y - 6} textAnchor="middle" className="fill-slate-100 font-mono text-[10px] font-bold">
-                {id}
-              </text>
-              <circle cx={312} cy={y + 9} r={4.5} fill={up ? "#38ff9c" : "#3a1018"} stroke={up ? "#b6ffd9" : "#7a2a33"} strokeWidth={1} filter={up ? "url(#fixt-wire-glow)" : undefined} />
-              <rect x={326} y={y - 3} width={20} height={6} rx={2} fill="#0b0d10" />
-            </g>
-          );
-        })}
-
-        {connected.map((id) => {
-          const y1 = rowY(WIRES.findIndex((w) => w.id === id));
-          const y2 = rowY(right.indexOf(id));
-          const wire = wireOf(id);
-          return <Wire key={id} d={sagPath(LEFT_X, y1, RIGHT_X, y2)} color={wire.color} core={wire.core} live />;
-        })}
-
-        {wrong && (
-          <g key={wrong.key} className="animate-[fixt-flicker_0.6s_ease-out_forwards]" pointerEvents="none">
-            <path d={sagPath(LEFT_X, yOf(wrong.from), RIGHT_X, yOf(wrong.to))} stroke="#ff2b4a" strokeWidth={6} fill="none" strokeLinecap="round" />
-            <text x={(LEFT_X + RIGHT_X) / 2} y={(yOf(wrong.from) + yOf(wrong.to)) / 2} textAnchor="middle" className="fill-red-300 font-mono text-[11px] font-bold">
-              WRONG RELAY −1s
-            </text>
-          </g>
-        )}
-
-        {preview && <Wire d={preview.d} color={wireOf(preview.id).color} core={wireOf(preview.id).core} ghost={!snap} />}
-
-        {/* Field-side terminals with wire tags. */}
-        {WIRES.map((wire, i) => {
-          const t: Terminal = { side: "L", id: wire.id };
-          const isSel = selected?.side === "L" && selected.id === wire.id;
-          const isDone = connected.includes(wire.id);
-          const isSnap = snap?.side === "L" && snap.id === wire.id;
-          const y = rowY(i);
-          return (
-            <g
-              key={`L-${wire.id}`}
-              role="button"
-              tabIndex={isDone ? -1 : 0}
-              aria-label={`Wire tagged ${wire.label}${isDone ? ", landed" : ""}`}
-              aria-pressed={isSel}
-              onClick={activate(t)}
-              onKeyDown={onKey(t)}
-              className={`outline-none ${isDone ? "" : "cursor-grab"}`}
-            >
-              <rect x={0} y={y - HIT_HALF_HEIGHT} width={HIT_LEFT_MAX_X} height={HIT_HALF_HEIGHT * 2} fill="transparent" />
-              <rect x={34} y={y - 19} width={30} height={14} rx={2} fill="#f2efe6" stroke={isSel ? wire.color : "#b9b4a6"} strokeWidth={isSel ? 2 : 0.8} />
-              <text x={49} y={y - 9} textAnchor="middle" className="fill-slate-900 font-mono text-[8.5px] font-bold">
-                {wire.id}
-              </text>
-              <Post x={LEFT_X} y={y} glow={isSel || isSnap} tight={isDone} />
-              {!isDone && !isSel && <circle cx={LEFT_X + 9} cy={y} r={3} fill="#d08a3a" stroke="#7a4a18" strokeWidth={0.8} />}
-            </g>
-          );
-        })}
-
-        {/* Relay-side terminal posts. */}
-        {right.map((id, i) => {
-          const wire = wireOf(id);
-          const t: Terminal = { side: "R", id };
-          const isSel = selected?.side === "R" && selected.id === id;
-          const isDone = connected.includes(id);
-          const isSnap = snap?.side === "R" && snap.id === id;
-          return (
-            <g
-              key={`R-${id}`}
-              role="button"
-              tabIndex={isDone ? -1 : 0}
-              aria-label={`Relay ${wire.label} terminal${isDone ? ", energized" : ""}`}
-              aria-pressed={isSel}
-              onClick={activate(t)}
-              onKeyDown={onKey(t)}
-              className={`outline-none ${isDone ? "" : "cursor-pointer"}`}
-            >
-              <rect x={HIT_RIGHT_MIN_X} y={rowY(i) - HIT_HALF_HEIGHT} width={W - HIT_RIGHT_MIN_X} height={HIT_HALF_HEIGHT * 2} fill="transparent" />
-              <line x1={RIGHT_X} y1={rowY(i)} x2={266} y2={rowY(i)} stroke="#6b5a2e" strokeWidth={2} />
-              <Post x={RIGHT_X} y={rowY(i)} glow={isSel || isSnap} tight={isDone} />
-            </g>
-          );
-        })}
-
-        {sparks.map((s) => (
-          <g key={s.key} className="pointer-events-none">
-            {Array.from({ length: 8 }).map((_, k) => {
-              const angle = (k / 8) * Math.PI * 2;
-              return (
-                <line
-                  key={k}
-                  x1={RIGHT_X}
-                  y1={s.y}
-                  x2={RIGHT_X + Math.cos(angle) * 20}
-                  y2={s.y + Math.sin(angle) * 20}
-                  stroke={k % 2 ? "#fff6d8" : "#ffd36b"}
-                  strokeWidth={2}
-                  strokeLinecap="round"
-                  className="animate-[fixt-spark_0.55s_ease-out_forwards]"
-                />
-              );
-            })}
-          </g>
-        ))}
-      </svg>
-      <p className="text-center text-xs text-slate-400">
-        Drag each wire to the relay with the same tag (or tap one, then the other). The wire snaps onto the post when it will land; the relay picks up and its
-        lamp turns green. A wrong relay costs one second.
-      </p>
-    </div>
+    <ArenaShell
+      hostRef={hostRef}
+      eyebrow={`Fix the T · Signal repair${place ? ` · ${place}` : ""}`}
+      title="Signal relay case"
+      objective={
+        won
+          ? "Track circuit clear. The signal shows green."
+          : holding
+            ? `Bring the ${holding} wire to the post marked ${holding} on the relay rack`
+            : "Land each tagged field wire on its relay's terminal post"
+      }
+      steps={WIRES.map((w) => ({ label: `${w.id} · ${w.name}`, done: landed.includes(w.id), active: holding === w.id }))}
+      prompts={[
+        { input: "Drag", label: "Move a wire" },
+        { input: "Tap", label: "Pick up, then place" },
+      ]}
+      meter={<ArenaGauge label="Relays picked up" value={`${landed.length}/4`} fraction={landed.length / 4} tone={won ? "good" : "neutral"} note={won ? "Track circuit clear" : "Signal held at red"} />}
+      message={message}
+      complete={won ? { title: "Signal restored", subtitle: "All four relays up · the home signal clears to green" } : null}
+      onExit={onExit}
+    />
   );
 }

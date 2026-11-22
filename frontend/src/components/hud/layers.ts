@@ -5,6 +5,9 @@ import type { MapLayerVisibility, MapViewMode } from "@/components/map";
 
 export type ViewMode = MapViewMode;
 
+/** The HUD's look: charcoal panels (dark) or white panels (light). Follows the map theme (themeMode.ts). */
+export type ThemeMode = "dark" | "light";
+
 export type MapLayerKey = keyof MapLayerVisibility;
 
 /** First load: trains and alerts only, so the map reads cleanly; the rest is one tap away. */

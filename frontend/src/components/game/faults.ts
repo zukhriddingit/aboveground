@@ -7,11 +7,27 @@ import type { GameKind } from "./alertTranslator";
 
 export type FaultKind = "signal" | "track" | "switch" | "power" | "train" | "frozen";
 
+/** Rapid-transit stations in a tunnel, where the street can open over the trouble. */
+const UNDERGROUND = new Set<string>([
+  // Green Line central subway, plus Prudential and Symphony on the E branch
+  "place-kencl", "place-hymnl", "place-coecl", "place-armnl", "place-boyls", "place-pktrm", "place-gover",
+  "place-haecl", "place-north", "place-prmnl", "place-symcl",
+  // Red Line
+  "place-alfcl", "place-davis", "place-portr", "place-harsq", "place-cntsq", "place-knncl", "place-dwnxg",
+  "place-sstat", "place-brdwy", "place-andrw",
+  // Orange Line downtown
+  "place-state", "place-chncl", "place-tumnl", "place-bbsta", "place-masta",
+  // Blue Line under downtown and the harbor
+  "place-bomnl", "place-aqucl", "place-mvbcl",
+]);
+
 /**
- * Stops at street level, with no tunnel to open: BU Central sits in the median of Commonwealth Ave, and
- * the Blue Line runs above ground at Airport.
+ * Stops at street level, elevated or in an open cut (BU Central sits in the median of Commonwealth Ave):
+ * no street to open, so the work zone is drawn on the tracks instead.
  */
-export const SURFACE_STATIONS = new Set<StationId>(["place-bucen", "place-aport"]);
+export function isSurfaceStation(id: string) {
+  return !UNDERGROUND.has(id);
+}
 
 export function faultForGame(game: GameKind): FaultKind {
   switch (game) {
@@ -58,7 +74,7 @@ export function faultSite(stationId: StationId, kind: FaultKind) {
 
 /** How the toast describes where crews are working. */
 export function faultPlace(kind: FaultKind, stationId: StationId, station: string) {
-  if (SURFACE_STATIONS.has(stationId)) {
+  if (isSurfaceStation(stationId)) {
     if (kind === "train") return `A disabled train is stopped at ${station}.`;
     const where = stationId === "place-bucen" ? "in the median" : "at street level";
     return `Crews are on the tracks ${where} just past ${station}; trains are standing by.`;

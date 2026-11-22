@@ -38,7 +38,7 @@ export function TFeedButton({ onClick, unread = 0, live = true, active = false, 
       T-Feed
       <span aria-hidden className={`size-1.5 rounded-full ${isLive ? "bg-emerald-400" : "bg-amber-400"}`} />
       {unread > 0 && (
-        <span className="absolute -top-1 -right-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-[#DA291C] px-1 text-[10px] font-bold text-white ring-2 ring-zinc-950">
+        <span className="absolute -top-1 -right-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-[#DA291C] px-1 text-[10px] font-bold text-[#fff] ring-2 ring-zinc-950">
           {unread > 9 ? "9+" : unread}
         </span>
       )}

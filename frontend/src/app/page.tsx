@@ -21,6 +21,7 @@ import {
 } from "@/components/stories";
 import {
   ClosureMarkers,
+  closureScenario,
   FixTheTMap,
   IncidentSim,
   IncidentTag,
@@ -44,6 +45,7 @@ import {
   type GameKind,
   type LiveAlert,
   type LiveEvent,
+  type MbtaStation,
   type TunnelView,
 } from "@/components/game";
 import {
@@ -51,6 +53,7 @@ import {
   DemoBar,
   GameHUD,
   HAT_INFO,
+  HudTheme,
   IncidentBanner,
   LiveAlertsButton,
   LiveAlertsPanel,
@@ -64,6 +67,7 @@ import {
   hatUnlockedBetween,
   rankOfLevel,
   useProgress,
+  useThemeMode,
   useTicker,
   useToasts,
   type GainResult,
@@ -73,6 +77,7 @@ import { useStationSignals } from "@/components/quickcheck";
 import { useBranchGaps, withTransitData } from "@/components/transit";
 import { DEFAULT_RIDER_NAME, setRiderPerks, useRiderProfile } from "@/lib/riderProfile";
 import { PANEL } from "@/lib/ui";
+import { routeLine } from "@/lib/theme";
 import type { FixTheTScene } from "@/components/game/FixTheTScene";
 import type { AvatarHat, Station, StationId, StationStory, TranslatedAlert } from "@/types/tverse";
 
@@ -135,6 +140,8 @@ export default function Home() {
   const [view, setView] = useState<MapViewMode>("3d");
   /** Map layers the rider has switched on (the HUD's Layers popover sets these); trains and alerts on first load. */
   const [layers, setLayers] = useState<MapLayerVisibility>(DEFAULT_LAYERS);
+  /** Light or dark HUD: white panels only when the rider picks Light in the map controls (themeMode.ts). */
+  const theme = useThemeMode();
   /** Pro Telemetry readout (HUD only), shown once the rank unlocks it. */
   const [telemetry, setTelemetry] = useState(false);
   const telemetryUnlocked = rank.level >= 3;
@@ -224,20 +231,31 @@ export default function Home() {
     flyToFeedStop(map.current, id, world.stations);
   }, [world.stations]);
 
-  const stationById = useCallback((id: StationId) => stations.find((s) => s.id === id) ?? null, [stations]);
-  const stationsRef = useRef(stations);
+  /** Closed stations off the featured list, added when one is tapped so a simulated repair can be staged there. */
+  const [extraStations, setExtraStations] = useState<Station[]>([]);
+  const allStations = useMemo(
+    () => (extraStations.length ? [...stations, ...extraStations.filter((e) => !stations.some((s) => s.id === e.id))] : stations),
+    [stations, extraStations],
+  );
+  const stationById = useCallback((id: StationId) => allStations.find((s) => s.id === id) ?? null, [allStations]);
+  const stationsRef = useRef(allStations);
   useEffect(() => {
-    stationsRef.current = stations;
-  }, [stations]);
+    stationsRef.current = allStations;
+  }, [allStations]);
 
   /** Look down into the opened street at a station (falls back to a plain fly-to). */
-  const viewTunnel = useCallback((id: StationId, duration = 1800) => {
-    // The cutaway and the repair only exist in the 3D world.
-    setView("3d");
-    const view = scene.current?.cutawayView(id);
-    if (view) map.current?.flyTo(view.center[0], view.center[1], { zoom: view.zoom, pitch: view.pitch, bearing: view.bearing, duration });
-    else map.current?.flyToStation(id, { zoom: 16, pitch: 62, duration });
-  }, []);
+  const viewTunnel = useCallback(
+    (id: StationId, duration = 1800) => {
+      // The cutaway and the repair only exist in the 3D world.
+      setView("3d");
+      const view = scene.current?.cutawayView(id);
+      const station = stationsRef.current.find((s) => s.id === id);
+      if (view) map.current?.flyTo(view.center[0], view.center[1], { zoom: view.zoom, pitch: view.pitch, bearing: view.bearing, duration });
+      else if (world.stations.some((s) => s.id === id)) map.current?.flyToStation(id, { zoom: 16, pitch: 62, duration });
+      else if (station) map.current?.flyTo(station.lng, station.lat, { zoom: 16, pitch: 62, duration });
+    },
+    [world.stations],
+  );
 
   const alertFor = useCallback(
     (station: Station): TranslatedAlert | null => {
@@ -381,9 +399,9 @@ export default function Home() {
 
   /** "Explore a simulated repair" for a live alert: the tunnel opens, but the real trains keep moving. */
   const exploreLive = useCallback(
-    (a: LiveAlert) => {
-      const scenario = scenarioFor(a.cause, a.header);
-      const station = featuredStationFor(a, stationsRef.current, live.index);
+    (a: LiveAlert, pick?: { station: Station; scenario: { game: GameKind; label: string } }) => {
+      const scenario = pick?.scenario ?? scenarioFor(a.cause, a.header);
+      const station = pick?.station ?? featuredStationFor(a, stationsRef.current, live.index);
       if (!scenario || !station || repairing) return;
       const busy = simAlerts.find((s) => s.stationId === station.id);
       if (busy) return openAlert(busy);
@@ -396,6 +414,25 @@ export default function Home() {
       walkInWhenOpen(station.id);
     },
     [live.index, openAlert, repairing, sim, simAlerts, staged, viewTunnel, walkInWhenOpen],
+  );
+
+  /** A red X: explore a simulated repair at that closed station, whether or not the map features it. */
+  const exploreClosure = useCallback(
+    (alert: LiveAlert, at: MbtaStation) => {
+      let station = stationsRef.current.find((s) => s.id === at.id) ?? null;
+      if (!station) {
+        const route = alert.routes.find((r) => /^(Red|Orange|Blue|Green|Mattapan)/.test(r));
+        if (!route) return showAlertDetails(alert);
+        // Its real MBTA parent-station id, which the shared StationId list doesn't name.
+        const added: Station = { id: at.id as StationId, name: at.name, line: routeLine(route), lng: at.lng, lat: at.lat, nextArrivalMin: 0, crowdedness: "FEW_SEATS", hasActiveAlert: true };
+        sim.setStations([added]);
+        stationsRef.current = [...stationsRef.current, added];
+        setExtraStations((list) => [...list, added]);
+        station = added;
+      }
+      exploreLive(alert, { station, scenario: closureScenario(alert) });
+    },
+    [exploreLive, showAlertDetails, sim],
   );
 
   const openAnyAlert = useCallback(
@@ -666,7 +703,7 @@ export default function Home() {
   const reportsNow = Object.values(signals.byStation).reduce((n, s) => n + (s?.total ?? 0), 0);
 
   return (
-    <main className="relative h-dvh w-full overflow-hidden bg-[#070b1a] text-zinc-100">
+    <main className={`relative h-dvh w-full overflow-hidden text-zinc-100 ${theme === "light" ? "bg-[#f2f0eb]" : "bg-[#070b1a]"}`}>
       <FixTheTMap
         ref={map}
         sim={sim}
@@ -732,7 +769,7 @@ export default function Home() {
               />
             );
           })}
-        {layers.alerts && <ClosureMarkers closures={live.closures} getZoom={getZoom} onOpen={showAlertDetails} />}
+        {layers.alerts && <ClosureMarkers closures={live.closures} onOpen={exploreClosure} />}
         {layers.alerts && (
           <LiveMarkers
             alerts={[...liveOnly].flatMap(([id, alert]) => {
@@ -759,6 +796,7 @@ export default function Home() {
         className={`absolute inset-0 z-[15] bg-[#0b1026] transition-opacity duration-500 ${inside ? "opacity-100" : "pointer-events-none opacity-0"}`}
       />
 
+      <HudTheme theme={theme}>
       {inside && (
         <div className="pointer-events-none absolute inset-x-0 bottom-[10.5rem] z-30 flex justify-center px-3">
           <div className={`${PANEL} pointer-events-auto flex items-center gap-1.5 p-1.5 pl-3 text-xs text-zinc-200`}>
@@ -943,6 +981,7 @@ export default function Home() {
           />
         </div>
       </footer>
+      </HudTheme>
 
       <CommunityDrawer
         open={feedOpen}

@@ -346,21 +346,6 @@ const SCENARIOS: Array<[RegExp, GameKind, string]> = [
 ];
 
 /**
- * Only when the MBTA left the cause blank (UNKNOWN_CAUSE / OTHER_CAUSE): the repair its own wording names
- * outright, e.g. "due to a signal problem", "overhead wire", "a disabled train". Planned shuttle diversions are
- * almost always for track or signal work, so a bare "shuttle buses" reads as planned track work.
- */
-const TEXT_SCENARIOS: Array<[RegExp, GameKind, string]> = [
-  [/\bsignal (problem|issue|repair|work|failure)s?\b/i, "WIRE_MATCH", "signal repair"],
-  [/\bswitch (problem|issue|repair|failure)s?\b/i, "SWITCH_THROW", "switch repair"],
-  [/\b(power (problem|issue|outage)|overhead wire|catenary|downed (wire|cable))s?\b/i, "BREAKER_SEQUENCE", "power repair"],
-  [/\b(disabled|stalled|broken[- ]down) (train|trolley|vehicle)s?\b|\bmechanical (problem|issue)s?\b/i, "RESCUE_COUPLE", "disabled-train rescue"],
-  [/\b(frozen|icy) switch(es)?\b|\bslippery rail\b/i, "ICE_THAW", "frozen-switch thaw"],
-  [/\b(track (problem|issue|work|repair)|broken rail|rail (defect|replacement))s?\b/i, "TRACK_WELD", "track repair"],
-  [/\bshuttle bus(es)?\b/i, "TRACK_WELD", "planned track work"],
-];
-
-/**
  * The simulated repair that illustrates the MBTA's published cause, or null when there's nothing to fix by hand.
  * The cause always wins; `text` (the alert's own header) is only read when the cause is blank.
  */
@@ -370,6 +355,27 @@ export function scenarioFor(cause: string, text?: string | null): { game: GameKi
     for (const [re, game, label] of TEXT_SCENARIOS) if (re.test(text)) return { game, label };
   }
   return null;
+}
+
+/** The same repairs, from the alert's own wording ("to allow for switch and rail upgrades"). */
+const TEXT_SCENARIOS: Array<[RegExp, GameKind, string]> = [
+  [/\bsignal/i, "WIRE_MATCH", "signal repair"],
+  [/\bswitch/i, "SWITCH_THROW", "switch repair"],
+  [/\bpower\b|electrical|overhead wire/i, "BREAKER_SEQUENCE", "power repair"],
+  [/disabled train|mechanical/i, "RESCUE_COUPLE", "disabled-train rescue"],
+  [/\bsnow|\bice\b|frozen/i, "ICE_THAW", "frozen-switch thaw"],
+  [/\brail|\btrack|\bties?\b/i, "TRACK_WELD", "track repair"],
+];
+
+/**
+ * The simulated repair to explore at a closed station: from the published cause, then the alert's wording,
+ * else track work (most closures are planned track and station work, often published as UNKNOWN_CAUSE).
+ */
+export function closureScenario(alert: Pick<LiveAlert, "cause" | "header">): { game: GameKind; label: string } {
+  const byCause = scenarioFor(alert.cause);
+  if (byCause) return byCause;
+  for (const [re, game, label] of TEXT_SCENARIOS) if (re.test(alert.header)) return { game, label };
+  return { game: "TRACK_WELD", label: "track repair" };
 }
 
 const ROUTE_NAMES: Record<string, string> = {
