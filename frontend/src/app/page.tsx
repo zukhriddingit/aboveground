@@ -4,12 +4,11 @@
 //
 // Layout: the header (rider badge, alerts, data source) sits at the top; under it the left rail
 // (next trains) and the right rail (map controls, alerts panel, telemetry) both end 6rem above the
-// bottom dock, so nothing floats over the dock on laptop screens. The map draws the 2D/3D view and
-// hides its own layers (viewMode, visibleLayers); the overlays below follow the same switches.
+// bottom dock, so nothing floats over the dock on laptop screens.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import { ChevronLeft, ChevronRight, LogOut } from "lucide-react";
-import type { MapLayerVisibility, MapViewMode, TVerseMapHandle } from "@/components/map";
+import { ChevronDown, ChevronUp, LogOut } from "lucide-react";
+import type { TVerseMapHandle } from "@/components/map";
 import {
   PostStoryModal,
   StationStoryBubbles,
@@ -20,11 +19,10 @@ import {
 } from "@/components/stories";
 import {
   ClosureMarkers,
-  FixTheTMap,
+  closureScenario,
   IncidentSim,
   IncidentTag,
   LiveMarkers,
-  alertForStoppedTrain,
   describeEvent,
   effectLabel,
   faultForGame,
@@ -43,6 +41,7 @@ import {
   type GameKind,
   type LiveAlert,
   type LiveEvent,
+  type MbtaStation,
   type TunnelView,
 } from "@/components/game";
 import {
@@ -50,6 +49,7 @@ import {
   DemoBar,
   GameHUD,
   HAT_INFO,
+  HudTheme,
   IncidentBanner,
   LiveAlertsButton,
   LiveAlertsPanel,
@@ -62,18 +62,26 @@ import {
   XP_REWARDS,
   hatUnlockedBetween,
   rankOfLevel,
+  setThemeMode,
   useProgress,
+  useThemeMode,
   useTicker,
   useToasts,
   type GainResult,
+  type MapLayerKey,
+  type MapLayers,
+  type ViewMode,
 } from "@/components/hud";
 import { CommunityDrawer, FeedStopPins, TFeedButton, flyToFeedStop, useCommunityFeed } from "@/components/community";
 import { useStationSignals } from "@/components/quickcheck";
 import { useBranchGaps, withTransitData } from "@/components/transit";
 import { DEFAULT_RIDER_NAME, setRiderPerks, useRiderProfile } from "@/lib/riderProfile";
 import { PANEL } from "@/lib/ui";
+import { BOSTON_CENTER, routeLine } from "@/lib/theme";
 import type { FixTheTScene } from "@/components/game/FixTheTScene";
 import type { AvatarHat, Station, StationId, StationStory, TranslatedAlert } from "@/types/tverse";
+import { LayeredMap } from "./LayeredMap";
+import { applyMapTheme } from "./mapTheme";
 
 // The delay card, its mini-games and the 3D repair scene only download when they're first needed.
 const FixTheTModal = dynamic(() => import("@/components/game/FixTheTModal").then((m) => m.FixTheTModal), { ssr: false });
@@ -84,6 +92,8 @@ const liveKey = (alert: LiveAlert) => `live-${alert.id}`;
 const NOTIFY_KEY = "tverse-notify-closures";
 const VIEW_KEY = "tverse-map-view";
 const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? "").replace(/\/$/, "");
+const FLAT_FOOTPRINTS = 0.85;
+const FOOTPRINT_OPACITY = ["interpolate", ["linear"], ["zoom"], 12, 0.5, 14.5, 0.85, 15.2, 0] as unknown as number;
 const SOURCE_LABEL: Record<FeedSource, string> = { backend: "Backend", live: "MBTA", sim: "Simulated" };
 
 interface Staged {
@@ -113,12 +123,15 @@ export default function Home() {
   const [alertsOpen, setAlertsOpen] = useState(false);
   const [alertFocus, setAlertFocus] = useState<string | null>(null);
   const [nextStation, setNextStation] = useState<StationId>("place-boyls");
-  /** 2D Clean: a flat, north-up transit map; 3D World: the tilted dusk city. */
-  const [view, setView] = useState<MapViewMode>("3d");
-  /** Map layers the rider has switched on (the HUD's Layers popover sets these); trains and alerts on first load. */
-  const [layers, setLayers] = useState<MapLayerVisibility>(DEFAULT_LAYERS);
-  /** Pro Telemetry readout (HUD only), shown once the rank unlocks it. */
-  const [telemetry, setTelemetry] = useState(false);
+  /** What the map shows; trains and alerts only on first load. */
+  const [layers, setLayers] = useState<MapLayers>(DEFAULT_LAYERS);
+  /** Light or dark map and HUD, from the map controls (remembered between visits). */
+  const theme = useThemeMode();
+  const [mapReady, setMapReady] = useState(false);
+  useEffect(() => {
+    const m = map.current?.getMap();
+    if (mapReady && m) applyMapTheme(m, theme);
+  }, [mapReady, theme]);
   const telemetryUnlocked = rank.level >= 3;
   /** A simulated repair staged from a live MBTA alert, while its card or repair is up. */
   const [explore, setExplore] = useState<{ id: string; game: GameKind; label: string } | null>(null);
@@ -137,7 +150,7 @@ export default function Home() {
   const staged = useMemo(() => {
     const out = new Map<string, Staged>();
     for (const a of live.alerts) {
-      const scenario = isServiceAlert(a) ? scenarioFor(a.cause, a.header) : null;
+      const scenario = isServiceAlert(a) ? scenarioFor(a.cause) : null;
       if (!scenario) continue;
       const station = featuredStationFor(a, world.stations, live.index, false);
       if (!station) continue;
@@ -198,26 +211,92 @@ export default function Home() {
     return withTransitData(base, gaps, signals.byStation);
   }, [world.stations, world.alerts, alerts, liveOnly, cleared, live.nextMinutes, gaps, signals.byStation]);
 
+  /** The stations as drawn: alert holograms and shuttle pins follow their layers (a simulated delay always shows). */
+  const mapStations = useMemo(
+    () =>
+      stations.map((s) => ({
+        ...s,
+        hasActiveAlert: layers.alerts ? s.hasActiveAlert : simAlerts.some((a) => a.stationId === s.id),
+        plannedClosure: layers.shuttles ? s.plannedClosure : undefined,
+      })),
+    [stations, layers.alerts, layers.shuttles, simAlerts],
+  );
+
   const openStopFeed = useCallback((id: StationId) => {
     setFeedStation(id);
     setFeedOpen(true);
     flyToFeedStop(map.current, id, world.stations);
   }, [world.stations]);
 
-  const stationById = useCallback((id: StationId) => stations.find((s) => s.id === id) ?? null, [stations]);
-  const stationsRef = useRef(stations);
+  /** Closed stations off the featured list, added when one is tapped so a simulated repair can be staged there. */
+  const [extraStations, setExtraStations] = useState<Station[]>([]);
+  const allStations = useMemo(
+    () => (extraStations.length ? [...stations, ...extraStations.filter((e) => !stations.some((s) => s.id === e.id))] : stations),
+    [stations, extraStations],
+  );
+  const stationById = useCallback((id: StationId) => allStations.find((s) => s.id === id) ?? null, [allStations]);
+  const stationsRef = useRef(allStations);
   useEffect(() => {
-    stationsRef.current = stations;
-  }, [stations]);
+    stationsRef.current = allStations;
+  }, [allStations]);
+
+  /** 2D Clean: a flat, north-up map without 3D buildings (lighter); 3D World: the tilted city. */
+  const [viewMode, setViewMode] = useState<ViewMode>("3d");
+  const flatView = useRef(false);
+  const applyView = useCallback((mode: ViewMode) => {
+    const m = map.current?.getMap();
+    if (!m) return;
+    const flat = mode === "2d";
+    flatView.current = flat;
+    for (const id of ["buildings", "buildings-skyline"]) if (m.getLayer(id)) m.setLayoutProperty(id, "visibility", flat ? "none" : "visible");
+    if (m.getLayer("building-footprints")) {
+      m.setLayerZoomRange("building-footprints", 12, flat ? 24 : 15.2);
+      m.setPaintProperty("building-footprints", "fill-opacity", flat ? FLAT_FOOTPRINTS : FOOTPRINT_OPACITY);
+    }
+    if (flat) {
+      m.dragRotate.disable();
+      m.touchZoomRotate.disableRotation();
+      m.touchPitch.disable();
+      m.keyboard.disableRotation();
+      m.easeTo({ pitch: 0, bearing: 0, duration: 700 });
+      // Only if it's still 2D when the tilt finishes (a repair can switch back to 3D mid-move).
+      m.once("moveend", () => flatView.current && m.setMaxPitch(0));
+    } else {
+      m.setMaxPitch(80);
+      m.dragRotate.enable();
+      m.touchZoomRotate.enableRotation();
+      m.touchPitch.enable();
+      m.keyboard.enableRotation();
+      m.easeTo({ pitch: 60, bearing: -15, duration: 700 });
+    }
+  }, []);
+  const changeView = useCallback(
+    (mode: ViewMode) => {
+      if (mode === viewMode) return;
+      setViewMode(mode);
+      applyView(mode);
+      try {
+        window.localStorage.setItem(VIEW_KEY, mode);
+      } catch {
+        // private windows may block storage; the choice just won't stick
+      }
+    },
+    [applyView, viewMode],
+  );
 
   /** Look down into the opened street at a station (falls back to a plain fly-to). */
-  const viewTunnel = useCallback((id: StationId, duration = 1800) => {
-    // The cutaway and the repair only exist in the 3D world.
-    setView("3d");
-    const view = scene.current?.cutawayView(id);
-    if (view) map.current?.flyTo(view.center[0], view.center[1], { zoom: view.zoom, pitch: view.pitch, bearing: view.bearing, duration });
-    else map.current?.flyToStation(id, { zoom: 16, pitch: 62, duration });
-  }, []);
+  const viewTunnel = useCallback(
+    (id: StationId, duration = 1800) => {
+      // The opened street and the repair are 3D, so a flat 2D map tilts back up first.
+      changeView("3d");
+      const view = scene.current?.cutawayView(id);
+      const station = stationsRef.current.find((s) => s.id === id);
+      if (view) map.current?.flyTo(view.center[0], view.center[1], { zoom: view.zoom, pitch: view.pitch, bearing: view.bearing, duration });
+      else if (world.stations.some((s) => s.id === id)) map.current?.flyToStation(id, { zoom: 16, pitch: 62, duration });
+      else if (station) map.current?.flyTo(station.lng, station.lat, { zoom: 16, pitch: 62, duration });
+    },
+    [changeView, world.stations],
+  );
 
   const alertFor = useCallback(
     (station: Station): TranslatedAlert | null => {
@@ -263,27 +342,16 @@ export default function Home() {
     [showOnMap],
   );
 
-  const changeView = useCallback((mode: MapViewMode) => {
-    setView(mode);
-    try {
-      window.localStorage.setItem(VIEW_KEY, mode);
-    } catch {
-      // private windows may block storage; the choice just won't stick
-    }
+  const recenter = useCallback(() => {
+    if (viewMode === "2d") map.current?.getMap()?.easeTo({ center: BOSTON_CENTER, zoom: 13.4, bearing: 0, duration: 1200 });
+    else map.current?.resetView();
+  }, [viewMode]);
+
+  const changeLayer = useCallback((key: MapLayerKey, on: boolean) => {
+    // Tourist beacons narrate on the Demo Ride; speech has to be unlocked by this tap.
+    if (key === "tourist" && on) primeSpeech();
+    setLayers((l) => ({ ...l, [key]: on }));
   }, []);
-
-  // The map keeps the overview north-up in 2D.
-  const recenter = useCallback(() => map.current?.resetView(), []);
-
-  /** The Layers popover's setter: setLayers, plus unlocking speech when Tourist Beacons turn on. */
-  const changeLayers = useCallback(
-    (next: MapLayerVisibility) => {
-      // Tourist beacons narrate on the Demo Ride; Safari only allows speech after a tap like this one.
-      if (next.tourist && !layers.tourist) primeSpeech();
-      setLayers(next);
-    },
-    [layers.tourist],
-  );
 
   useEffect(
     () => () => {
@@ -332,9 +400,9 @@ export default function Home() {
 
   /** "Explore a simulated repair" for a live alert: the tunnel opens, but the real trains keep moving. */
   const exploreLive = useCallback(
-    (a: LiveAlert) => {
-      const scenario = scenarioFor(a.cause, a.header);
-      const station = featuredStationFor(a, stationsRef.current, live.index);
+    (a: LiveAlert, pick?: { station: Station; scenario: { game: GameKind; label: string } }) => {
+      const scenario = pick?.scenario ?? scenarioFor(a.cause);
+      const station = pick?.station ?? featuredStationFor(a, stationsRef.current, live.index);
       if (!scenario || !station || repairing) return;
       const busy = simAlerts.find((s) => s.stationId === station.id);
       if (busy) return openAlert(busy);
@@ -347,6 +415,25 @@ export default function Home() {
       walkInWhenOpen(station.id);
     },
     [live.index, openAlert, repairing, sim, simAlerts, staged, viewTunnel, walkInWhenOpen],
+  );
+
+  /** A red X: explore a simulated repair at that closed station, whether or not the map features it. */
+  const exploreClosure = useCallback(
+    (alert: LiveAlert, at: MbtaStation) => {
+      let station = stationsRef.current.find((s) => s.id === at.id) ?? null;
+      if (!station) {
+        const route = alert.routes.find((r) => /^(Red|Orange|Blue|Green|Mattapan)/.test(r));
+        if (!route) return showAlertDetails(alert);
+        // Its real MBTA parent-station id, which the shared StationId list doesn't name.
+        const added: Station = { id: at.id as StationId, name: at.name, line: routeLine(route), lng: at.lng, lat: at.lat, nextArrivalMin: 0, crowdedness: "FEW_SEATS", hasActiveAlert: true };
+        sim.setStations([added]);
+        stationsRef.current = [...stationsRef.current, added];
+        setExtraStations((list) => [...list, added]);
+        station = added;
+      }
+      exploreLive(alert, { station, scenario: closureScenario(alert) });
+    },
+    [exploreLive, showAlertDetails, sim],
   );
 
   const openAnyAlert = useCallback(
@@ -368,10 +455,10 @@ export default function Home() {
   }, [exitTunnel, explore, fixAlert, repairing, sim]);
 
   const onReady = useCallback(() => {
-    try {
-      if (window.localStorage.getItem(VIEW_KEY) === "2d") setView("2d");
-    } catch {
-      // storage blocked: start in 3D
+    setMapReady(true);
+    if (window.localStorage.getItem(VIEW_KEY) === "2d") {
+      setViewMode("2d");
+      applyView("2d");
     }
     void import("@/components/game/FixTheTScene").then(({ FixTheTScene }) => {
       const m = map.current?.getMap();
@@ -379,15 +466,13 @@ export default function Home() {
         scene.current = new FixTheTScene(m, sim, (id) => stationsRef.current.find((s) => s.id === id) ?? null);
       }
     });
-  }, [sim]);
+  }, [applyView, sim]);
 
   const simulateDelay = useCallback(async () => {
     const station = stationById(delayStation);
     if (!station) return;
     const existing = alerts.find((a) => a.stationId === station.id);
     if (existing) return openAnyAlert(existing);
-    // A simulated delay is the demo: make sure its alert layer is showing.
-    setLayers((l) => (l.alerts ? l : { ...l, alerts: true }));
     setSimulating(true);
     try {
       const { alert } = await triggerDelay(station);
@@ -589,7 +674,7 @@ export default function Home() {
   }, [live.events, names, notifyOn, push, staged]);
 
   const activeSim = simAlerts.find((a) => sim.incidents.has(a.id)) ?? null;
-  useTicker(500, !!activeSim || !!fixAlert || (telemetry && telemetryUnlocked));
+  useTicker(500, !!activeSim || !!fixAlert || (layers.telemetry && telemetryUnlocked));
 
   /** The station whose street is open right now (offers "Go inside"). */
   const [openTunnel, setOpenTunnel] = useState<StationId | null>(null);
@@ -607,16 +692,15 @@ export default function Home() {
   const reportsNow = Object.values(signals.byStation).reduce((n, s) => n + (s?.total ?? 0), 0);
 
   return (
-    <main className="relative h-dvh w-full overflow-hidden bg-[#070b1a] text-zinc-100">
-      <FixTheTMap
+    <main className={`relative h-dvh w-full overflow-hidden text-zinc-100 ${theme === "light" ? "bg-[#f2f0eb]" : "bg-[#070b1a]"}`}>
+      <LayeredMap
         ref={map}
         sim={sim}
+        showTrains={layers.trains}
         className="absolute inset-0 h-full w-full"
-        stations={stations}
+        stations={mapStations}
         linesGeoJson={world.linesGeoJson}
         touristMode={touristMode}
-        viewMode={view}
-        visibleLayers={layers}
         demoRideActive={riding}
         avatarHat={hatHold ?? progress.equipped}
         onReady={onReady}
@@ -652,24 +736,23 @@ export default function Home() {
             }}
           />
         )}
-        {layers.alerts &&
-          alerts.map((alert) => {
-            const station = stationById(alert.stationId);
-            if (!station) return null;
-            return (
-              <IncidentTag
-                key={alert.id}
-                station={station}
-                alert={alert}
-                sim={sim}
-                repairing={repairing === alert.stationId}
-                live={staged.has(alert.id)}
-                getZoom={getZoom}
-                onOpen={openAnyAlert}
-              />
-            );
-          })}
-        {layers.alerts && <ClosureMarkers closures={live.closures} getZoom={getZoom} onOpen={showAlertDetails} />}
+        {alerts.map((alert) => {
+          const station = stationById(alert.stationId);
+          if (!station || (!layers.alerts && !simAlerts.some((a) => a.id === alert.id))) return null;
+          return (
+            <IncidentTag
+              key={alert.id}
+              station={station}
+              alert={alert}
+              sim={sim}
+              repairing={repairing === alert.stationId}
+              live={staged.has(alert.id)}
+              getZoom={getZoom}
+              onOpen={openAnyAlert}
+            />
+          );
+        })}
+        {layers.alerts && <ClosureMarkers closures={live.closures} onOpen={exploreClosure} />}
         {layers.alerts && (
           <LiveMarkers
             alerts={[...liveOnly].flatMap(([id, alert]) => {
@@ -680,202 +763,201 @@ export default function Home() {
             getZoom={getZoom}
             onOpenAlert={showAlertDetails}
             onOpenTrain={(train) => {
-              // A train standing still near a modeled station opens the disabled-train rescue walkthrough.
-              const rescue = alertForStoppedTrain(train, stationsRef.current);
-              if (rescue && !repairing) return exploreLive(rescue);
               setAlertFocus(null);
               setAlertsOpen(true);
               map.current?.flyTo(train.lng, train.lat, { zoom: 15.8, pitch: 55, duration: 1600 });
             }}
           />
         )}
-      </FixTheTMap>
+      </LayeredMap>
 
       <div
         ref={tunnelHost}
         className={`absolute inset-0 z-[15] bg-[#0b1026] transition-opacity duration-500 ${inside ? "opacity-100" : "pointer-events-none opacity-0"}`}
       />
 
-      {inside && (
-        <div className="pointer-events-none absolute inset-x-0 bottom-[10.5rem] z-30 flex justify-center px-3">
-          <div className={`${PANEL} pointer-events-auto flex items-center gap-1.5 p-1.5 pl-3 text-xs text-zinc-200`}>
-            <span className="mr-1 hidden sm:inline">
-              On the platform at <span className="font-semibold text-white">{shortName(stationById(inside) ?? { id: inside, name: "the station" })}</span> · drag to look around
-            </span>
-            {([-1, 1] as const).map((dir) => (
+      <HudTheme theme={theme}>
+        {inside && (
+          <div className="pointer-events-none absolute inset-x-0 bottom-[10.5rem] z-30 flex justify-center px-3">
+            <div className={`${PANEL} pointer-events-auto flex items-center gap-1.5 p-1.5 pl-3 text-xs text-zinc-200`}>
+              <span className="mr-1 hidden sm:inline">
+                On the platform at <span className="font-semibold text-white">{shortName(stationById(inside) ?? { id: inside, name: "the station" })}</span> · drag to look, W A S D to walk
+              </span>
+              {([-1, 1] as const).map((dir) => (
+                <button
+                  key={dir}
+                  type="button"
+                  aria-label={dir < 0 ? "Step back (hold)" : "Walk forward where you're looking (hold)"}
+                  onPointerDown={() => tunnelView.current?.walk(dir)}
+                  onPointerUp={() => tunnelView.current?.walk(0)}
+                  onPointerLeave={() => tunnelView.current?.walk(0)}
+                  className="flex size-9 items-center justify-center rounded-lg border border-white/12 bg-white/[0.05] hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-white"
+                >
+                  {dir < 0 ? <ChevronDown className="size-4" /> : <ChevronUp className="size-4" />}
+                </button>
+              ))}
               <button
-                key={dir}
                 type="button"
-                aria-label={dir < 0 ? "Walk back along the platform" : "Walk forward along the platform"}
-                onPointerDown={() => tunnelView.current?.walk(dir)}
-                onPointerUp={() => tunnelView.current?.walk(0)}
-                onPointerLeave={() => tunnelView.current?.walk(0)}
-                className="flex size-9 items-center justify-center rounded-lg border border-white/12 bg-white/[0.05] hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-white"
+                onClick={() => void exitTunnel()}
+                className="flex h-9 items-center gap-1.5 rounded-lg bg-white px-3 font-semibold text-zinc-950 hover:bg-zinc-200 focus-visible:outline-2 focus-visible:outline-white"
               >
-                {dir < 0 ? <ChevronLeft className="size-4" /> : <ChevronRight className="size-4" />}
+                <LogOut className="size-4" />
+                Back to street
               </button>
-            ))}
-            <button
-              type="button"
-              onClick={() => void exitTunnel()}
-              className="flex h-9 items-center gap-1.5 rounded-lg bg-white px-3 font-semibold text-zinc-950 hover:bg-zinc-200 focus-visible:outline-2 focus-visible:outline-white"
-            >
-              <LogOut className="size-4" />
-              Back to street
-            </button>
-          </div>
-        </div>
-      )}
-
-      <header className="pointer-events-none absolute inset-x-0 top-0 z-30 flex items-start justify-between gap-2 p-3 sm:p-4">
-        <div className="pointer-events-auto flex items-start gap-2">
-          <div className={`${PANEL} hidden h-14 items-center gap-2.5 px-3 lg:flex`}>
-            <TRoundel size={30} />
-            <div className="leading-tight">
-              <p className="text-[15px] font-semibold tracking-tight text-white">AboveGround</p>
-              <p className="text-[10px] text-zinc-400">T-Verse · Boston&apos;s live T</p>
             </div>
           </div>
-          <GameHUD
-            progress={progress}
-            rank={rank}
-            next={nextRankUp}
-            fraction={rankFraction}
-            gain={gain}
-            onEquip={equip}
-            onDemoModeChange={changeDemoMode}
-            onJumpToLevel={jumpToLevel}
-          />
-        </div>
-        <div className="pointer-events-auto flex shrink-0 flex-col-reverse items-end gap-2 sm:flex-row sm:items-center">
-          <LiveAlertsButton
-            count={live.alerts.length}
-            closures={live.closures.length}
-            status={live.status}
-            open={alertsOpen}
-            onClick={() => {
-              setAlertFocus(null);
-              setAlertsOpen((o) => !o);
-            }}
-          />
-          <SourceBadge source={world.source} trainCount={sim.trainCount} />
-        </div>
-      </header>
+        )}
 
-      {/* Right rail: map controls, and Pro telemetry under them. Ends 6rem above the dock. */}
-      <div className="pointer-events-none absolute top-[7.25rem] right-3 bottom-24 z-20 flex flex-col items-end gap-2 sm:top-[4.25rem] sm:right-4">
-        <div className="pointer-events-auto">
-          <MapControls
-            viewMode={view}
-            onViewModeChange={changeView}
-            layers={layers}
-            onLayersChange={changeLayers}
-            telemetry={telemetry}
-            onTelemetryChange={setTelemetry}
-            telemetryLockedHint={telemetryUnlocked ? null : `Unlocks at Lvl 3 · ${rankOfLevel(3).name}`}
-            onRecenter={recenter}
-            onOpen={() => setAlertsOpen(false)}
+        <header className="pointer-events-none absolute inset-x-0 top-0 z-30 flex items-start justify-between gap-2 p-3 sm:p-4">
+          <div className="pointer-events-auto flex items-start gap-2">
+            <div className={`${PANEL} hidden h-14 items-center gap-2.5 px-3 lg:flex`}>
+              <TRoundel size={30} />
+              <div className="leading-tight">
+                <p className="text-[15px] font-semibold tracking-tight text-white">AboveGround</p>
+                <p className="text-[10px] text-zinc-400">T-Verse · Boston&apos;s live T</p>
+              </div>
+            </div>
+            <GameHUD
+              progress={progress}
+              rank={rank}
+              next={nextRankUp}
+              fraction={rankFraction}
+              gain={gain}
+              onEquip={equip}
+              onDemoModeChange={changeDemoMode}
+              onJumpToLevel={jumpToLevel}
+            />
+          </div>
+          <div className="pointer-events-auto flex shrink-0 flex-col-reverse items-end gap-2 sm:flex-row sm:items-center">
+            <LiveAlertsButton
+              count={live.alerts.length}
+              closures={live.closures.length}
+              status={live.status}
+              open={alertsOpen}
+              onClick={() => {
+                setAlertFocus(null);
+                setAlertsOpen((o) => !o);
+              }}
+            />
+            <SourceBadge source={world.source} trainCount={sim.trainCount} />
+          </div>
+        </header>
+
+        {/* Right rail: map controls, and Pro telemetry under them. Ends 6rem above the dock. */}
+        <div className="pointer-events-none absolute top-[7.25rem] right-3 bottom-24 z-20 flex flex-col items-end gap-2 sm:top-[4.25rem] sm:right-4">
+          <div className="pointer-events-auto">
+            <MapControls
+              viewMode={viewMode}
+              onViewModeChange={changeView}
+              theme={theme}
+              onThemeChange={setThemeMode}
+              layers={layers}
+              onLayerChange={changeLayer}
+              telemetryLockedHint={telemetryUnlocked ? null : `Unlocks at Lvl 3 · ${rankOfLevel(3).name}`}
+              onRecenter={recenter}
+              onOpen={() => setAlertsOpen(false)}
+            />
+          </div>
+          {layers.telemetry && telemetryUnlocked && (
+            <div className="pointer-events-auto hidden sm:block">
+              <TelemetryCard
+                updatedAt={live.updatedAt}
+                stats={[
+                  { label: "Trains on map", value: layers.trains ? sim.trainCount : "hidden" },
+                  { label: "Train feed", value: world.source ? SOURCE_LABEL[world.source] : "…" },
+                  { label: "Alerts in effect", value: live.alerts.length },
+                  { label: "Closures", value: live.closures.length, alert: live.closures.length > 0 },
+                  { label: "Standing trains", value: live.stopped.length, alert: live.stopped.length > 0 },
+                  { label: "Rider reports", value: reportsNow },
+                ]}
+              />
+            </div>
+          )}
+        </div>
+
+        {/* Alerts panel: left of the map controls on desktop, full width on phones; ends above the dock. */}
+        <div className="pointer-events-none absolute inset-x-3 top-[7.25rem] bottom-24 z-40 flex items-start justify-end sm:inset-x-auto sm:top-[4.25rem] sm:right-[4.5rem]">
+          <LiveAlertsPanel
+            open={alertsOpen}
+            onClose={() => setAlertsOpen(false)}
+            alerts={live.alerts}
+            status={live.status}
+            updatedAt={live.updatedAt}
+            focusId={alertFocus}
+            stationName={(id) => live.index?.stations.get(id)?.name ?? null}
+            onShowOnMap={showOnMap}
+            exploreLabel={(a) => (scenarioFor(a.cause) && featuredStationFor(a, stations, live.index) ? scenarioFor(a.cause)!.label : null)}
+            onExplore={exploreLive}
+            notify={{ supported: notifySupported, on: notifyOn, toggle: () => void toggleNotify() }}
+            events={live.events}
+            onShowEvent={showEvent}
           />
         </div>
-        {telemetry && telemetryUnlocked && (
-          <div className="pointer-events-auto hidden sm:block">
-            <TelemetryCard
-              updatedAt={live.updatedAt}
-              stats={[
-                { label: "Trains on map", value: layers.trains ? sim.trainCount : "hidden" },
-                { label: "Train feed", value: world.source ? SOURCE_LABEL[world.source] : "…" },
-                { label: "Alerts in effect", value: live.alerts.length },
-                { label: "Closures", value: live.closures.length, alert: live.closures.length > 0 },
-                { label: "Standing trains", value: live.stopped.length, alert: live.stopped.length > 0 },
-                { label: "Rider reports", value: reportsNow },
-              ]}
+
+        {/* Left rail: next trains (a button under the rider badge on phones, bottom-left from lg). */}
+        {!inside && stationById(nextStation) && (
+          <div className="pointer-events-none absolute top-[5.25rem] bottom-24 left-3 z-20 flex flex-col items-start lg:top-[5.75rem] lg:left-4 lg:justify-end">
+            <NextTrains
+              station={stationById(nextStation)!}
+              stations={stations}
+              onSelect={(id) => {
+                setNextStation(id);
+                map.current?.flyToStation(id, { zoom: 16 });
+              }}
+              arrivals={live.arrivals.get(nextStation)}
+              state={live.arrivalsState}
+              closures={live.closures.find((c) => c.station.id === nextStation)?.alerts ?? []}
+              onOpenAlert={showAlertDetails}
             />
           </div>
         )}
-      </div>
 
-      {/* Alerts panel: left of the map controls on desktop, full width on phones; ends above the dock. */}
-      <div className="pointer-events-none absolute inset-x-3 top-[7.25rem] bottom-24 z-40 flex items-start justify-end sm:inset-x-auto sm:top-[4.25rem] sm:right-[4.5rem]">
-        <LiveAlertsPanel
-          open={alertsOpen}
-          onClose={() => setAlertsOpen(false)}
-          alerts={live.alerts}
-          status={live.status}
-          updatedAt={live.updatedAt}
-          focusId={alertFocus}
-          stationName={(id) => live.index?.stations.get(id)?.name ?? null}
-          onShowOnMap={showOnMap}
-          exploreLabel={(a) => (scenarioFor(a.cause, a.header) && featuredStationFor(a, stations, live.index) ? scenarioFor(a.cause, a.header)!.label : null)}
-          onExplore={exploreLive}
-          notify={{ supported: notifySupported, on: notifyOn, toggle: () => void toggleNotify() }}
-          events={live.events}
-          onShowEvent={showEvent}
-        />
-      </div>
-
-      {/* Left rail: next trains (a button under the rider badge on phones, bottom-left from lg). */}
-      {!inside && stationById(nextStation) && (
-        <div className="pointer-events-none absolute top-[5.25rem] bottom-24 left-3 z-20 flex flex-col items-start lg:top-[5.75rem] lg:left-4 lg:justify-end">
-          <NextTrains
-            station={stationById(nextStation)!}
-            stations={stations}
-            onSelect={(id) => {
-              setNextStation(id);
-              map.current?.flyToStation(id, { zoom: 16 });
-            }}
-            arrivals={live.arrivals.get(nextStation)}
-            state={live.arrivalsState}
-            closures={live.closures.find((c) => c.station.id === nextStation)?.alerts ?? []}
-            onOpenAlert={showAlertDetails}
-          />
+        <div className="pointer-events-none absolute top-[7.75rem] right-[4.25rem] left-3 z-30 flex justify-end sm:top-20 sm:right-auto sm:left-1/2 sm:-translate-x-1/2 sm:justify-center">
+          <ToastStack toasts={toasts} onDismiss={dismiss} />
         </div>
-      )}
 
-      <div className="pointer-events-none absolute top-[7.75rem] right-[4.25rem] left-3 z-30 flex justify-end sm:top-20 sm:right-auto sm:left-1/2 sm:-translate-x-1/2 sm:justify-center">
-        <ToastStack toasts={toasts} onDismiss={dismiss} />
-      </div>
+        {activeSim && stationById(activeSim.stationId) && (
+          <div className="pointer-events-none absolute inset-x-0 bottom-24 z-20 flex justify-center px-3">
+            <div className="pointer-events-auto max-w-[min(94vw,460px)]">
+              <IncidentBanner
+                alert={activeSim}
+                stationName={shortName(stationById(activeSim.stationId)!)}
+                stats={sim.stats(activeSim.id)}
+                repairing={repairing === activeSim.stationId}
+                onFix={() => openAnyAlert(activeSim)}
+                onEnterTunnel={
+                  !inside && !repairing && openTunnel === activeSim.stationId ? () => enterTunnel(activeSim.stationId) : undefined
+                }
+              />
+            </div>
+          </div>
+        )}
 
-      {activeSim && stationById(activeSim.stationId) && (
-        <div className="pointer-events-none absolute inset-x-0 bottom-24 z-20 flex justify-center px-3">
-          <div className="pointer-events-auto max-w-[min(94vw,460px)]">
-            <IncidentBanner
-              alert={activeSim}
-              stationName={shortName(stationById(activeSim.stationId)!)}
-              stats={sim.stats(activeSim.id)}
-              repairing={repairing === activeSim.stationId}
-              onFix={() => openAnyAlert(activeSim)}
-              onEnterTunnel={
-                !inside && !repairing && openTunnel === activeSim.stationId ? () => enterTunnel(activeSim.stationId) : undefined
+        <footer className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex justify-center p-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] sm:p-4">
+          <div className="pointer-events-auto">
+            <DemoBar
+              stations={stations}
+              riding={riding}
+              onToggleRide={() => setRiding((r) => !r)}
+              onPostStory={() => setPosting(true)}
+              delayStation={delayStation}
+              onDelayStationChange={setDelayStation}
+              onSimulateDelay={() => void simulateDelay()}
+              simulating={simulating}
+              delayDisabledReason={repairing ? "A repair is in progress" : null}
+              extra={
+                <TFeedButton
+                  className="shrink-0"
+                  unread={feedOpen ? 0 : feed.unread}
+                  live={feed.online}
+                  active={feedOpen}
+                  onClick={() => setFeedOpen((o) => !o)}
+                />
               }
             />
           </div>
-        </div>
-      )}
-
-      <footer className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex justify-center p-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] sm:p-4">
-        <div className="pointer-events-auto">
-          <DemoBar
-            stations={stations}
-            riding={riding}
-            onToggleRide={() => setRiding((r) => !r)}
-            onPostStory={() => setPosting(true)}
-            delayStation={delayStation}
-            onDelayStationChange={setDelayStation}
-            onSimulateDelay={() => void simulateDelay()}
-            simulating={simulating}
-            delayDisabledReason={repairing ? "A repair is in progress" : null}
-            extra={
-              <TFeedButton
-                className="shrink-0"
-                unread={feedOpen ? 0 : feed.unread}
-                live={feed.online}
-                active={feedOpen}
-                onClick={() => setFeedOpen((o) => !o)}
-              />
-            }
-          />
-        </div>
-      </footer>
+        </footer>
+      </HudTheme>
 
       <CommunityDrawer
         open={feedOpen}
