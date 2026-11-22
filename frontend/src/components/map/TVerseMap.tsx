@@ -214,7 +214,15 @@ export default function TVerseMap(props: TVerseMapProps) {
       if (cancelled || leaving) return;
       const initial = latest.current.viewMode ?? "3d";
       cameraMode.current = initial;
-      const options = { container: el, ...OVERVIEW, ...northUp(initial), zoom: overviewZoom(el.clientWidth), maxPitch: initial === "2d" ? 0 : 80 };
+      // Draw at most 1.5x the CSS size: on a 2x Retina screen that is ~44% fewer pixels a frame, which keeps the close
+      // 3D views (Mapbox buildings, station models, rain) near 60 fps, and the difference is hard to see.
+      const options = { container: el, ...OVERVIEW, ...northUp(initial), zoom: overviewZoom(el.clientWidth), maxPitch: initial === "2d" ? 0 : 80,
+        pixelRatio: Math.min(window.devicePixelRatio || 1, 1.5) };
+      // Mapbox GL JS has no pixelRatio option (it reads window.devicePixelRatio), so cap what this page reports.
+      // Nothing else here needs more: the tunnel view caps itself at 1.6 and the dioramas run in their own frames.
+      if (engine === "mapbox" && window.devicePixelRatio > 1.5) {
+        Object.defineProperty(window, "devicePixelRatio", { configurable: true, get: () => 1.5 });
+      }
       const initialPreset = lighting.current.themeMode === "auto" ? process.env.NEXT_PUBLIC_MAPBOX_LIGHT : undefined;
       const m = loaded.engine === "mapbox"
         ? new loaded.lib.Map({ ...options, style: "mapbox://styles/mapbox/standard", projection: "mercator", antialias: true,
