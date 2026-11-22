@@ -1,6 +1,4 @@
-import type { ExpressionSpecification, LayerSpecification, Map as LibreMap, StyleSpecification } from "maplibre-gl";
-import { FLAT_TRANSIT } from "./flatTransit";
-import type { MapLayerVisibility, MapViewMode } from "./types";
+import type { ExpressionSpecification, LayerSpecification, StyleSpecification } from "maplibre-gl";
 import { LINE_COLORS, LINE_GLOW } from "@/lib/theme";
 
 // Boston at dusk: indigo ground, deep-blue water, sodium-lamp arterials and slate-violet
@@ -228,58 +226,8 @@ export function createMapStyle(): StyleSpecification {
       },
       lines: { type: "geojson", data: empty },
       ride: { type: "geojson", data: empty },
-      vehicles: { type: "geojson", data: empty },
-      curbs: { type: "geojson", data: empty },
-      sights: { type: "geojson", data: empty },
       stations: { type: "geojson", data: empty },
     },
-    layers: [...ground, ...footprints, ...roads, ...transit, ...city, ...FLAT_TRANSIT, ...labels],
+    layers: [...ground, ...footprints, ...roads, ...transit, ...city, ...labels],
   };
-}
-
-type PaintKey = Parameters<LibreMap["setPaintProperty"]>[1];
-type PaintValue = Parameters<LibreMap["setPaintProperty"]>[2];
-const daylight: [string, PaintKey, PaintValue][] = [
-  ["night", "background-color", "#f1f1eb"], ["landuse", "fill-color", "#edece6"],
-  ["landcover", "fill-color", "#d1e4d2"], ["parks", "fill-color", "#bbdbbe"],
-  ["water", "fill-color", "#acd7ea"], ["water-shore", "line-color", "#90bdc9"], ["channels", "line-color", "#a2cada"],
-  ["streets", "line-color", "#ffffff"], ["collectors", "line-color", "#ffffff"], ["arterials", "line-color", "#fffaf1"],
-  ["arterials", "line-opacity", 1], ["paths", "line-color", "#a49b8d"], ["runways", "line-color", "#c8c6be"],
-  ["heavy-rail", "line-color", "#a29c9c"], ["building-footprints", "fill-color", "#d4d1c9"],
-  ["building-footprints", "fill-opacity", .85], ["water-names", "text-color", "#396c81"],
-  ["water-names", "text-halo-color", "#d1eaf2"], ["neighborhoods", "text-color", "#555d54"],
-  ["neighborhoods", "text-halo-color", "#f7f7ef"], ["station-names", "text-halo-color", "#ffffff"],
-  ["station-names", "text-opacity", 1], ["rail-core", "line-color", ["to-color", ["coalesce", ["get", "color"], "#00843d"]]],
-  ["ride-core", "line-color", "#225c79"],
-];
-const duskPaint = new Map([...ground, ...roads, ...footprints, ...transit, ...labels].map(l => [l.id, l.paint]));
-
-/** Keep the sources, hit targets and tile cache alive when changing map appearance. */
-export function setBasemapMode(map: LibreMap, mode: MapViewMode) {
-  const flat = mode === "2d";
-  for (const [id, key, value] of daylight) {
-    if (map.getLayer(id)) map.setPaintProperty(id, key, flat ? value : (duskPaint.get(id) as Record<string, PaintValue>)[key]);
-  }
-  if (map.getLayer("building-footprints")) map.setLayerZoomRange("building-footprints", 12, flat ? 24 : 15.2);
-  for (const id of ["buildings", "buildings-skyline", "building-edges", "arterial-glow", "rail-glow", "rail-hot", "ride-glow"]) {
-    if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", flat ? "none" : "visible");
-  }
-  if (map.getLayer("station-names")) {
-    map.setLayoutProperty("station-names", "text-field", flat ? ["get", "name"] : ["upcase", ["get", "name"]]);
-    map.setLayoutProperty("station-names", "text-letter-spacing", flat ? .01 : .12);
-    map.setLayoutProperty("station-names", "text-allow-overlap", !flat);
-  }
-}
-
-export function setTransitVisibility(map: LibreMap, mode: MapViewMode, layers: MapLayerVisibility, tourist: boolean) {
-  const flat = mode === "2d";
-  const visible: Record<string, boolean> = {
-    "stop-disc": true, "train-marker": layers.trains, "delay-badge": layers.alerts,
-    "curb-path": layers.shuttles, "curb-pin": layers.shuttles, "sight-marker": tourist && layers.tourist, "sight-names": tourist && layers.tourist,
-  };
-  for (const [id, on] of Object.entries(visible)) {
-    if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", flat && on ? "visible" : "none");
-  }
-  if (map.getLayer("station-names")) map.setPaintProperty("station-names", "text-color", flat ? "#172d33"
-    : layers.alerts ? ["case", ["get", "alert"], "#ffb4bc", "#e3ebf7"] : "#e3ebf7");
 }
