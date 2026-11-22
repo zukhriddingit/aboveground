@@ -1,44 +1,57 @@
 "use client";
 // Red X over every station the MBTA reports closed, bypassed or suspended right now (live V3
-// alerts). Delays never get an X. Render inside <TVerseMap>.
+// alerts). Delays never get an X. Tapping one explores a simulated repair there. Render inside <TVerseMap>.
+// The X sits on the track itself: the MBTA's station point is usually the headhouse, a little off the
+// line, so it's snapped to the nearest point of the closed route's track.
+import { useMemo } from "react";
 import { X } from "lucide-react";
 import { MapAnchor } from "@/components/map";
-import { effectLabel, type LiveAlert } from "./mbtaV3";
-import { zoomScale } from "./trackGeo";
+import { routeLine } from "@/lib/theme";
+import { effectLabel, type LiveAlert, type MbtaStation } from "./mbtaV3";
+import { TRACKS, pointAt, snapToTracks, toLngLat, toLocal } from "./trackGeo";
 import type { ClosureSite } from "./useLiveMbta";
 
-/** Above the station models, below the incident tags (330 m), zoom-scaled like the map's 3D layer. */
-const ALTITUDE = 140;
+/** A station further than this from its line keeps its own point. */
+const SNAP_METERS = 300;
+/** A little above the rails so the marker isn't buried in the ballast at low angles. */
+const ALTITUDE = 3;
 
-export function ClosureMarkers({
-  closures,
-  getZoom,
-  onOpen,
-}: {
-  closures: ClosureSite[];
-  getZoom: () => number;
-  onOpen: (alert: LiveAlert) => void;
-}) {
+/** Where the X goes: the nearest point on the track of the routes the alerts name. */
+function onTrack(station: MbtaStation, alerts: LiveAlert[]): [number, number] {
+  const routes = new Set(alerts.flatMap((a) => a.routes));
+  const lines = new Set([...routes].map(routeLine));
+  const tracks = Object.entries(TRACKS)
+    .filter(([route]) => routes.has(route) || lines.has(routeLine(route)))
+    .flatMap(([, list]) => list);
+  const snap = tracks.length ? snapToTracks(tracks, toLocal(station.lng, station.lat)) : null;
+  if (!snap || snap.dist > SNAP_METERS) return [station.lng, station.lat];
+  const p = pointAt(snap.track, snap.d);
+  return toLngLat(p.x, p.z);
+}
+
+export function ClosureMarkers({ closures, onOpen }: { closures: ClosureSite[]; onOpen: (alert: LiveAlert, station: MbtaStation) => void }) {
+  const placed = useMemo(() => closures.map((site) => ({ ...site, at: onTrack(site.station, site.alerts) })), [closures]);
   return (
     <>
-      {closures.map(({ station, alerts }) => {
+      {placed.map(({ station, alerts, at }) => {
         const label = `${station.name}: ${effectLabel(alerts[0])}`;
         return (
-          <MapAnchor key={station.id} lng={station.lng} lat={station.lat} follow={() => [station.lng, station.lat, ALTITUDE * zoomScale(getZoom())]}>
+          <MapAnchor key={station.id} lng={at[0]} lat={at[1]} altitude={ALTITUDE} anchor="center">
             <button
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
-                onOpen(alerts[0]);
+                onOpen(alerts[0], station);
               }}
               title={label}
-              aria-label={`${label}. Open the MBTA alert`}
-              className="group flex flex-col items-center outline-none"
+              aria-label={`${label}. Explore a simulated repair here`}
+              className="group relative flex items-center justify-center outline-none"
             >
               <span className="flex size-8 items-center justify-center rounded-full border-2 border-white bg-red-600 shadow-[0_0_18px_rgba(255,40,60,0.85)] transition group-hover:scale-110 group-focus-visible:ring-2 group-focus-visible:ring-white">
                 <X className="size-5 text-white" strokeWidth={3.5} />
               </span>
-              <span className="mt-1 rounded-full border border-red-400/40 bg-slate-950/90 px-2 py-0.5 text-[10px] font-semibold whitespace-nowrap text-red-100 opacity-0 transition group-hover:opacity-100 group-focus-visible:opacity-100">
+              {/* Out of the layout, so the X itself stays centered on the track. */}
+              <span className="absolute top-full left-1/2 mt-1 -translate-x-1/2 rounded-full border border-red-400/40 bg-slate-950/90 px-2 py-0.5 text-[10px] font-semibold whitespace-nowrap text-red-100 opacity-0 transition group-hover:opacity-100 group-focus-visible:opacity-100">
                 {label}
                 {alerts.length > 1 ? ` +${alerts.length - 1}` : ""}
               </span>
