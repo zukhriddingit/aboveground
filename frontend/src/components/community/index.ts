@@ -1,5 +1,6 @@
 // T-Feed: the community feed by T line. See README.md in this folder for page.tsx wiring.
 export { CommunityDrawer, type CommunityDrawerProps } from "./CommunityDrawer";
+export { LinePulse, localPulse } from "./LinePulse";
 export { CreatePostModal, POST_POINTS, type CreatePostModalProps } from "./CreatePostModal";
 export { PostCard, type PostCardProps } from "./PostCard";
 export { ReplyThread, REPLY_POINTS, type ReplyThreadProps } from "./ReplyThread";

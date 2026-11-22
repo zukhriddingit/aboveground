@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import type { CommunityPost, NewCommunityReply, ReactionKey, StationId, TransitLine } from "@/types/tverse";
-import { REACTIONS, VIBES, formatCount, lineColor, lineGlow, relativeTime } from "./feedMeta";
+import { REACTIONS, VIBES, authorLabel, formatCount, lineColor, lineGlow, relativeTime } from "./feedMeta";
 import { ReplyThread } from "./ReplyThread";
 import { Avatar, BadgeTag } from "./RiderBits";
 
@@ -76,17 +76,15 @@ export function PostCard({
 
   return (
     <article
-      className="relative overflow-clip rounded-3xl border border-white/10 bg-white/[.035] shadow-[0_10px_40px_rgba(0,0,0,.35)]"
+      className="relative overflow-clip rounded-2xl border border-white/12 bg-white/[.03]"
       style={{ animation: localOnly ? "tf-pop-in .3s ease-out" : undefined }}
     >
-      <div className="absolute inset-x-6 top-0 h-px" style={{ background: `linear-gradient(90deg, transparent, ${glow}, transparent)` }} />
-
       {/* Header */}
       <header className="flex items-start gap-2.5 px-3.5 pb-2.5 pt-3">
         <Avatar handle={post.author} color={post.avatarColor} />
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 items-center gap-1.5 text-[13px]">
-            <span className="truncate font-bold text-white">@{post.author}</span>
+            <span className="truncate font-bold text-white">{authorLabel(post.author)}</span>
             <BadgeTag badge={post.authorBadge} />
             <span className="shrink-0 text-white/35">
               · {pending ? "posting…" : relativeTime(post.createdAt, now)}
@@ -96,8 +94,8 @@ export function PostCard({
           <div className="mt-1 flex min-w-0">{station}</div>
         </div>
         <span
-          className="shrink-0 rounded-full px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wider text-white"
-          style={{ background: color, boxShadow: `0 0 14px ${glow}66` }}
+          className="shrink-0 rounded px-2 py-1 text-[10px] font-extrabold uppercase tracking-wider text-white"
+          style={{ background: color }}
         >
           {post.line} Line
         </span>
@@ -165,7 +163,7 @@ export function PostCard({
               className="flex items-center gap-1 rounded-full px-2.5 py-1.5 text-xs font-semibold tabular-nums transition active:scale-90"
               style={
                 on
-                  ? { background: `${glow}26`, color: "#fff", boxShadow: `inset 0 0 0 1px ${glow}99, 0 0 14px ${glow}44` }
+                  ? { background: `${glow}26`, color: "#fff", boxShadow: `inset 0 0 0 1px ${glow}99` }
                   : { background: "rgba(255,255,255,.05)", color: "rgba(255,255,255,.7)", boxShadow: "inset 0 0 0 1px rgba(255,255,255,.08)" }
               }
             >
@@ -189,7 +187,7 @@ export function PostCard({
 
       {showImage && (
         <p className="break-words px-4 pt-2 text-[13.5px] leading-snug text-white/90">
-          <span className="mr-1.5 font-bold text-white">@{post.author}</span>
+          <span className="mr-1.5 font-bold text-white">{authorLabel(post.author)}</span>
           {post.caption}
         </p>
       )}

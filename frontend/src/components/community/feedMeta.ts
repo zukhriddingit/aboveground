@@ -58,6 +58,11 @@ export function cleanHandle(value: string) {
   return value.replace(/^@+/, "").replace(/\s+/g, "").slice(0, 24);
 }
 
+/** "@Adam" for one-word handles; names with spaces ("Anonymous Rider") are shown as they are. */
+export function authorLabel(author: string) {
+  return /\s/.test(author) ? author : `@${author}`;
+}
+
 export function relativeTime(iso: string, now: number) {
   if (!now) return "";
   const s = Math.max(0, (now - new Date(iso).getTime()) / 1000);

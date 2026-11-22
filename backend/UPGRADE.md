@@ -1,7 +1,7 @@
-# Upgrade P0/P1 backend: note for Member 1
+# Upgrade P0/P1 backend
 
-Two new self-contained routers sit next to `community.py` (T-Feed). They don't touch your code.
-**To turn everything on in `main.py`, add these lines** after `app = FastAPI(...)` and your CORS middleware:
+Two self-contained routers sit next to `community.py` (T-Feed). `main.py` mounts them with world, stories and the
+alert trigger; the lines it uses are:
 
 ```python
 from community import router as community_router   # T-Feed (already documented in COMMUNITY.md)
@@ -68,13 +68,13 @@ include them too.
   error, safety block or empty answer → deterministic templates (the four 2026 scenarios, per-line alternates, a 2-sentence
   above-ground fact for all 15 stops). Gemini answers are cached for 10 min per prompt. `AI_DISABLED=1` forces templates.
 
-## Run it alone (before `main.py` exists)
+## Run it
 
 ```bash
 cd backend
-python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
-GEMINI_API_KEY=... .venv/bin/uvicorn dev_app:app --reload --port 8000     # key optional
+python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+.venv/bin/uvicorn main:app --reload --port 8000     # GEMINI_API_KEY from the env or backend/.env, optional
+.venv/bin/python verify_live.py                     # checks every route, live Gemini and the 4 s fallback
 ```
 
-`dev_app.py` mounts T-Feed + Quick-Check + AI with open CORS. Delete it (and `community_dev_app.py`) once `main.py`
-includes the routers.
+`dev_app.py` and `community_dev_app.py` now just re-export `main:app`, so old commands keep working.

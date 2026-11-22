@@ -227,7 +227,7 @@ function StoryViewer({
               {handle.charAt(0) || "?"}
             </div>
             <div className="min-w-0 flex-1 leading-tight">
-              <div className="truncate text-sm font-semibold">@{handle}</div>
+              <div className="truncate text-sm font-semibold">{/\s/.test(handle) ? handle : `@${handle}`}</div>
               <div className="truncate text-xs text-white/70">
                 🚇 {stationName(story.stationId, stations)} · {timeAgo(story.createdAt)}
                 {held && " · paused"}

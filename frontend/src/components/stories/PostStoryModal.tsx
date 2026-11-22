@@ -2,7 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { Station, StationId, StoryCategory } from "@/types/tverse";
+import { Switch } from "@/components/hud/Switch";
 import { MOCK_STATIONS } from "@/lib/mockData";
+import { DEFAULT_RIDER_NAME, publicName, setRiderProfile, useRiderProfile } from "@/lib/riderProfile";
 import { LINE_COLORS } from "@/lib/theme";
 import { CATEGORIES, CATEGORY_META } from "./storyData";
 import { compressImage, renderTextCard } from "./imageUtils";
@@ -18,19 +20,9 @@ export interface PostStoryModalProps {
   onPosted?: (draft: NewStoryDraft) => void;
   stations?: Station[];
   defaultStationId?: StationId;
-  defaultAuthor?: string;
 }
 
 const PRICE_CHIPS = ["Free", "$5", "$10", "$15"];
-const AUTHOR_KEY = "tverse.author";
-
-function readAuthor(fallback: string) {
-  try {
-    return localStorage.getItem(AUTHOR_KEY) || fallback;
-  } catch {
-    return fallback;
-  }
-}
 
 /** 5-second "drop a Story" sheet. Mounted fresh each time it opens, so the form starts empty. */
 export function PostStoryModal(props: PostStoryModalProps) {
@@ -44,7 +36,6 @@ function PostStorySheet({
   onPosted,
   stations = MOCK_STATIONS,
   defaultStationId,
-  defaultAuthor = "charlie_rider",
 }: PostStoryModalProps) {
   const [stationId, setStationId] = useState<StationId>(defaultStationId ?? stations[0]?.id ?? "place-kencl");
   const [category, setCategory] = useState<StoryCategory>("CHEAP_EATS");
@@ -55,7 +46,8 @@ function PostStorySheet({
   const [placeName, setPlaceName] = useState("");
   const [priceTag, setPriceTag] = useState("");
   const [walkMin, setWalkMin] = useState(3);
-  const [author, setAuthor] = useState(() => readAuthor(defaultAuthor));
+  // The name is the rider profile (also edited from the HUD badge and T-Feed).
+  const profile = useRiderProfile();
   const cameraRef = useRef<HTMLInputElement>(null);
   const galleryRef = useRef<HTMLInputElement>(null);
   const captionRef = useRef<HTMLTextAreaElement>(null);
@@ -90,14 +82,11 @@ function PostStorySheet({
     e?.preventDefault();
     if (!canPost) return;
     const place = placeName.trim() || station?.name || "Near the T";
-    const cleanAuthor = author.trim().replace(/^@/, "") || defaultAuthor;
-    try {
-      localStorage.setItem(AUTHOR_KEY, cleanAuthor);
-    } catch {}
+    if (!profile.name.trim()) setRiderProfile({ name: DEFAULT_RIDER_NAME });
     const draft: NewStoryDraft = {
       stationId,
       category,
-      author: cleanAuthor,
+      author: publicName(profile),
       caption: caption.trim(),
       placeName: place,
       priceTag: priceTag || undefined,
@@ -121,13 +110,13 @@ function PostStorySheet({
       <StoryStyles />
       <form
         onSubmit={submit}
-        className="tv-no-scrollbar max-h-[94dvh] w-full overflow-y-auto rounded-t-3xl bg-slate-950/90 p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] text-white shadow-2xl ring-1 ring-white/10 backdrop-blur-xl sm:max-w-md sm:rounded-3xl"
+        className="tv-no-scrollbar max-h-[94dvh] w-full overflow-y-auto rounded-t-2xl bg-zinc-950/95 p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] text-white shadow-2xl ring-1 ring-white/12 backdrop-blur-xl sm:max-w-md sm:rounded-2xl"
         style={{ animation: "tv-sheet-up .3s cubic-bezier(.2,.9,.3,1)" }}
       >
         <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-white/25 sm:hidden" />
         <div className="mb-4 flex items-center justify-between">
           <div>
-            <h2 className="text-lg font-bold">Drop a Story ⚡</h2>
+            <h2 className="text-lg font-bold">Drop a Story</h2>
             <p className="text-xs text-white/55">What&apos;s happening above ground?</p>
           </div>
           <button
@@ -218,7 +207,7 @@ function PostStorySheet({
                 className="flex flex-col items-center gap-0.5 rounded-xl py-2 text-[11px] font-semibold ring-1 ring-white/15 transition"
                 style={
                   active
-                    ? { background: `${m.color}26`, color: m.color, boxShadow: `0 0 16px ${m.color}55`, borderColor: m.color }
+                    ? { background: `${m.color}26`, color: m.color, boxShadow: `inset 0 0 0 1px ${m.color}` }
                     : { background: "rgba(255,255,255,.04)", color: "rgba(255,255,255,.7)" }
                 }
               >
@@ -275,14 +264,26 @@ function PostStorySheet({
             </button>
           </div>
         </div>
-        <div className="mb-4 flex items-center gap-2 rounded-xl bg-white/[.04] px-3 py-2 ring-1 ring-white/10">
-          <span className="text-xs text-white/45">Posting as @</span>
-          <input
-            value={author}
-            onChange={(e) => setAuthor(e.target.value.replace(/\s/g, "").slice(0, 24))}
-            className="min-w-0 flex-1 bg-transparent text-sm font-semibold outline-none"
-            aria-label="Your handle"
-          />
+        <div className="mb-4 space-y-2 rounded-xl bg-white/[.04] px-3 py-2.5 ring-1 ring-white/12">
+          <label className="flex items-center gap-2">
+            <span className="shrink-0 text-xs text-white/45">Posting as</span>
+            {profile.anonymous ? (
+              <span className="min-w-0 flex-1 truncate text-sm font-semibold text-white/80">{publicName(profile)}</span>
+            ) : (
+              <input
+                value={profile.name}
+                onChange={(e) => setRiderProfile({ name: e.target.value })}
+                maxLength={24}
+                placeholder={DEFAULT_RIDER_NAME}
+                className="min-w-0 flex-1 bg-transparent text-sm font-semibold outline-none placeholder:text-white/35"
+                aria-label="Your display name"
+              />
+            )}
+          </label>
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-xs text-white/55">Post anonymously</span>
+            <Switch size="sm" checked={profile.anonymous} onChange={(on) => setRiderProfile({ anonymous: on })} label="Post anonymously" />
+          </div>
         </div>
 
         <button
@@ -291,7 +292,7 @@ function PostStorySheet({
           className="w-full rounded-2xl py-3.5 text-base font-bold text-black shadow-xl transition active:scale-[.98] disabled:opacity-40"
           style={{ background: CATEGORY_META[category].gradient }}
         >
-          Post to {station?.name ?? "station"} 🚀
+          Post to {station?.name ?? "station"}
         </button>
       </form>
     </div>

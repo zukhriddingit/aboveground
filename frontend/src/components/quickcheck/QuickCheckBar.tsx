@@ -35,7 +35,7 @@ interface Burst {
 
 /**
  * 1-tap "Waze for the T": zero typing. Each tap sends a report (or queues it offline in
- * localStorage `pending_t_reports`), awards +10 CharliePoints and starts a 60 s cooldown for
+ * localStorage `pending_t_reports`), awards +10 XP and starts a 60 s cooldown for
  * that stop + chip so it can't be farmed.
  */
 export function QuickCheckBar({
@@ -100,7 +100,7 @@ export function QuickCheckBar({
     }
     setTapped((t) => ({ ...t, [kind]: clock() }));
     onPointsAwarded?.(QUICK_POINTS, kind);
-    burst(`+${QUICK_POINTS} CharliePoints`, meta.color);
+    burst(`+${QUICK_POINTS} XP`, meta.color);
   };
 
   const coolingDown = (kind: QuickCheckKind) => {

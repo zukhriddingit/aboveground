@@ -1,10 +1,14 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Lock, Shirt, Sparkles } from "lucide-react";
+import { EyeOff } from "lucide-react";
+import { DEFAULT_RIDER_NAME, riderInitials, useRiderProfile } from "@/lib/riderProfile";
+import { FOCUS, PANEL } from "@/lib/ui";
 import type { AvatarHat } from "@/types/tverse";
 import { HatIcon } from "./HatIcon";
-import { HAT_INFO, HAT_ORDER, type Progress } from "./useProgress";
+import { RiderProfilePopover } from "./RiderProfilePopover";
+import type { Rank, RankLevel } from "./ranks";
+import type { Progress, XpGain } from "./useProgress";
 
 function useCountUp(value: number) {
   const [shown, setShown] = useState(value);
@@ -25,12 +29,39 @@ function useCountUp(value: number) {
   return shown;
 }
 
-/** Top-left badge: avatar name, CharliePoints, and the wardrobe of unlocked 3D hats. */
-export function GameHUD({ progress, onEquip }: { progress: Progress; onEquip: (hat: AvatarHat) => void }) {
-  const points = useCountUp(progress.points);
+const HUD_CSS = `
+@keyframes hud-xp-pop {
+  0% { opacity: 0; transform: translateY(6px) scale(.9); }
+  15% { opacity: 1; transform: translateY(0) scale(1); }
+  75% { opacity: 1; transform: translateY(-6px); }
+  100% { opacity: 0; transform: translateY(-14px); }
+}
+@keyframes hud-bar-glint {
+  0% { opacity: .9; }
+  100% { opacity: 0; }
+}
+`;
+
+export interface GameHUDProps {
+  progress: Progress;
+  rank: Rank;
+  next: Rank | null;
+  /** 0..1 through the current rank. */
+  fraction: number;
+  /** Latest XP award, for the "+25 XP" chip. */
+  gain: XpGain | null;
+  onEquip: (hat: AvatarHat) => void;
+  onDemoModeChange: (on: boolean) => void;
+  onJumpToLevel: (level: RankLevel) => void;
+}
+
+/** Top-left rider badge: name, Transit Rank and XP bar. Opens the Rider Profile (name, anonymous, rank, wardrobe). */
+export function GameHUD({ progress, rank, next, fraction, gain, onEquip, onDemoModeChange, onJumpToLevel }: GameHUDProps) {
+  const profile = useRiderProfile();
+  const xp = useCountUp(progress.points);
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
-  const nextLocked = HAT_ORDER.find((h) => !progress.unlocked.includes(h));
+  const name = profile.name.trim() || DEFAULT_RIDER_NAME;
 
   useEffect(() => {
     if (!open) return;
@@ -47,74 +78,60 @@ export function GameHUD({ progress, onEquip }: { progress: Progress; onEquip: (h
   }, [open]);
 
   return (
-    <div ref={root} className="relative">
-      <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-slate-950/75 p-2 pr-2.5 shadow-lg backdrop-blur-md">
-        <div className="relative flex size-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-400 to-fuchsia-500 text-sm font-black text-slate-950 shadow-[0_0_18px_rgba(34,211,238,0.45)]">
-          {progress.equipped !== "none" && <HatIcon hat={progress.equipped} className="absolute -top-3 size-6 drop-shadow" />}
-          CH
-        </div>
-        <div className="min-w-0 leading-tight">
-          <p className="text-[11px] font-medium tracking-wide whitespace-nowrap text-slate-400 uppercase">Charlie · you</p>
-          <p className="flex items-center gap-1 text-base font-semibold text-amber-200 tabular-nums">
-            <Sparkles className="size-4 text-amber-300" />
-            {points.toLocaleString()}
-            <span className="text-[11px] font-medium text-amber-200/60">CP</span>
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={() => setOpen((o) => !o)}
-          aria-expanded={open}
-          aria-controls="wardrobe"
-          className="ml-1 flex h-9 items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-2.5 text-xs font-medium text-slate-200 transition hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-cyan-300"
-        >
-          <Shirt className="size-4" />
-          <span className="hidden sm:inline">Wardrobe</span>
-        </button>
-      </div>
+    <div ref={root} className="relative" data-hud-panel="rider">
+      <style>{HUD_CSS}</style>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        aria-controls="rider-profile"
+        aria-label={`Rider profile: ${name}, level ${rank.level} ${rank.name}, ${progress.points} XP`}
+        className={`${PANEL} flex w-[13.5rem] items-center gap-2.5 sm:w-[15.5rem] p-2 pr-3 text-left transition-colors hover:bg-zinc-900/95 ${FOCUS}`}
+      >
+        <span className="relative flex size-10 shrink-0 items-center justify-center rounded-full border-2 border-white bg-zinc-800 text-[13px] font-bold text-white">
+          {progress.equipped !== "none" && <HatIcon hat={progress.equipped} className="absolute -top-3.5 size-6 drop-shadow" />}
+          {riderInitials(name)}
+        </span>
+        <span className="min-w-0 flex-1 leading-tight">
+          <span className="flex items-center gap-1.5">
+            <span className="truncate text-[13px] font-semibold text-white">{name}</span>
+            {profile.anonymous && <EyeOff className="size-3 shrink-0 text-zinc-400" aria-label="Posting anonymously" />}
+            {progress.demo && <span className="shrink-0 rounded bg-white px-1 text-[9px] font-bold tracking-wide text-zinc-950">DEMO</span>}
+          </span>
+          <span className="mt-0.5 flex items-baseline justify-between gap-2 text-[11px]">
+            <span className="truncate font-medium text-zinc-300">
+              Lvl {rank.level} · {rank.name}
+            </span>
+            <span className="shrink-0 font-mono text-[10px] text-zinc-400 tabular-nums">
+              {xp}
+              {next ? `/${next.minXp}` : ""} XP
+            </span>
+          </span>
+          <span className="relative mt-1.5 block h-1.5 overflow-hidden rounded-full bg-white/12" aria-hidden>
+            <span className="absolute inset-y-0 left-0 rounded-full bg-white transition-[width] duration-700 ease-out" style={{ width: `${Math.round(fraction * 100)}%` }} />
+            {gain && <span key={gain.seq} className="absolute inset-0 bg-emerald-300 [animation:hud-bar-glint_1.2s_ease-out_forwards]" />}
+          </span>
+        </span>
+        {gain && (
+          <span
+            key={gain.seq}
+            aria-live="polite"
+            className="pointer-events-none absolute -top-2 right-2 rounded-full bg-emerald-400 px-2 py-0.5 text-[11px] font-bold text-zinc-950 opacity-0 shadow [animation:hud-xp-pop_1.8s_ease-out_forwards]"
+          >
+            +{gain.amount} XP
+          </span>
+        )}
+      </button>
 
       {open && (
-        <div
-          id="wardrobe"
-          className="absolute top-full left-0 z-40 mt-2 w-[min(20rem,calc(100vw-1.5rem))] rounded-2xl border border-white/10 bg-slate-950/90 p-3 text-slate-100 shadow-xl backdrop-blur-md"
-        >
-          <p className="text-sm font-semibold">Avatar wardrobe</p>
-          <p className="text-xs text-slate-400">Fix T delays to unlock 3D hats. They pop onto your avatar on the map.</p>
-          <div className="mt-2 grid grid-cols-2 gap-2">
-            {(["none", ...HAT_ORDER] as AvatarHat[]).map((hat) => {
-              const unlocked = progress.unlocked.includes(hat);
-              const equipped = progress.equipped === hat;
-              return (
-                <button
-                  key={hat}
-                  type="button"
-                  disabled={!unlocked}
-                  onClick={() => onEquip(hat)}
-                  title={HAT_INFO[hat].blurb}
-                  className={`flex flex-col items-center gap-1 rounded-xl border p-2.5 text-center transition ${
-                    equipped
-                      ? "border-cyan-400/70 bg-cyan-400/10 shadow-[0_0_16px_rgba(34,211,238,0.25)]"
-                      : "border-white/10 bg-white/5 hover:bg-white/10"
-                  } disabled:cursor-not-allowed disabled:opacity-50`}
-                >
-                  <HatIcon hat={hat} className={`size-10 ${unlocked ? "" : "grayscale"}`} />
-                  <span className="text-[11px] leading-tight font-medium">{HAT_INFO[hat].name}</span>
-                  {!unlocked && (
-                    <span className="flex items-center gap-1 text-[10px] text-slate-400">
-                      <Lock className="size-3" />
-                      {hat === nextLocked ? "Next fix" : "Locked"}
-                    </span>
-                  )}
-                  {equipped && <span className="text-[10px] text-cyan-300">Wearing</span>}
-                </button>
-              );
-            })}
-          </div>
-          <p className="mt-2 text-[11px] text-slate-500">
-            {progress.fixes} {progress.fixes === 1 ? "fix" : "fixes"} so far
-            {nextLocked ? ` · next unlock: ${HAT_INFO[nextLocked].name}` : " · wardrobe complete"}
-          </p>
-        </div>
+        <RiderProfilePopover
+          progress={progress}
+          rank={rank}
+          onEquip={onEquip}
+          onDemoModeChange={onDemoModeChange}
+          onJumpToLevel={onJumpToLevel}
+          onClose={() => setOpen(false)}
+        />
       )}
     </div>
   );

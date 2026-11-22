@@ -10,7 +10,7 @@ so `globals.css` is untouched.
 | `StationStoryBubbles` | Neon story rings pinned over stations with `MapAnchor`. Render it **inside `<TVerseMap>`**. Overlapping bubbles (Boylston / Park St) stack upward on a stem. |
 | `StoryRail` | IG-style row of station rings that works without the map. |
 | `StoryViewerModal` | Full-screen story: progress bars, 6 s auto-advance, tap left/right, swipe, hold or Space to pause, Esc, "Walk Here" (Google Maps walking directions). |
-| `PostStoryModal` | 5-second post sheet: snap/upload (compressed JPEG data URL), station chips, tag, caption, price, walk minutes. No photo → auto-generated text card. Enter posts. |
+| `PostStoryModal` | 5-second post sheet: snap/upload (compressed JPEG data URL), station chips, tag, caption, price, walk minutes. No photo → auto-generated text card. Enter posts. Posts under the shared rider profile name (`@/lib/riderProfile`), or "Anonymous Rider" with Post Anonymously on. |
 | `TouristNarratorCard` | Golden landmark banner that reads `station.landmark` aloud with `speechSynthesis` (mute / replay / dismiss). |
 | `primeSpeech()` | Call it in the Tourist Mode button's click handler: Safari/iOS only allow speech after a tap. |
 
@@ -57,6 +57,7 @@ Z-index: narrator card `z-[60]`, modals `z-[70]`. The narrator sits top-centre, 
 
 ## Notes for the team
 
-- **Member 1:** posted images are base64 JPEG data URLs, usually 100–250 KB, so the POST body can reach about 500 KB.
-- `MOCK_STORIES` uses random `picsum.photos` seeds, so offline photos don't match captions (snowy trees on the pizza story).
-  The backend's 12 seeded stories will replace them. If you change `mockData.ts` later, real food photos would help the demo.
+- Posted images are base64 JPEG data URLs, usually 100–250 KB, so the POST body can reach about 500 KB (`backend/stories.py` allows 3 MB).
+- `MOCK_STORIES` and the backend's 8 seeds use random `picsum.photos` seeds, so photos don't match captions (snowy trees on the
+  pizza story). Real food photos would help the demo.
+- On the main page, bubbles and T-Feed pins are the **Station Stories** map layer (off on first load; posting a Story turns it on).

@@ -17,7 +17,7 @@ let seq = 0;
 const listeners = new Set<() => void>();
 const emit = () => listeners.forEach((l) => l());
 
-/** Show a toast like "+25 CharliePoints · Posted to Green Line!". Needs a <FeedToaster/> mounted (CommunityDrawer has one). */
+/** Show a toast like "+25 XP · Posted to Green Line". Needs a <FeedToaster/> mounted (CommunityDrawer has one). */
 export function showFeedToast(toast: Omit<FeedToast, "id">, ms = 2800) {
   const id = ++seq;
   toasts = [...toasts.slice(-2), { ...toast, id }];
@@ -49,17 +49,16 @@ export function FeedToaster({ besideDrawer = false }: { besideDrawer?: boolean }
       {list.map((t, i) => (
         <div
           key={t.id}
-          className="absolute left-1/2 flex items-center gap-2 whitespace-nowrap rounded-full border border-white/15 bg-slate-950/90 px-4 py-2.5 text-sm font-semibold text-white shadow-2xl backdrop-blur-xl"
+          className="absolute left-1/2 flex items-center gap-2 whitespace-nowrap rounded-full border border-white/12 bg-zinc-950/95 px-4 py-2.5 text-sm font-semibold text-white shadow-[0_10px_30px_rgba(0,0,0,.5)] backdrop-blur-xl"
           style={{
             bottom: (list.length - 1 - i) * 52,
             animation: "tf-toast-in .28s cubic-bezier(.2,.9,.3,1.2) both",
-            boxShadow: t.color ? `0 0 28px ${t.color}55, 0 10px 30px rgba(0,0,0,.5)` : undefined,
             transform: "translateX(-50%)",
           }}
         >
           {t.emoji && <span className="text-base">{t.emoji}</span>}
           <span>{t.text}</span>
-          {t.color && <span className="h-2 w-2 rounded-full" style={{ background: t.color, boxShadow: `0 0 10px ${t.color}` }} />}
+          {t.color && <span className="h-2 w-2 rounded-full" style={{ background: t.color }} />}
         </div>
       ))}
     </div>
