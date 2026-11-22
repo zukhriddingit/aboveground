@@ -1,14 +1,14 @@
 "use client";
 
 import { useEffect, useEffectEvent, useId, useState } from "react";
-import { Bot, CircleCheck, Clock3, ExternalLink, Eye, RotateCcw, ShieldAlert, Users, Wrench, X, Zap } from "lucide-react";
+import { Bot, CircleCheck, Clock3, ExternalLink, Eye, ShieldAlert, Users, X, Zap } from "lucide-react";
 import type { Station, TranslatedAlert } from "@/types/tverse";
-import { AiSourceTag, useAlertTranslation } from "@/components/ai";
 import { canPlay, gameFor, type GameKind } from "./alertTranslator";
 import { BreakerSequenceGame } from "./BreakerSequenceGame";
 import { GameStyles } from "./GameStyles";
 import { formatElapsed } from "./format";
 import { IceThawGame } from "./IceThawGame";
+import type { MiniGameProps } from "./miniGame";
 import { REAL_REPAIRS } from "./realRepairs";
 import type { IncidentStats } from "./incidentSim";
 import { RescueCoupleGame } from "./RescueCoupleGame";
@@ -16,63 +16,20 @@ import { SwitchThrowGame } from "./SwitchThrowGame";
 import { TrackWeldGame } from "./TrackWeldGame";
 import { WireMatchGame } from "./WireMatchGame";
 
-type GameProps = { onWin: (remainingMs: number) => void; onLose: () => void };
-
-const GAMES: Record<GameKind, { title: string; hint: string; cta: string; done: string; fail: string; Game: (p: GameProps) => React.ReactNode }> = {
-  WIRE_MATCH: {
-    title: "Reconnect the 4 signal wires",
-    hint: "Land each tagged wire on its relay's terminal post before the timer runs out.",
-    cta: "Help Fix the Signal",
-    done: "Signal restored!",
-    fail: "The relay fried.",
-    Game: WireMatchGame,
-  },
-  TRACK_WELD: {
-    title: "Thermite-weld the broken rail",
-    hint: "Preheat the rail ends, pour the molten steel, grind the weld flush, then let it cool before trains cross.",
-    cta: "Help Weld the Track",
-    done: "Track welded!",
-    fail: "The joint cracked again.",
-    Game: TrackWeldGame,
-  },
-  SWITCH_THROW: {
-    title: "Line up the switches",
-    hint: "Throw the switches so the trolley reaches its destination, twice.",
-    cta: "Help Throw the Switch",
-    done: "Switch lined up!",
-    fail: "The trolley took the wrong track.",
-    Game: SwitchThrowGame,
-  },
-  BREAKER_SEQUENCE: {
-    title: "Restore the power feed",
-    hint: "Watch the restoration order, then close the feeder breakers in the same order.",
-    cta: "Help Restore Power",
-    done: "Power restored!",
-    fail: "The feeder tripped again.",
-    Game: BreakerSequenceGame,
-  },
-  RESCUE_COUPLE: {
-    title: "Tow the stalled train clear",
-    hint: "Couple up, connect the air line and charge the brakes, right on time.",
-    cta: "Help Clear the Train",
-    done: "Train towed clear!",
-    fail: "The coupler slipped.",
-    Game: RescueCoupleGame,
-  },
-  ICE_THAW: {
-    title: "Thaw the frozen switch",
-    hint: "Torch the ice out of the switch point until it can close.",
-    cta: "Help Thaw the Switch",
-    done: "Switch thawed!",
-    fail: "The points froze solid.",
-    Game: IceThawGame,
-  },
+/** Each repair is a full-screen 3D mini-game; you finish at your own pace (no timer, no losing). */
+const GAMES: Record<GameKind, { cta: string; done: string; Game: (p: MiniGameProps) => React.ReactNode }> = {
+  WIRE_MATCH: { cta: "Help Fix the Signal", done: "Signal restored!", Game: WireMatchGame },
+  TRACK_WELD: { cta: "Help Weld the Track", done: "Track welded!", Game: TrackWeldGame },
+  SWITCH_THROW: { cta: "Help Throw the Switch", done: "Switch lined up!", Game: SwitchThrowGame },
+  BREAKER_SEQUENCE: { cta: "Help Restore Power", done: "Power restored!", Game: BreakerSequenceGame },
+  RESCUE_COUPLE: { cta: "Help Clear the Train", done: "Train towed clear!", Game: RescueCoupleGame },
+  ICE_THAW: { cta: "Help Thaw the Switch", done: "Switch thawed!", Game: IceThawGame },
 };
 
 /** How long the "how long it really takes" card stays up before the repair plays. */
 const WON_HOLD_MS = 9000;
 
-type Step = "brief" | "game" | "won" | "lost";
+type Step = "brief" | "game" | "won";
 
 export interface FixTheTModalProps {
   alert: TranslatedAlert | null;
@@ -89,7 +46,7 @@ export interface FixTheTModalProps {
   onWin: (alert: TranslatedAlert) => void;
 }
 
-/** The AI plain-English delay card, then the 15-second repair mini-game. */
+/** The AI plain-English delay card, then the full-screen 3D repair mini-game. */
 export function FixTheTModal(props: FixTheTModalProps) {
   if (!props.alert) return null;
   return <FixTheTDialog key={props.alert.id} {...props} alert={props.alert} />;
@@ -97,14 +54,11 @@ export function FixTheTModal(props: FixTheTModalProps) {
 
 function FixTheTDialog({ alert, station, stats, simulated, unlockName, explore, onClose, onWin }: FixTheTModalProps & { alert: TranslatedAlert }) {
   const [step, setStep] = useState<Step>("brief");
-  const [attempt, setAttempt] = useState(0);
   const titleId = useId();
   const playable = canPlay(alert);
   const kind = explore?.game ?? gameFor(alert);
   const game = GAMES[kind];
   const real = REAL_REPAIRS[kind];
-  // Plain-English "what broke" from Gemini when it answers within 4 s; the alert's own text until then.
-  const ai = useAlertTranslation(explore ? null : alert);
 
   // The page re-renders every half second while this is open and hands in a fresh onWin each time,
   // so the timer must not depend on it.
@@ -117,11 +71,18 @@ function FixTheTDialog({ alert, station, stats, simulated, unlockName, explore, 
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && step !== "won") onClose();
+      if (e.key !== "Escape" || step === "won") return;
+      // Esc leaves the game for the delay card; from the card it closes everything.
+      if (step === "game") setStep("brief");
+      else onClose();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [step, onClose]);
+
+  if (step === "game") {
+    return <game.Game onWin={() => setStep("won")} onExit={() => setStep("brief")} place={station?.name} />;
+  }
 
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center p-3" role="presentation">
@@ -170,27 +131,8 @@ function FixTheTDialog({ alert, station, stats, simulated, unlockName, explore, 
               <p className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold tracking-widest text-cyan-300 uppercase">
                 <Bot className="size-3.5" />
                 {explore ? `What a ${explore.label} usually involves` : "What actually broke"}
-                {!explore && <AiSourceTag source={ai.source} pending={ai.pending} className="ml-auto" />}
               </p>
-              <p className="text-[15px] leading-relaxed text-slate-100">{explore ? alert.plainExplanation : ai.explanation}</p>
-              {!explore && ai.alternateMove && (
-                <p className="mt-2 text-[13px] leading-relaxed text-cyan-100/80">
-                  <span className="font-semibold text-cyan-200">Smartest move: </span>
-                  {ai.alternateMove}
-                </p>
-              )}
-            </div>
-
-            <div className="rounded-xl border border-amber-300/20 bg-amber-300/5 p-3">
-              <p className="mb-1.5 flex flex-wrap items-center gap-2 text-[11px] font-semibold tracking-widest text-amber-200 uppercase">
-                <Wrench className="size-3.5" />
-                Real-world crew context
-                <span className="rounded-full bg-amber-300/15 px-2 py-0.5 text-[11px] tracking-normal text-amber-100 normal-case">
-                  Typical real repair: {real.typical}
-                </span>
-              </p>
-              <p className="text-[13px] leading-relaxed text-slate-200">{real.detail}</p>
-              {real.examples[0] && <p className="mt-1.5 text-[12px] leading-relaxed text-slate-400 italic">{real.examples[0]}</p>}
+              <p className="text-[15px] leading-relaxed text-slate-100">{alert.plainExplanation}</p>
             </div>
 
             {explore && (
@@ -229,18 +171,6 @@ function FixTheTDialog({ alert, station, stats, simulated, unlockName, explore, 
                 This one is for first responders, so there&apos;s no mini-game. Give them room and check back soon.
               </p>
             )}
-          </div>
-        )}
-
-        {step === "game" && (
-          <div className="space-y-3">
-            <div className="pr-8">
-              <h2 id={titleId} className="text-lg font-semibold text-white">
-                {game.title}
-              </h2>
-              <p className="text-sm text-slate-400">{game.hint}</p>
-            </div>
-            <game.Game key={attempt} onWin={() => setStep("won")} onLose={() => setStep("lost")} />
           </div>
         )}
 
@@ -304,35 +234,6 @@ function FixTheTDialog({ alert, station, stats, simulated, unlockName, explore, 
           </div>
         )}
 
-        {step === "lost" && (
-          <div className="space-y-4 py-2 text-center">
-            <h2 id={titleId} className="text-xl font-semibold text-white">
-              {game.fail}
-            </h2>
-            <p className="text-slate-300">{simulated && !explore ? "Trains are still holding. One more try?" : "Out of time. One more try?"}</p>
-            <div className="flex justify-center gap-2">
-              <button
-                type="button"
-                onClick={onClose}
-                className="rounded-xl border border-white/15 px-4 py-2 text-sm hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-cyan-300"
-              >
-                Close
-              </button>
-              <button
-                type="button"
-                autoFocus
-                onClick={() => {
-                  setAttempt((a) => a + 1);
-                  setStep("game");
-                }}
-                className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-fuchsia-500 to-cyan-400 px-4 py-2 text-sm font-semibold text-slate-950 focus-visible:outline-2 focus-visible:outline-white"
-              >
-                <RotateCcw className="size-4" />
-                Try again
-              </button>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );
