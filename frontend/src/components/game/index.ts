@@ -16,7 +16,10 @@ export { LiveMarkers } from "./LiveMarkers";
 export { describeEvent, useLiveMbta, type ClosureSite, type LiveEvent, type LiveMbta, type StoppedNear } from "./useLiveMbta";
 export {
   causeLabel,
+  closureReason,
   closureScenario,
+  closureStatus,
+  closureTiming,
   countdownLabel,
   effectLabel,
   featuredStationFor,
@@ -24,6 +27,7 @@ export {
   scenarioFor,
   whenLabel,
   type Arrival,
+  type ClosureTiming,
   type LiveAlert,
   type MbtaStation,
   type StationIndex,

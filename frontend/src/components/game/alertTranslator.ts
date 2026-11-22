@@ -172,6 +172,11 @@ const HOW_IT_WORKS: Record<GameKind, { title: string; explain: string }> = {
     explain:
       "Snow and ice can jam switches and third rail on outdoor track. Heaters help, but crews often have to clear the switch points by hand before trains can change tracks again.",
   },
+  ACCESS_UPGRADE: {
+    title: "Accessibility work",
+    explain:
+      "Many older T stations can only be reached by stairs, and their platforms sit well below the train floor. Making one accessible means adding elevators from the street and raising the platforms (on the Green Line, to 8 inches above the rail for today's trolleys), so the station usually closes while crews dig and rebuild.",
+  },
 };
 
 /** Card for a live MBTA alert: the agency's own words, plus how that kind of repair generally works. */
@@ -212,7 +217,7 @@ export function demoAlert(station: Pick<Station, "id" | "name" | "line">): Trans
 }
 
 /** Every kind of fix, picked from what actually broke. */
-export type GameKind = "WIRE_MATCH" | "TRACK_WELD" | "SWITCH_THROW" | "BREAKER_SEQUENCE" | "RESCUE_COUPLE" | "ICE_THAW";
+export type GameKind = "WIRE_MATCH" | "TRACK_WELD" | "SWITCH_THROW" | "BREAKER_SEQUENCE" | "RESCUE_COUPLE" | "ICE_THAW" | "ACCESS_UPGRADE";
 
 export function gameFor(alert: TranslatedAlert): GameKind {
   switch (classify(alert.rawMbtaText)) {

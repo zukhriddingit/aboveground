@@ -81,4 +81,21 @@ export const REAL_REPAIRS: Record<GameKind, RealRepair> = {
       { label: "Boston Globe, Feb 2015", url: "https://www.bostonglobe.com/metro/2015/02/03/record-amounts-snow-compounds-problems-for-already-battered-transit-system/lB69Adr1JmzUxS60U1OpaN/story.html" },
     ],
   },
+  ACCESS_UPGRADE: {
+    typical: "Months to years",
+    detail:
+      "Replacing one station elevator takes the MBTA six to 12 months on average, depending on the job and how easy the work area is to reach; an overhaul of an existing elevator takes about 8 to 10 weeks. Making a whole station accessible, with new elevators and raised platforms, takes years.",
+    examples: [
+      "Symphony closed in June 2026 for a $150.8 million renovation: four new elevators, raised platforms and accessible restrooms. It is due to reopen in summer 2029 and to be finished in fall 2030.",
+      "Green Line C branch, 2026: seven Beacon Street stops get platforms raised 8 inches above the rail for today's trolleys, with sloped walkways and new lighting. In a nine-day shutdown in November crews built new inbound platforms at Summit Avenue and Hawes Street. Once only Type 10 cars run, a later phase adds 6 more inches for level boarding.",
+      "Andrew, 2019: replacing three elevators was due to finish in August; water and structural problems stretched the outage past 13 months.",
+    ],
+    sources: [
+      { label: "MBTA Symphony project", url: "https://www.mbta.com/projects/symphony-station-accessibility-improvements" },
+      { label: "MBTA, Nov 2026", url: "https://www.mbta.com/news/2026-11-16/mbta-continues-successfully-advance-green-line-modernization-investments-makes" },
+      { label: "Brookline Record, Oct 2026", url: "https://brooklinerecord.com/articles/brookline-c-branch-trains-shut-down-nov-7-15-for-station-work-mvtg2wp1" },
+      { label: "Boston Globe, Oct 2019", url: "https://www.bostonglobe.com/metro/2019/10/01/mbta-elevator-repair-delays-pushing-buttons/Vzv0qLewpDE91TjSHkgIvJ/story.html" },
+      { label: "MBTA, Dec 2025", url: "https://cdn.mbta.com/sites/default/files/2025-12/Accessibility%20Initiatives%20Report%20H2%202025.pdf" },
+    ],
+  },
 };

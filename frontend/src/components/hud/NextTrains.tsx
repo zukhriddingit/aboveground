@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { ChevronDown, TrainFront, X } from "lucide-react";
-import { countdownLabel, effectLabel, type Arrival, type LiveAlert } from "@/components/game";
+import { closureTiming, countdownLabel, effectLabel, type Arrival, type LiveAlert } from "@/components/game";
 import { CONTROL, DANGER_TEXT, FOCUS, LABEL, MBTA_RED, PANEL, WARN_TEXT } from "@/lib/ui";
 import type { Station, StationId } from "@/types/tverse";
 import { LineBullet } from "./LineBullet";
@@ -103,7 +103,10 @@ export function NextTrains({
               style={{ borderLeftColor: MBTA_RED }}
             >
               <X className={`mt-0.5 size-3.5 shrink-0 ${DANGER_TEXT}`} strokeWidth={3} />
-              <span className="line-clamp-2">{a.shortHeader}</span>
+              <span className="min-w-0">
+                <span className="line-clamp-2">{a.shortHeader}</span>
+                <span className={`mt-0.5 block text-[11px] font-semibold ${DANGER_TEXT}`}>{closureTiming(a, now).short}</span>
+              </span>
             </button>
           ))}
 
