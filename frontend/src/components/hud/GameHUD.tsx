@@ -112,7 +112,7 @@ export function GameHUD({ progress, rank, next, fraction, gain, onEquip, onDemoM
               <span className="truncate font-medium text-zinc-300">
                 Lvl {rank.level} · {rank.name}
               </span>
-              <span className="shrink-0 font-mono text-[10px] text-zinc-400 tabular-nums">
+              <span className="shrink-0 font-mono text-[11px] text-zinc-400 tabular-nums">
                 {xp}
                 {next ? `/${next.minXp}` : ""} XP
               </span>

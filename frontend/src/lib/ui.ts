@@ -21,7 +21,7 @@ export const CONTROL_STATIC = `${CONTROL_SHAPE} bg-zinc-950/88 text-zinc-100`;
 export const FOCUS = "outline-none focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:ring-offset-1 focus-visible:ring-offset-zinc-950";
 
 /** Uppercase section label, like the small caps on station signs. */
-export const LABEL = "text-[10px] font-semibold tracking-[0.08em] text-zinc-400 uppercase";
+export const LABEL = "text-[11px] font-semibold tracking-[0.07em] text-zinc-400 uppercase";
 
 export const DIVIDER = "border-white/12";
 

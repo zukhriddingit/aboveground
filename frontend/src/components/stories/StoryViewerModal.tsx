@@ -170,7 +170,7 @@ function StoryViewer({
 
       <div
         className="relative h-[100dvh] w-full select-none overflow-hidden bg-zinc-900 text-white shadow-2xl sm:aspect-[9/16] sm:h-[min(88vh,820px)] sm:w-auto sm:rounded-2xl sm:border sm:border-white/12"
-        style={{ animation: "tv-pop-in .28s cubic-bezier(.2,.9,.3,1.2)" }}
+        style={{ animation: "tv-pop-in .3s cubic-bezier(.16,1,.3,1)" }}
       >
         {imageFailed ? (
           <div className="absolute inset-0 flex items-center justify-center bg-zinc-900">

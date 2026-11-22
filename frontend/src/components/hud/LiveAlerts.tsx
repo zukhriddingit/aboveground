@@ -251,7 +251,7 @@ function AlertCard({
   return (
     <article
       data-alert={alert.id}
-      className={`rounded-lg border bg-white/[0.03] p-3 text-sm ${alert.closure ? "border-white/12 border-l-[3px] border-l-[#DA291C]" : "border-white/12"} ${
+      className={`rounded-lg border bg-white/[0.03] p-3 text-sm ${alert.closure ? "border-[#DA291C]/45 bg-[#DA291C]/[0.06]" : "border-white/12"} ${
         expandedByDefault ? "ring-1 ring-white/60" : ""
       }`}
     >

@@ -4,7 +4,7 @@ import { useEffect, useEffectEvent, useId, useRef, useState } from "react";
 import { Bot, CircleCheck, Clock3, ExternalLink, Eye, RotateCcw, ShieldAlert, Users, Wrench, X } from "lucide-react";
 import type { RepairKind, Station, TranslatedAlert } from "@/types/tverse";
 import { AiSourceTag, useAlertTranslation } from "@/components/ai";
-import { BUTTON, BUTTON_PRIMARY, FOCUS, LABEL, MBTA_RED, PANEL } from "@/lib/ui";
+import { BUTTON, BUTTON_PRIMARY, FOCUS, LABEL, PANEL } from "@/lib/ui";
 import { canPlay, gameFor, type GameKind } from "./alertTranslator";
 import { BreakerSequenceGame } from "./BreakerSequenceGame";
 import { GameStyles } from "./GameStyles";
@@ -186,8 +186,8 @@ function FixTheTDialog({ alert, station, stats, simulated, unlockName, explore, 
           <div className="space-y-3.5">
             <div className="flex flex-wrap items-center gap-2 pr-8">
               <span
-                className="inline-flex items-center gap-1.5 rounded-md border border-white/12 border-l-[3px] bg-white/[0.04] px-2 py-1 text-[11px] font-semibold tracking-[0.06em] text-zinc-100 uppercase"
-                style={{ borderLeftColor: explore ? "#ffffff" : MBTA_RED }}
+                className="inline-flex items-center gap-1.5 rounded-md border bg-white/[0.04] px-2 py-1 text-[11px] font-semibold tracking-[0.06em] text-zinc-100 uppercase"
+                style={{ borderColor: explore ? "rgba(255,255,255,.35)" : "rgba(218,41,28,.55)" }}
               >
                 <ShieldAlert className="size-3.5" />
                 {explore ? "Live MBTA alert · simulated repair" : simulated ? "Simulated delay" : "Service alert"}
@@ -201,7 +201,7 @@ function FixTheTDialog({ alert, station, stats, simulated, unlockName, explore, 
               </h2>
             </div>
 
-            <div className={`${SECTION} border-l-[3px]`} style={{ borderLeftColor: MBTA_RED }}>
+            <div className={SECTION} style={{ borderColor: "rgba(218,41,28,.4)", background: "rgba(218,41,28,.05)" }}>
               <p className={`${LABEL} mb-1.5`}>{explore ? "What the MBTA is reporting now" : "What the MBTA said"}</p>
               <p className="font-mono text-[13px] leading-relaxed text-zinc-300">{alert.rawMbtaText}</p>
             </div>
@@ -275,8 +275,8 @@ function FixTheTDialog({ alert, station, stats, simulated, unlockName, explore, 
                 </span>
                 {stats && stats.heldTrains > 0 && (
                   <span
-                    className="inline-flex items-center gap-1.5 rounded-md border border-white/12 border-l-[3px] px-2.5 py-1.5 text-zinc-100 tabular-nums"
-                    style={{ borderLeftColor: MBTA_RED }}
+                    className="inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-zinc-100 tabular-nums"
+                    style={{ borderColor: "rgba(218,41,28,.5)", background: "rgba(218,41,28,.06)" }}
                   >
                     <Users className="size-3.5" />
                     {stats.heldTrains} {stats.heldTrains === 1 ? "train" : "trains"} holding · ~{stats.ridersWaiting.toLocaleString()} riders ·{" "}
