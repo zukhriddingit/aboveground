@@ -9,6 +9,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { ChevronLeft, ChevronRight, LogOut } from "lucide-react";
+import { DEMO_TRIP, type TripPlan } from "@/components/map/rideRoute";
 import type { MapLayerVisibility, MapViewMode, TVerseMapHandle } from "@/components/map";
 import {
   PostStoryModal,
@@ -182,7 +183,8 @@ export default function Home() {
   const [fixAlert, setFixAlert] = useState<TranslatedAlert | null>(null);
   const [repairing, setRepairing] = useState<StationId | null>(null);
   const [hatHold, setHatHold] = useState<AvatarHat | null>(null);
-  const [riding, setRiding] = useState(false);
+  const [trip, setTrip] = useState<TripPlan | null>(null);
+  const riding = !!trip;
   const [approaching, setApproaching] = useState<Station | null>(null);
   const [delayStation, setDelayStation] = useState<StationId>("place-boyls");
   const [simulating, setSimulating] = useState(false);
@@ -510,7 +512,10 @@ export default function Home() {
 
       const reveal = async () => {
         if (!unlockedHat) {
-          if (levelUp) push(`Level ${levelUp.level} · ${levelUp.name}`, { tone: "success", description: `Unlocked: ${levelUp.perks.join(", ")}.` });
+          if (levelUp) {
+            map.current?.celebrate();
+            push(`Level ${levelUp.level} · ${levelUp.name}`, { tone: "success", description: `Unlocked: ${levelUp.perks.join(", ")}.` });
+          }
           return;
         }
         const [lng, lat] = map.current?.getAvatarLngLat() ?? [0, 0];
@@ -524,7 +529,7 @@ export default function Home() {
         });
       };
 
-      setRiding(false);
+      setTrip(null);
       setRepairing(alert.stationId);
       viewTunnel(alert.stationId, 1200);
       const spot = scene.current?.repairSpot(alert.stationId);
@@ -671,7 +676,7 @@ export default function Home() {
         touristMode={touristMode}
         viewMode={view}
         visibleLayers={layers}
-        demoRideActive={riding}
+        trip={trip}
         avatarHat={hatHold ?? progress.equipped}
         onReady={onReady}
         onApproachStation={(id) => {
@@ -679,7 +684,11 @@ export default function Home() {
           setApproaching(station);
           if (!touristMode && station) push(`Approaching ${shortName(station)}`, { durationMs: 2400 });
         }}
-        onDemoRideEnd={() => setRiding(false)}
+        onDemoRideStop={(id) => {
+          const transfer = trip?.legs.find((leg, i) => i > 0 && leg.from.id === id);
+          if (transfer) push(`Change to the ${transfer.line} Line`, { description: transfer.from.name, durationMs: 3000 });
+        }}
+        onDemoRideEnd={() => setTrip(null)}
         onAlertClick={(station) => {
           const real = liveOnly.get(station.id);
           if (real && !alerts.some((a) => a.stationId === station.id)) return showAlertDetails(real);
@@ -910,8 +919,9 @@ export default function Home() {
         <div className="pointer-events-auto">
           <DemoBar
             stations={stations}
-            riding={riding}
-            onToggleRide={() => setRiding((r) => !r)}
+            trip={trip}
+            onTrip={setTrip}
+            onToggleRide={() => setTrip(current => current ? null : DEMO_TRIP)}
             onPostStory={() => setPosting(true)}
             delayStation={delayStation}
             onDelayStationChange={setDelayStation}

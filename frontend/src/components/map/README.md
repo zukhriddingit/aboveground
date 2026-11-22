@@ -26,6 +26,29 @@ Both views keep the camera, GeoJSON sources, live vehicles, custom layers and pi
 
 Client overlays can import `useMapTheme` from `@/components/map/mapTheme`. It returns `{ mode, theme, setMode }`, where `theme` is the resolved `"light" | "dark"`. Calling `setMode("auto" | "light" | "dark")` saves the choice and dispatches `aboveground:map-theme` on `window` so mounted controls and overlays update together.
 
+## Rider and trips
+
+**Plan a trip** in the dock opens the From and To selectors. The summary shows the lines in order, each change station, the number of stops after boarding, and the duration of the demo. **Go** starts the trip. **Demo Ride** starts BU Central → Park Street in one click. That preset takes about 29 seconds and calls at eight stops after boarding.
+
+The planner builds a bidirectional graph from the bundled MBTA shapes. Each stop projects onto its own line. Rail edges retain every shape vertex between adjacent platforms. The search tracks both station and line, minimizes transfers first, and breaks ties by rail distance. It can change lines at Park Street (Green/Red), Downtown Crossing (Red/Orange), Government Center (Green/Blue), and State (Orange/Blue). The ten featured stations are selectable. Intermediate stops such as Arlington, Central and Maverick count toward the ETA and arrival callbacks.
+
+In 3D the commuter turns, walks to the door, boards the cutaway car and holds the strap as the car accelerates, brakes and dwells. The two-link knees and ankles place each shoe according to ground distance, including the short boarding ramp. The transfer walk connects the two lines' individually projected platforms. At the destination the rider steps out, turns and waves. In 2D a rider marker follows the same timeline. Dragging takes over the camera until 2.5 seconds after the last gesture. Stop returns the rider to the last station reached. The idle map figure appears at station zoom (15.25 and above).
+
+The animated portrait occupies the left side of the upper-left rider badge. It waves on hover, cheers for each XP award and opens the customizer. The portrait draws at 16 fps and sleeps while the fitting preview is open. Both canvases stop drawing in a hidden tab. The map rig, portrait and preview share immutable geometry. The preview supports horizontal dragging and the left/right arrow keys.
+
+Import `openAvatarCustomizer()` from `@/components/avatar/look` to open the panel. It dispatches `aboveground:open-avatar-customizer` on `window`. The same module exports `AvatarLook`, `DEFAULT_LOOK`, `getAvatarLook()`, `setAvatarLook(patch)` and `useAvatarLook()`. Changes write `aboveground.avatar.look` and dispatch `aboveground:avatar-look`. The look includes skin, hairstyle, hair colour, jacket, jeans, sneakers, backpack and equipped hat. Progress determines which hats the rider can wear and preserves hats from existing progress saves.
+
+### Rider acceptance checks
+
+1. Open `/` in **3D**. Hover over the portrait. Click it, change each colour, try **Short crop**, **Curls** and **Low bun**, and toggle **Backpack**. Drag the preview to see the back. Tab to the preview and press a left/right arrow. Close with **Escape**, reload and reopen. The selections and portrait should match.
+2. Close the customizer. Press **Shift+D**, click the portrait and equip each of the three unlocked hats. Close it, click the rider name to open the profile and confirm the equipped hat there. Press **Shift+D** again to restore real progress. A new rider should see only **No hat** in the customizer.
+3. Open **Layers**, enable **Tourist Beacons**, close Layers and click **Demo Ride**. Watch the turn, grounded approach, boarding, strap grip, station approaches, disembarkation and wave at Park Street. Zoom out to the city overview and back in at Park Street to check idle visibility. On `/map-dev`, press **Demo Ride** to see individual arrival IDs and the end callback in the event log.
+4. Click **Plan a trip**, select **Harvard → Airport** and click **Go**. Watch the changes at Park Street and Government Center. Drag during the ride, release and wait for following to resume. Reopen **Plan a trip**, click **Stop**, swap the stations and press **Go** to run in reverse. Select the same From and To after stopping and confirm Go is disabled.
+5. Run **Harvard → Chinatown** to change at Downtown Crossing and **Chinatown → Airport** to change at State. Compare the transfer toast, line stripe and next leg with the planner summary.
+6. Select **2D**, start a trip and watch the moving rider marker on the dashed itinerary. Drag, then switch back to **3D** during the same trip. With a public token configured, press **Shift+M** and repeat the trip checks on the other engine.
+7. With Station Stories off, click a station, then a **Quick-Check** chip such as **Ghost · Stale**. Check the +10 XP and portrait cheer. For an on-map celebration, zoom in on the idle rider and press **Shift+D** to equip the unlocked trolley helmet. Restore real progress with **Shift+D**. Switch tabs during a portrait or preview recording in DevTools Performance and verify draws pause until the tab is visible.
+8. Select **Boylston** beside **Simulate T Delay**, trigger the delay and open **Fix it**. The repair and crew should still run. The rider trip adds no callbacks to the repair renderer.
+
 ## Browser checks
 
 1. Start with an empty token. Open `/`, select **3D** and zoom into Copley. Verify that trains, station beacons and shaded buildings appear. With DevTools Network open and **Preserve log** off, reload. The current page should request the MapLibre worker and OpenFreeMap tiles.
@@ -52,9 +75,10 @@ const map = useRef<TVerseMapHandle>(null);
   viewMode={viewMode}                     // "3d" (default) or north-up "2d"
   visibleLayers={visibleLayers}             // partial trains, stories, alerts, shuttles, tourist flags
   touristMode={touristMode}               // golden landmark beacons + "★ Fenway Park · 7 min walk" labels
-  demoRideActive={riding}                 // true = start the 20 s ride BU Central -> Park St
+  demoRideActive={riding}                 // true starts BU Central → Park Street
   avatarHat={hat}                         // "none" | "dunkin_hat" | "trolley_helmet" | "sox_cap" (pops on with confetti)
-  onApproachStation={id => narrate(id)}   // ~1 s before each stop: Kenmore, Hynes, Copley, Boylston, Park St
+  onApproachStation={id => narrate(id)}   // before each featured stop
+  onDemoRideStop={id => logArrival(id)}  // every actual arrival, including intermediate stops
   onDemoRideEnd={() => setRiding(false)}  // set the prop back to false here
   onAlertClick={station => openFixTheT(station)}   // signal cabinet or red warning triangle
   onStationClick={station => openStories(station)} // station tap also shows the built-in info card
@@ -66,6 +90,8 @@ const map = useRef<TVerseMapHandle>(null);
   <MapAnchor layer="stories" lng={s.lng} lat={s.lat} altitude={90}><StoryBubble /></MapAnchor>
 </TVerseMap>
 ```
+
+For a custom route, pass `trip={planTrip(from, to)}` using a plan memoized for the chosen endpoints. Clear the prop on Stop or in `onDemoRideEnd`. Import `planTrip` from `./rideRoute`. Preset callers can continue using `demoRideActive` or the imperative handle.
 
 Handle (`map.current?.…`): `flyToStation(id, {zoom, pitch, bearing, duration})`, `flyTo(lng, lat)`, `resetView()`,
 `startDemoRide()`, `stopDemoRide()`, `resetAvatar()`, `celebrate()` (confetti on the avatar — use it on a hat unlock),
@@ -109,13 +135,16 @@ Set `BLENDER` to select an executable. On macOS the launcher also checks `/Appli
 | `TVerseMap.tsx` | Map lifecycle, station picking, Demo Ride camera and overlays |
 | `ThreeOverlayLayer.ts` | Three.js custom layer for train pods, stations, alerts, landmark beacons, avatar, and sparks |
 | `stationModels.ts`, `blender/` | Station instances, geometry builders and comparison renders |
-| `avatar.ts` | Procedural low-poly avatar + the three hats |
+| `avatar.ts` | Articulated commuter, planted gait, strap grip, gestures and three hats |
+| `riderGeometry.ts`, `tripCar.ts` | Cached commuter geometry and the line-liveried cutaway car |
+| `../avatar/` | Saved look, portrait renderer and rotatable customizer |
+| `../hud/TripPlanner.tsx` | Origin, destination, route summary, Go and Stop |
 | `flatTransit.ts` | Flat markers, source data and 2D picking |
 | `mapEngine.ts` | Engine choice, isolated browser loading and recovery |
 | `mapTheme.ts` | Theme preference, Boston sun and subscriptions |
 | `customProjection.ts` | Normalized Mercator-to-clip matrix for both custom layers |
 | `mapStyle.ts` | OpenFreeMap palettes, Standard slots and shared transit styling |
-| `rideRoute.ts` | Demo Ride path (real Green Line B track) and timing |
+| `rideRoute.ts` | Station graph, sliced track geometry and shared trip timeline |
 | `landmarks.ts` | Where each Tourist Mode beacon stands |
 | `geo.ts` | Mercator math: everything 3D is placed with `toLocal(lng, lat)` |
 | `MapAnchor.tsx`, `mapContext.ts` | HTML pinned to 3D points |

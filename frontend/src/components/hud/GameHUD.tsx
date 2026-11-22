@@ -5,7 +5,9 @@ import { EyeOff } from "lucide-react";
 import { DEFAULT_RIDER_NAME, riderInitials, useRiderProfile } from "@/lib/riderProfile";
 import { FOCUS, PANEL } from "@/lib/ui";
 import type { AvatarHat } from "@/types/tverse";
-import { HatIcon } from "./HatIcon";
+import { AvatarCanvas } from "../avatar/AvatarCanvas";
+import { AvatarCustomizer } from "../avatar/AvatarCustomizer";
+import { OPEN_CUSTOMIZER, openAvatarCustomizer } from "../avatar/look";
 import { RiderProfilePopover } from "./RiderProfilePopover";
 import type { Rank, RankLevel } from "./ranks";
 import type { Progress, XpGain } from "./useProgress";
@@ -60,6 +62,12 @@ export function GameHUD({ progress, rank, next, fraction, gain, onEquip, onDemoM
   const profile = useRiderProfile();
   const xp = useCountUp(progress.points);
   const [open, setOpen] = useState(false);
+  const [customizing, setCustomizing] = useState(false);
+  useEffect(() => {
+    const show = () => { setOpen(false); setCustomizing(true); };
+    window.addEventListener(OPEN_CUSTOMIZER, show);
+    return () => window.removeEventListener(OPEN_CUSTOMIZER, show);
+  }, []);
   const root = useRef<HTMLDivElement>(null);
   const name = profile.name.trim() || DEFAULT_RIDER_NAME;
 
@@ -80,49 +88,52 @@ export function GameHUD({ progress, rank, next, fraction, gain, onEquip, onDemoM
   return (
     <div ref={root} className="relative" data-hud-panel="rider">
       <style>{HUD_CSS}</style>
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        aria-expanded={open}
-        aria-controls="rider-profile"
-        aria-label={`Rider profile: ${name}, level ${rank.level} ${rank.name}, ${progress.points} XP`}
-        className={`${PANEL} flex w-[13.5rem] items-center gap-2.5 sm:w-[15.5rem] p-2 pr-3 text-left transition-colors hover:bg-zinc-900/95 ${FOCUS}`}
-      >
-        <span className="relative flex size-10 shrink-0 items-center justify-center rounded-full border-2 border-white bg-zinc-800 text-[13px] font-bold text-white">
-          {progress.equipped !== "none" && <HatIcon hat={progress.equipped} className="absolute -top-3.5 size-6 drop-shadow" />}
-          {riderInitials(name)}
-        </span>
-        <span className="min-w-0 flex-1 leading-tight">
-          <span className="flex items-center gap-1.5">
-            <span className="truncate text-[13px] font-semibold text-white">{name}</span>
-            {profile.anonymous && <EyeOff className="size-3 shrink-0 text-zinc-400" aria-label="Posting anonymously" />}
-            {progress.demo && <span className="shrink-0 rounded bg-white px-1 text-[9px] font-bold tracking-wide text-zinc-950">DEMO</span>}
-          </span>
-          <span className="mt-0.5 flex items-baseline justify-between gap-2 text-[11px]">
-            <span className="truncate font-medium text-zinc-300">
-              Lvl {rank.level} · {rank.name}
+      <div className={`${PANEL} flex w-[13.5rem] items-center gap-1.5 p-1 sm:w-[15.5rem]`}>
+        <button type="button" aria-label="Customize avatar" title="Customize avatar" aria-expanded={customizing}
+          aria-controls="avatar-customizer" onClick={openAvatarCustomizer}
+          className={`${FOCUS} size-12 shrink-0 overflow-hidden rounded-lg border border-white/15 bg-zinc-800 hover:bg-zinc-700`}>
+          <AvatarCanvas portrait hat={progress.equipped} gainSeq={gain?.seq} paused={customizing} fallback={riderInitials(name)}/>
+        </button>
+        <button
+          type="button"
+          onClick={() => { setCustomizing(false); setOpen((o) => !o); }}
+          aria-expanded={open}
+          aria-controls="rider-profile"
+          aria-label={`Rider profile: ${name}, level ${rank.level} ${rank.name}, ${progress.points} XP`}
+          className={`flex min-w-0 flex-1 items-center rounded-md py-1 pr-2 text-left hover:bg-white/5 ${FOCUS}`}
+        >
+          <span className="min-w-0 flex-1 leading-tight">
+            <span className="flex items-center gap-1.5">
+              <span className="truncate text-[13px] font-semibold text-white">{name}</span>
+              {profile.anonymous && <EyeOff className="size-3 shrink-0 text-zinc-400" aria-label="Posting anonymously" />}
+              {progress.demo && <span className="shrink-0 rounded bg-white px-1 text-[9px] font-bold tracking-wide text-zinc-950">DEMO</span>}
             </span>
-            <span className="shrink-0 font-mono text-[10px] text-zinc-400 tabular-nums">
-              {xp}
-              {next ? `/${next.minXp}` : ""} XP
+            <span className="mt-0.5 flex items-baseline justify-between gap-2 text-[11px]">
+              <span className="truncate font-medium text-zinc-300">
+                Lvl {rank.level} · {rank.name}
+              </span>
+              <span className="shrink-0 font-mono text-[10px] text-zinc-400 tabular-nums">
+                {xp}
+                {next ? `/${next.minXp}` : ""} XP
+              </span>
+            </span>
+            <span className="relative mt-1.5 block h-1.5 overflow-hidden rounded-full bg-white/12" aria-hidden>
+              <span className="absolute inset-y-0 left-0 rounded-full bg-white transition-[width] duration-700 ease-out" style={{ width: `${Math.round(fraction * 100)}%` }} />
+              {gain && <span key={gain.seq} className="absolute inset-0 bg-emerald-300 [animation:hud-bar-glint_1.2s_ease-out_forwards]" />}
             </span>
           </span>
-          <span className="relative mt-1.5 block h-1.5 overflow-hidden rounded-full bg-white/12" aria-hidden>
-            <span className="absolute inset-y-0 left-0 rounded-full bg-white transition-[width] duration-700 ease-out" style={{ width: `${Math.round(fraction * 100)}%` }} />
-            {gain && <span key={gain.seq} className="absolute inset-0 bg-emerald-300 [animation:hud-bar-glint_1.2s_ease-out_forwards]" />}
-          </span>
-        </span>
-        {gain && (
-          <span
-            key={gain.seq}
-            aria-live="polite"
-            className="pointer-events-none absolute -top-2 right-2 rounded-full bg-emerald-400 px-2 py-0.5 text-[11px] font-bold text-zinc-950 opacity-0 shadow [animation:hud-xp-pop_1.8s_ease-out_forwards]"
-          >
-            +{gain.amount} XP
-          </span>
-        )}
-      </button>
-
+          {gain && (
+            <span
+              key={gain.seq}
+              aria-live="polite"
+              className="pointer-events-none absolute -top-2 right-2 rounded-full bg-emerald-400 px-2 py-0.5 text-[11px] font-bold text-zinc-950 opacity-0 shadow [animation:hud-xp-pop_1.8s_ease-out_forwards]"
+            >
+              +{gain.amount} XP
+            </span>
+          )}
+        </button>
+      </div>
+      {customizing && <AvatarCustomizer progress={progress} onEquip={onEquip} onClose={() => setCustomizing(false)}/>}
       {open && (
         <RiderProfilePopover
           progress={progress}

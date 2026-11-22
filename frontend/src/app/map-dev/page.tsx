@@ -136,6 +136,7 @@ export default function MapDevPage() {
         onLandmarkClick={s => log(`${s.landmark?.title ?? "Landmark"} · ${s.name}`)}
         onTrainClick={v => log(`Train · ${v.route} · ${v.id}`)}
         onAvatarClick={() => log("Avatar selected")}
+        onDemoRideStop={id => log(`Arrived · ${id}`)}
         onDemoRideEnd={() => { setRiding(false); log("Demo Ride ended"); }}
         onReady={() => log("Map ready")}
       >

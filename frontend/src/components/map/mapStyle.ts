@@ -97,12 +97,9 @@ const transit: LayerSpecification[] = [
     paint: { "line-color": railColor, "line-width": ["interpolate", ["linear"], ["zoom"], 10, 1.4, 14, 3, 17, 5.5] } },
   { id: "rail-hot", type: "line", source: "lines", layout: { "line-join": "round", "line-cap": "round" },
     paint: { "line-color": "#ffffff", "line-width": ["interpolate", ["linear"], ["zoom"], 10, 0.3, 14, 0.9, 17, 1.6], "line-opacity": 0.55 } },
-  // Demo Ride route: lights up while the avatar rides it (opacity driven by TVerseMap).
-  { id: "ride-glow", type: "line", source: "ride", layout: { "line-join": "round", "line-cap": "round" },
-    paint: { "line-color": "#6ff7ff", "line-width": ["interpolate", ["linear"], ["zoom"], 10, 10, 14, 26, 17, 44],
-      "line-blur": 12, "line-opacity": 0, "line-opacity-transition": { duration: 900, delay: 0 } } },
+  // Dashes highlight the planned trip and leave the underlying MBTA line colour readable.
   { id: "ride-core", type: "line", source: "ride", layout: { "line-join": "round", "line-cap": "round" },
-    paint: { "line-color": "#d9fdff", "line-width": ["interpolate", ["linear"], ["zoom"], 10, 1.5, 14, 3.5, 17, 6],
+    paint: { "line-color": "#f7f7f3", "line-dasharray": [2, 2], "line-width": ["interpolate", ["linear"], ["zoom"], 10, 1, 14, 1.8, 17, 2.6],
       "line-opacity": 0, "line-opacity-transition": { duration: 900, delay: 0 } } },
 ];
 
@@ -240,7 +237,7 @@ const daylight: [string, PaintKey, PaintValue][] = [
   ["neighborhoods", "text-halo-color", "#f7f7ef"], ["station-names", "text-halo-color", "#ffffff"],
   ["rail-core", "line-color", ["to-color", ["coalesce", ["get", "color"], "#00843d"]]],
   ["sight-names", "text-color", "#705119"], ["sight-names", "text-halo-color", "#fffcf1"],
-  ["ride-core", "line-color", "#225c79"], ["ride-glow", "line-color", "#56a8b1"],
+  ["ride-core", "line-color", "#26313a"],
 ];
 const duskPaint = new Map([...ground, ...roads, ...footprints, ...transit, ...city, ...FLAT_TRANSIT, ...labels, stationNames].map(l => [l.id, l.paint]));
 
@@ -260,7 +257,7 @@ export function setBasemapMode(map: LibreMap, mode: MapViewMode, theme: MapTheme
   for (const [id, key, value] of daylight) {
     if (map.getLayer(id)) map.setPaintProperty(id, key, theme === "light" ? value : (duskPaint.get(id) as Record<string, PaintValue>)[key]);
   }
-  for (const id of ["buildings", "buildings-skyline", "building-edges", "arterial-glow", "rail-glow", "rail-hot", "ride-glow"]) {
+  for (const id of ["buildings", "buildings-skyline", "building-edges", "arterial-glow", "rail-glow", "rail-hot"]) {
     if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", flat ? "none" : "visible");
   }
   if (map.getLayer("station-names")) {

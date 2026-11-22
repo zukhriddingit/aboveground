@@ -35,12 +35,14 @@ export function toLocal(lng: number, lat: number, altMeters = 0, out = new T.Vec
 }
 
 /** Local scene meters (x east, z south) -> [lng, lat]. */
-export function toLngLat(x: number, z: number): [number, number] {
+export function toLngLat(x: number, z: number, out: [number, number] = [0, 0]): [number, number] {
   const mx = o.x + x * S;
   const my = o.y + z * S;
   const lng = mx * 360 - 180;
   const lat = (360 / Math.PI) * Math.atan(Math.exp(((180 - my * 360) * Math.PI) / 180)) - 90;
-  return [lng, lat];
+  out[0] = lng;
+  out[1] = lat;
+  return out;
 }
 
 /** Compass bearing (degrees clockwise from north) -> rotation.y for an object whose nose is -z. */
@@ -87,7 +89,7 @@ export class LocalPath {
   }
 
   /** Position and heading (degrees) at a distance along the path. */
-  at(distance: number) {
+  at(distance: number, out = { x: 0, z: 0, bearing: 0 }) {
     const d = Math.min(Math.max(distance, 0), this.length);
     let lo = 0;
     let hi = this.cum.length - 1;
@@ -100,7 +102,10 @@ export class LocalPath {
     const u = (d - this.cum[lo]) / span;
     const dx = this.xs[hi] - this.xs[lo];
     const dz = this.zs[hi] - this.zs[lo];
-    return { x: this.xs[lo] + dx * u, z: this.zs[lo] + dz * u, bearing: localBearing(dx, dz) };
+    out.x = this.xs[lo] + dx * u;
+    out.z = this.zs[lo] + dz * u;
+    out.bearing = localBearing(dx, dz);
+    return out;
   }
 
   /** Distance along the path of the point closest to (lng, lat). */

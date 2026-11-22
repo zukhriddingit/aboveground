@@ -9,6 +9,9 @@ import type { AvatarHat, Crowdedness, Station, StationId, TLinesGeoJson, TrainVe
 import { CROWDEDNESS, LINE_COLORS, LINE_GLOW, routeLine } from "@/lib/theme";
 import { mercatorToClip, type CustomFrame } from "./customProjection";
 import type { MapTheme } from "./mapTheme";
+import { TripCar } from "./tripCar";
+import { TRIP_SCALE, type RideFrame } from "./rideRoute";
+import type { AvatarLook } from "../avatar/look";
 import { AvatarRig, AVATAR_HEIGHT } from "./avatar";
 import { angleDelta, bearingToYaw, MODEL_MATRIX, toLngLat, toLocal } from "./geo";
 import { allowStationModel, stationModelAllowed, loadStationModel, loadStationSite, StationModel, STATION_MODEL, stationYaw } from "./stationModels";
@@ -169,10 +172,10 @@ class Sparks {
   emit(at: T.Vector3, velocity: T.Vector3, color: T.ColorRepresentation, sizePx: number, life: number, gravity = 0, drag = 0, source: "avatar" | "alerts" | "tourist" = "avatar") {
     const i = this.cursor;
     this.cursor = (this.cursor + 1) % SPARK_COUNT;
-    this.pos.set([at.x, at.y, at.z], i * 3);
-    this.vel.set([velocity.x, velocity.y, velocity.z], i * 3);
+    at.toArray(this.pos, i * 3);
+    velocity.toArray(this.vel, i * 3);
     this.color.set(color);
-    this.tint.set([this.color.r, this.color.g, this.color.b], i * 3);
+    this.color.toArray(this.tint, i * 3);
     this.baseSize[i] = sizePx;
     this.source[i] = source;
     this.life[i] = life;
@@ -479,6 +482,9 @@ export class ThreeOverlayLayer implements CustomLayerInterface {
   private environment?: T.WebGLRenderTarget;
   private readonly sparks = new Sparks();
   private readonly avatar = new AvatarRig();
+  private readonly contact = new T.Mesh(discGeo, new T.MeshBasicMaterial({
+    color: "#252427", transparent: true, opacity: .21, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1,
+  }));
   private readonly stations = new Map<StationId, StationNode>();
   private readonly landmarks = new Map<StationId, LandmarkNode>();
   private readonly trains = new Map<string, TrainNode>();
@@ -502,10 +508,10 @@ export class ThreeOverlayLayer implements CustomLayerInterface {
   private readonly avatarPos = new T.Vector3();
   private avatarYaw = 0;
   private avatarTargetYaw: number | null = null;
-  private avatarRiding = false;
-  private avatarSpeed = 0;
-  private avatarSize = 100;
-  private trailTimer = 0;
+  private tripFrame: RideFrame | null = null;
+  private readonly car = new TripCar();
+  private avatarSize = 8;
+  private riderScale = 5;
 
   private readonly v3 = new T.Vector3();
   private readonly v3b = new T.Vector3();
@@ -523,7 +529,10 @@ export class ThreeOverlayLayer implements CustomLayerInterface {
   };
 
   constructor() {
-    this.scene.add(this.sparks.points, this.avatar.root);
+    this.contact.scale.set(.29, 1, .20);
+    this.contact.position.y = .008;
+    this.avatar.root.add(this.contact);
+    this.scene.add(this.sparks.points, this.avatar.root, this.car.root);
     for (let i = 0; i < 10; i++) {
       const mesh = new T.Mesh(ringGeo, glow("#ffffff", 0));
       mesh.visible = false;
@@ -588,6 +597,8 @@ export class ThreeOverlayLayer implements CustomLayerInterface {
     for (const node of this.trains.values()) this.disposeTrain(node);
     this.trains.clear();
     this.avatar.dispose();
+    this.contact.material.dispose();
+    this.car.dispose();
     this.sparks.dispose();
     for (const m of [...this.coreMats.values(), ...this.haloMats.values(), ...this.bandMats.values()]) m.dispose();
     for (const w of this.waves) w.mesh.material.dispose();
@@ -1308,25 +1319,20 @@ export class ThreeOverlayLayer implements CustomLayerInterface {
 
   // ------------------------------------------------------------ avatar
 
-  /** Place the avatar. `bearing` is the direction of travel; null = turn to face the camera. */
-  setAvatar(lng: number, lat: number, bearing: number | null, riding: boolean, speed = 0) {
-    toLocal(lng, lat, 0, this.avatarPos);
-    this.avatarTargetYaw = bearing === null ? null : bearingToYaw(bearing);
-    this.avatarRiding = riding;
-    this.avatarSpeed = speed;
-  }
-
-  setAvatarLocal(x: number, z: number, bearing: number | null, riding: boolean, speed = 0) {
+  setRiderStation(x: number, z: number) {
+    this.tripFrame = null;
+    this.car.root.visible = false;
     this.avatarPos.set(x, 0, z);
-    this.avatarTargetYaw = bearing === null ? null : bearingToYaw(bearing);
-    this.avatarRiding = riding;
-    this.avatarSpeed = speed;
+    this.avatarTargetYaw = null;
   }
 
-  /** Avatar position in local scene meters. */
-  avatarLocal() {
-    return { x: this.avatarPos.x, z: this.avatarPos.z };
+  setTripFrame(frame: RideFrame) {
+    this.tripFrame = frame;
+    this.avatarPos.set(frame.x, frame.floor * TRIP_SCALE, frame.z);
+    this.avatarTargetYaw = bearingToYaw(frame.bearing);
   }
+
+  setAvatarLook(look: AvatarLook) { this.avatar.setLook(look); }
 
   avatarLngLat(): [number, number] {
     return toLngLat(this.avatarPos.x, this.avatarPos.z);
@@ -1337,12 +1343,14 @@ export class ThreeOverlayLayer implements CustomLayerInterface {
     this.avatar.setHat(hat, this.time, animate);
     if (animate && hat !== "none") {
       // Let the hat start dropping in, then burst.
+      this.avatar.cheer();
       this.burst(0.15);
     }
   }
 
   /** Confetti burst + ground shockwaves at the avatar. */
   celebrate() {
+    this.avatar.cheer();
     this.burst(0);
     this.spawnWave(this.avatarPos, "#7ff6ff", this.avatarSize * 2.2, 1.2);
     this.spawnWave(this.avatarPos, GOLD, this.avatarSize * 1.5, 0.9, 0.18);
@@ -1356,41 +1364,36 @@ export class ThreeOverlayLayer implements CustomLayerInterface {
 
   private updateAvatar(dt: number) {
     const t = this.time;
-    // Partial zoom compensation: a kaiju over the whole city, life-size-ish at street level.
-    this.avatarSize = Math.min(330, Math.max(38, 95 * 2 ** ((16 - this.zoom) * 0.72)));
+    const frame = this.tripFrame;
     const root = this.avatar.root;
-    root.scale.setScalar(this.avatarSize / AVATAR_HEIGHT);
+    // Idle stays local to the station and out of the city overview. The trip's
+    // physical scale stays fixed so planted feet and the car never drift apart.
+    const idleScale = Math.min(7, Math.max(2, 5 * 2 ** ((17 - this.zoom) * .55)));
+    this.riderScale = frame ? TRIP_SCALE : this.riderScale + (idleScale - this.riderScale) * (1 - Math.exp(-dt * 5));
+    const scale = this.riderScale;
+    this.avatarSize = scale * AVATAR_HEIGHT;
+    root.visible = !!frame || this.zoom >= 15.25;
+    root.scale.setScalar(scale);
     root.position.copy(this.avatarPos);
-    let targetYaw = this.avatarTargetYaw;
-    if (targetYaw === null && this.map) {
-      // Face the camera, turned a little for a three-quarter view.
-      targetYaw = bearingToYaw(this.map.getBearing() + 180 + 25);
-    }
-    if (targetYaw !== null) this.avatarYaw += angleDelta(this.avatarYaw, targetYaw) * (1 - Math.exp(-dt * 5));
-    root.rotation.y = this.avatarYaw;
-    this.avatar.update(t, dt, this.avatarRiding, this.avatarSpeed, this.glowStrength);
-
-    // Hover-board trail while riding.
-    if (this.avatarRiding && this.avatarSpeed > 0.15) {
-      this.trailTimer -= dt;
-      while (this.trailTimer <= 0) {
-        this.trailTimer += 1 / (70 * this.glowStrength);
-        const s = this.avatarSize / AVATAR_HEIGHT;
-        const back = this.v3b.set(Math.sin(this.avatarYaw), 0, Math.cos(this.avatarYaw)); // +z of the rig = behind
-        this.v3.set(
-          this.avatarPos.x + back.x * 0.5 * s + (Math.random() - 0.5) * 0.9 * s,
-          0.12 * s,
-          this.avatarPos.z + back.z * 0.5 * s + (Math.random() - 0.5) * 0.9 * s,
-        );
-        const vel = back.multiplyScalar(0.2 * s).setY((0.4 + Math.random() * 0.6) * s);
-        this.sparks.emit(this.v3, vel, Math.random() < 0.8 ? "#5ef2ff" : "#ffffff", 4 + Math.random() * 4, 0.9, 0, 1.5);
-      }
+    if (frame?.line) {
+      this.car.setLine(frame.line);
+      this.car.ramp.visible = frame.pose === "walk";
+      this.car.root.position.set(frame.carX, 0, frame.carZ);
+      this.car.root.scale.setScalar(scale);
+      this.car.root.rotation.y = bearingToYaw(frame.carBearing);
+      this.car.root.visible = true;
+    } else this.car.root.visible = false;
+    if (root.visible) {
+      const target = this.avatarTargetYaw ?? bearingToYaw((this.map?.getBearing() ?? 0) + 200);
+      this.avatarYaw += angleDelta(this.avatarYaw, target) * (frame ? 1 : 1 - Math.exp(-dt * 7));
+      root.rotation.y = this.avatarYaw;
+      this.avatar.update(t, dt, frame?.pose, frame?.walkDistance, frame?.walkLength, frame?.surface);
     }
 
     for (let i = this.pendingBursts.length - 1; i >= 0; i--) {
       if (this.pendingBursts[i] > t) continue;
       this.pendingBursts.splice(i, 1);
-      const at = this.avatar.hatWorldPosition(new T.Vector3());
+      const at = this.avatar.hatWorldPosition(this.v3);
       const s = this.avatarSize;
       const colors = [GOLD, "#ff5fa2", "#5ef2ff", "#ffffff", "#ff8a3d"];
       for (let k = 0; k < 140; k++) {
@@ -1500,8 +1503,8 @@ export class ThreeOverlayLayer implements CustomLayerInterface {
     }
     const head = this.projectLocal(this.v3.set(this.avatarPos.x, this.avatarSize, this.avatarPos.z));
     const feet = this.projectLocal(this.v3b.set(this.avatarPos.x, 0, this.avatarPos.z));
-    if (head && feet) {
-      const r = Math.max(28, Math.hypot(head.x - feet.x, head.y - feet.y) * 0.55);
+    if (this.avatar.root.visible && head && feet) {
+      const r = Math.max(7, Math.hypot(head.x - feet.x, head.y - feet.y) * 0.55);
       test("avatar", "me", this.v3.set(this.avatarPos.x, this.avatarSize * 0.5, this.avatarPos.z), r);
     }
     // Trains and stations rank together by how close the click is (a hit on a station's model counts as dead
