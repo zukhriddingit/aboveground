@@ -1,10 +1,11 @@
-// A street-level stop, drawn on the map at all times: BU Central sits in the median of
-// Commonwealth Avenue, so there's no tunnel to open. Side platforms with ramps, glass shelters
-// with the station sign, T pylons, fences, overhead-wire poles and street lights; trolleys at
-// the station are drawn as real Type 9s. During a delay: a red signal, a sparking relay
-// cabinet, a work crew, cones and an MBTA maintenance truck.
+// A work zone on street-level track: BU Central sits in the median of Commonwealth Avenue, so there's
+// no tunnel to open. The station itself is Member 2's surveyed model; this draws the stretch of median
+// down the line where the trouble actually is: ballast, rails and overhead wire at the cutaway's 3x
+// section, the fault, a protected work zone (lookout, lanterns, speed signs, work lights), cones and an
+// MBTA truck on the road, and the next train waiting short of the zone.
 import * as T from "three";
 import type { TLine } from "@/types/tverse";
+import type { FaultKind } from "./faults";
 import type { Puffs, Sparks } from "./fx";
 import { TrackCorridor } from "./TrackCorridor";
 import type { CutawayTrain } from "./TunnelCutaway";
@@ -12,39 +13,35 @@ import {
   buildBarricade,
   buildCabinet,
   buildCone,
+  buildLantern,
+  buildLightTower,
   buildSignal,
+  buildSwitchMachine,
+  buildTrackSign,
   buildTrain,
   buildWorker,
+  consistFor,
+  seedOf,
+  trainSign,
   type CabinetModel,
   type SignalModel,
   type TrainModel,
   type Worker,
 } from "./tunnelModels";
-import {
-  ballastTexture,
-  concreteTexture,
-  grassTexture,
-  platformTexture,
-  stationSignTexture,
-  tLogoTexture,
-  tactileTexture,
-} from "./tunnelTextures";
+import { ballastTexture, grassTexture } from "./tunnelTextures";
 import { clamp, compassBearing, easeInOut, type Track } from "./trackGeo";
 
-const HALF = 110;
+const HALF = 90;
 const TRACK = 6;
 const BED_Y = 0.35;
 const RAIL_Y = 1.0;
-const PLAT_Y = 2.1;
-const PLAT_IN = 10.5;
-const PLAT_OUT = 17;
 const MEDIAN = 19.5;
-const STATION_HALF = 42;
-const RAMP = 9;
-const CABINET_S = 34;
 const WIRE_Y = RAIL_Y + 17;
+/** Where the next train stops, short of the work zone. */
+const WAIT_S = -58;
 
 const HOT = [new T.Color("#ffffff"), new T.Color("#ffd36b"), new T.Color("#ff9a2b"), new T.Color("#9fe7ff")];
+const ARC = [new T.Color("#ffffff"), new T.Color("#bfe6ff"), new T.Color("#7fc7ff")];
 const SMOKE = new T.Color("#8a8780");
 
 const lambert = (params: T.MeshLambertMaterialParameters) => new T.MeshLambertMaterial({ side: T.DoubleSide, ...params });
@@ -56,6 +53,9 @@ export interface SurfaceOptions {
   lineColor: string;
   track: Track;
   dS: number;
+  fault: FaultKind;
+  /** Meters along the track from the station to the fault. */
+  faultS: number;
 }
 
 function buildTruck() {
@@ -94,16 +94,20 @@ export class SurfaceStation extends TrackCorridor {
   readonly group = new T.Group();
   readonly stationId: string;
   readonly line: TLine;
-  private readonly name: string;
-  private readonly lineColor: string;
-  private readonly incidentGroup = new T.Group();
+  readonly fault: FaultKind;
   private readonly pop: Array<{ obj: T.Object3D; delay: number }> = [];
   private readonly lamps: T.MeshBasicMaterial[] = [];
   private readonly signals: SignalModel[] = [];
   private readonly cabinet: CabinetModel;
-  private readonly crew: Array<{ w: Worker; base: T.Vector3; work: T.Vector3 }> = [];
+  private readonly crew: Array<{ w: Worker; base: T.Vector3; work: T.Vector3; lookout: boolean }> = [];
   private readonly trains = new Map<string, TrainModel>();
-  private readonly platformTrains: Array<{ dir: 1 | -1; s0: number; delay: number; model: TrainModel }> = [];
+  private readonly waiting: TrainModel;
+  private readonly westward: boolean;
+  private readonly focus = new T.Vector3();
+  private readonly crackMat = new T.MeshBasicMaterial({ color: "#ff7a1a", toneMapped: false });
+  private readonly ice: T.Mesh[] = [];
+  private brokenWire: T.Object3D | null = null;
+  private arcLight: T.PointLight | null = null;
   private incidentAt: number | null = null;
   private repairAt: number | null = null;
   private restoredAt: number | null = null;
@@ -114,48 +118,23 @@ export class SurfaceStation extends TrackCorridor {
   private readonly mouthWorld = new T.Vector3();
 
   constructor(opts: SurfaceOptions, private readonly routeLine: (route: string) => TLine) {
-    super(opts.track, opts.dS, HALF);
+    super(opts.track, opts.dS + opts.faultS, HALF);
     this.stationId = opts.stationId;
     this.line = opts.line;
-    this.name = opts.name;
-    this.lineColor = opts.lineColor;
+    this.fault = opts.fault;
+    this.westward = this.sampleAt(0).tx < 0;
     this.buildGround();
-    this.buildPlatforms();
-    this.buildStructures();
-    this.cabinet = this.buildIncident();
-    for (const [dir, s0, delay] of [[1, 6, 0.5], [-1, -6, 1.1]] as const) {
-      const model = buildTrain("lrv", this.lineColor, "BOSTON COLLEGE");
-      model.group.visible = false;
-      this.group.add(model.group);
-      this.platformTrains.push({ dir, s0, delay, model });
-    }
-    this.group.add(this.incidentGroup);
+    this.buildOverhead();
+    this.cabinet = this.buildFault();
+    this.buildWorkZone();
+    this.waiting = buildTrain(consistFor(this.line, seedOf(`${opts.stationId}-wait`)), trainSign(opts.track.route, this.westward));
+    this.group.add(this.waiting.group);
+    this.placeTrain(this.waiting, WAIT_S, true, RAIL_Y, TRACK);
+    this.group.visible = false;
     this.group.traverse((o) => (o.frustumCulled = false));
   }
 
   // ------------------------------------------------------------ build
-
-  private sloped(lat0: number, lat1: number, s0: number, s1: number, y0: number, y1: number, mat: T.Material) {
-    const pts = this.span(Math.min(s0, s1), Math.max(s0, s1));
-    const pos: number[] = [];
-    const idx: number[] = [];
-    pts.forEach((p, i) => {
-      const y = y0 + ((p.s - s0) / (s1 - s0)) * (y1 - y0);
-      for (const lat of [lat0, lat1]) {
-        const q = this.at(p, lat, y, this.v);
-        pos.push(q.x, q.y, q.z);
-      }
-      if (i > 0) {
-        const a = (i - 1) * 2;
-        idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
-      }
-    });
-    const g = new T.BufferGeometry();
-    g.setAttribute("position", new T.Float32BufferAttribute(pos, 3));
-    g.setIndex(idx);
-    g.computeVertexNormals();
-    this.group.add(new T.Mesh(g, mat));
-  }
 
   private buildGround() {
     const L = HALF;
@@ -172,108 +151,23 @@ export class SurfaceStation extends TrackCorridor {
     this.mesh(bed, lambert({ map: ballastTexture() }), this.group);
     this.mesh(ties, lambert({ color: "#4e4740" }), this.group);
     this.mesh(rails, new T.MeshLambertMaterial({ color: "#aab1b9", emissive: "#1c1f23" }), this.group);
-  }
-
-  private buildPlatforms() {
-    const plat = lambert({ map: platformTexture() });
-    const edge = lambert({ map: concreteTexture() });
-    const tactile = lambert({ map: tactileTexture() });
-    for (const side of [1, -1]) {
-      const [i0, i1] = side > 0 ? [PLAT_IN, PLAT_OUT] : [-PLAT_OUT, -PLAT_IN];
-      this.mesh([this.ribbon(i0, i1, PLAT_Y, -STATION_HALF, STATION_HALF, 9, 9)], plat, this.group);
-      const t0 = side * PLAT_IN;
-      const t1 = side * (PLAT_IN + 1.8);
-      this.mesh([this.ribbon(Math.min(t0, t1), Math.max(t0, t1), PLAT_Y + 0.04, -STATION_HALF, STATION_HALF, 3, 1.8)], tactile, this.group);
-      this.mesh(
-        [
-          this.wall(side * PLAT_IN, PLAT_Y, 0, -STATION_HALF, STATION_HALF, 6, PLAT_Y),
-          this.wall(side * PLAT_OUT, PLAT_Y, 0, -STATION_HALF, STATION_HALF, 6, PLAT_Y),
-        ],
-        edge,
-        this.group,
-      );
-      // Accessible ramps down to the crosswalks at each end.
-      this.sloped(i0 + 1.5, i1, STATION_HALF, STATION_HALF + RAMP, PLAT_Y, 0.35, plat);
-      this.sloped(i0 + 1.5, i1, -STATION_HALF, -STATION_HALF - RAMP, PLAT_Y, 0.35, plat);
-    }
-  }
-
-  private buildStructures() {
-    const steel = lambert({ color: "#2b3a33" });
-    const glass = new T.MeshStandardMaterial({
-      color: "#9fd8ff", transparent: true, opacity: 0.22, roughness: 0.05, metalness: 0.1, side: T.DoubleSide, depthWrite: false,
-    });
-    const warm = new T.MeshBasicMaterial({ color: "#fff0c8", toneMapped: false });
-    const green = lambert({ color: this.lineColor });
-    const wood = lambert({ color: "#7a5a3c" });
-    const frame: T.BufferGeometry[] = [];
-    const glassGeo: T.BufferGeometry[] = [];
-    const strips: T.BufferGeometry[] = [];
-    const fascia: T.BufferGeometry[] = [];
-    const benches: T.BufferGeometry[] = [];
-    const signMat = new T.MeshBasicMaterial({ map: stationSignTexture(this.name.toUpperCase(), this.lineColor), toneMapped: false, side: T.DoubleSide });
-    const logo = new T.MeshBasicMaterial({ map: tLogoTexture(), transparent: true, side: T.DoubleSide, toneMapped: false });
-
-    for (const side of [1, -1]) {
-      const sc = side * -10;
-      const top = PLAT_Y + 8.6;
-      frame.push(this.boxAt(sc, side * 14.2, top, 25, 0.5, 6.8));
-      fascia.push(this.boxAt(sc, side * 14.2, top - 0.5, 25.2, 0.5, 6.9));
-      for (const ds of [-11.5, 11.5]) {
-        for (const lat of [12.4, 16.1]) frame.push(this.boxAt(sc + ds, side * lat, PLAT_Y + 4.2, 0.45, 8.4, 0.45));
-      }
-      glassGeo.push(this.wall(side * 16.3, PLAT_Y + 7.8, PLAT_Y + 0.5, sc - 11.5, sc + 11.5, 23, 10));
-      for (const ds of [-11.5, 11.5]) glassGeo.push(this.boxAt(sc + ds, side * 14.6, PLAT_Y + 4.2, 0.1, 7.2, 3.2));
-      strips.push(this.boxAt(sc, side * 13.4, top - 0.4, 21, 0.15, 0.6));
-      benches.push(this.boxAt(sc - 3, side * 15.4, PLAT_Y + 1.5, 9, 0.35, 1.7), this.boxAt(sc - 3, side * 15.9, PLAT_Y + 2.6, 9, 1.8, 0.25));
-
-      const sign = new T.Mesh(new T.PlaneGeometry(13, 2), signMat);
-      const p = this.sampleAt(sc + 4);
-      this.at(p, side * 12.5, PLAT_Y + 7.0, sign.position);
-      sign.lookAt(this.at(p, 0, PLAT_Y + 7.0));
-      this.group.add(sign);
-
-      const light = new T.PointLight("#ffe2b0", 260, 45, 2);
-      this.at(this.sampleAt(sc), side * 14, PLAT_Y + 7, light.position);
-      this.group.add(light);
-
-      for (const ps of [-(STATION_HALF - 3), STATION_HALF - 3]) {
-        frame.push(this.boxAt(ps, side * 15.6, PLAT_Y + 6.2, 0.6, 12.4, 0.6));
-        const q = this.sampleAt(ps);
-        const disc = new T.Mesh(new T.CircleGeometry(2.2, 32), logo);
-        this.at(q, side * 15.6, PLAT_Y + 12.6, disc.position);
-        disc.rotation.y = -q.angle + Math.PI / 2;
-        this.group.add(disc);
-      }
-    }
-    this.mesh(frame, steel, this.group);
-    this.mesh(glassGeo, glass, this.group);
-    this.mesh(strips, warm, this.group);
-    this.mesh(fascia, green, this.group);
-    this.mesh(benches, wood, this.group);
-
-    // Fences: along the platform backs, then along the median.
+    // Fences between the reservation and the traffic lanes.
     const fence: T.BufferGeometry[] = [];
     for (const side of [1, -1]) {
-      const segments: Array<[number, number, number, number]> = [
-        [side * (PLAT_OUT - 0.3), -STATION_HALF, STATION_HALF, PLAT_Y],
-        [side * (MEDIAN - 0.6), -HALF, -STATION_HALF - RAMP, 0.3],
-        [side * (MEDIAN - 0.6), STATION_HALF + RAMP, HALF, 0.3],
-      ];
-      for (const [lat, s0, s1, y] of segments) {
-        for (let s = s0; s <= s1; s += 4) fence.push(this.boxAt(s, lat, y + 1.6, 0.2, 3.2, 0.2));
-        fence.push(...this.run(lat, y + 1.3, 0.15, 0.15, s0, s1), ...this.run(lat, y + 3.0, 0.2, 0.2, s0, s1));
-      }
+      const lat = side * (MEDIAN - 0.6);
+      for (let s = -L; s <= L; s += 4) fence.push(this.boxAt(s, lat, 1.9, 0.2, 3.2, 0.2));
+      fence.push(...this.run(lat, 1.6, 0.15, 0.15, -L, L), ...this.run(lat, 3.3, 0.2, 0.2, -L, L));
     }
     this.mesh(fence, lambert({ color: "#3b3f46" }), this.group);
+  }
 
-    // Overhead wire: poles with arms every 26 m, contact wire over each track.
+  private buildOverhead() {
+    const warm = new T.MeshBasicMaterial({ color: "#fff0c8", toneMapped: false });
     const poles: T.BufferGeometry[] = [];
     const wire: T.BufferGeometry[] = [];
     for (let s = -HALF + 6; s <= HALF; s += 26) {
       for (const side of [1, -1]) {
-        const poleLat = side * (MEDIAN - 1.4);
-        poles.push(this.boxAt(s, poleLat, 9.6, 0.7, 19.2, 0.7));
+        poles.push(this.boxAt(s, side * (MEDIAN - 1.4), 9.6, 0.7, 19.2, 0.7));
         const armLen = MEDIAN - 1.4 - TRACK + 1.2;
         poles.push(this.boxAt(s, side * (TRACK - 1.2 + armLen / 2), WIRE_Y + 0.9, 0.35, 0.35, armLen));
         wire.push(this.boxAt(s, side * TRACK, WIRE_Y + 0.45, 0.12, 0.9, 0.12));
@@ -282,8 +176,6 @@ export class SurfaceStation extends TrackCorridor {
     for (const lat of [TRACK, -TRACK]) wire.push(...this.run(lat, WIRE_Y, 0.16, 0.16, -HALF, HALF));
     this.mesh(poles, lambert({ color: "#4a4f57" }), this.group);
     this.mesh(wire, new T.MeshLambertMaterial({ color: "#1f2226" }), this.group);
-
-    // Street lights on the median edges.
     const lampPoles: T.BufferGeometry[] = [];
     const heads: T.BufferGeometry[] = [];
     for (let s = -HALF + 20; s <= HALF; s += 52) {
@@ -297,50 +189,139 @@ export class SurfaceStation extends TrackCorridor {
     this.mesh(heads, warm, this.group);
   }
 
-  private buildIncident(): CabinetModel {
-    for (const [s, lat, dir] of [[50, -12.8, -1], [-50, 12.8, 1]] as const) {
-      const sig = buildSignal();
-      const p = this.sampleAt(s);
-      this.at(p, lat, 0.3, sig.group.position);
-      sig.group.rotation.y = -(p.angle + (dir > 0 ? 0 : Math.PI));
-      this.group.add(sig.group);
-      this.signals.push(sig);
-    }
+  /** The broken thing at s = 0, plus the signal guarding the approach. */
+  private buildFault(): CabinetModel {
+    const sig = buildSignal();
+    const sp = this.sampleAt(this.fault === "signal" ? -6 : -34);
+    this.at(sp, -12.6, 0.3, sig.group.position);
+    sig.group.rotation.y = -sp.angle;
+    this.group.add(sig.group);
+    this.signals.push(sig);
 
     const cabinet = buildCabinet();
-    const cp = this.sampleAt(CABINET_S);
-    this.at(cp, -(PLAT_OUT - 1.8), PLAT_Y, cabinet.group.position);
-    cabinet.group.lookAt(this.at(cp, 0, PLAT_Y));
+    const cp = this.sampleAt(4);
+    this.at(cp, -(MEDIAN - 3), 0.3, cabinet.group.position);
+    cabinet.group.lookAt(this.at(cp, 0, 0.3));
+    cabinet.group.visible = this.fault === "signal" || this.fault === "power";
     this.group.add(cabinet.group);
 
-    const spots: Array<[number, number, number, number]> = [
-      [24, -(PLAT_IN + 3), CABINET_S - 3.2, -(PLAT_OUT - 4.8)],
-      [28, -(PLAT_IN + 5.5), CABINET_S, -(PLAT_OUT - 5.4)],
-      [40, -(PLAT_IN + 3.2), CABINET_S + 3.2, -(PLAT_OUT - 4.8)],
-    ];
+    if (this.fault === "track") {
+      this.group.add(new T.Mesh(this.boxAt(0, -TRACK - 2.15, RAIL_Y + 0.02, 1.6, 0.14, 0.8), this.crackMat));
+      this.at(this.sampleAt(0), -TRACK - 2.15, RAIL_Y + 0.3, this.focus);
+    }
+    if (this.fault === "switch" || this.fault === "frozen") {
+      const rails: T.BufferGeometry[] = [];
+      for (const off of [2.15, -2.15]) {
+        const N = 8;
+        for (let i = 0; i < N; i++) {
+          const a = this.at(this.sampleAt(-16 + (32 * i) / N), -TRACK + (2 * TRACK * i) / N + off, RAIL_Y - 0.3);
+          const b = this.at(this.sampleAt(-16 + (32 * (i + 1)) / N), -TRACK + (2 * TRACK * (i + 1)) / N + off, RAIL_Y - 0.3);
+          const len = Math.hypot(b.x - a.x, b.z - a.z);
+          const g = new T.BoxGeometry(len + 0.1, 0.6, 0.42);
+          g.applyMatrix4(new T.Matrix4().compose(
+            new T.Vector3((a.x + b.x) / 2, RAIL_Y - 0.3, (a.z + b.z) / 2),
+            new T.Quaternion().setFromEuler(new T.Euler(0, -Math.atan2(b.z - a.z, b.x - a.x), 0)),
+            new T.Vector3(1, 1, 1),
+          ));
+          rails.push(g);
+        }
+      }
+      this.mesh(rails, new T.MeshLambertMaterial({ color: "#b4bbc3", emissive: "#1c1f23" }), this.group);
+      for (const [s, lat] of [[-16, -TRACK - 4.4], [16, TRACK + 4.4]] as const) {
+        const m = buildSwitchMachine();
+        const p = this.sampleAt(s);
+        this.at(p, lat, BED_Y, m.group.position);
+        m.group.rotation.y = -p.angle + (lat < 0 ? 0 : Math.PI);
+        this.group.add(m.group);
+      }
+      this.at(this.sampleAt(-16), -TRACK - 4.4, BED_Y + 1.8, this.focus);
+      if (this.fault === "frozen") {
+        const iceMat = new T.MeshLambertMaterial({ color: "#e6f6ff", emissive: "#2a4a66", transparent: true, opacity: 0.85 });
+        for (let i = 0; i < 6; i++) {
+          const blob = new T.Mesh(new T.SphereGeometry(0.9 + (i % 3) * 0.3, 10, 8), iceMat);
+          this.at(this.sampleAt(-15 + i * 1.6), -TRACK + (i % 2 ? 2.15 : -2.15), RAIL_Y, blob.position);
+          blob.scale.y = 0.55;
+          this.group.add(blob);
+          this.ice.push(blob);
+        }
+      }
+    }
+    if (this.fault === "power") {
+      const top = this.at(this.sampleAt(0), -TRACK, WIRE_Y);
+      const end = this.at(this.sampleAt(5), -TRACK - 1.5, RAIL_Y + 3);
+      const wire = new T.Mesh(new T.CylinderGeometry(0.12, 0.12, top.distanceTo(end), 6), new T.MeshLambertMaterial({ color: "#26292d" }));
+      wire.position.copy(top).add(end).multiplyScalar(0.5);
+      wire.quaternion.setFromUnitVectors(new T.Vector3(0, 1, 0), end.clone().sub(top).normalize());
+      this.group.add(wire);
+      this.brokenWire = wire;
+      this.arcLight = new T.PointLight("#9fd8ff", 0, 40, 2);
+      this.arcLight.position.copy(end);
+      this.group.add(this.arcLight);
+    }
+    if (this.fault === "train") this.at(this.sampleAt(WAIT_S + 30), -TRACK, RAIL_Y + 4, this.focus);
+    return cabinet;
+  }
+
+  private buildWorkZone() {
+    const spots: Array<[number, number, number, number]> =
+      this.fault === "signal" || this.fault === "power"
+        ? [[-14, -14, 1, -(MEDIAN - 6.2)], [-10, -15, 5, -(MEDIAN - 6.6)]]
+        : this.fault === "track"
+          ? [[-14, -14, -2.5, -TRACK - 4.2], [-9, -15, 2.5, -TRACK - 4.4]]
+          : this.fault === "train"
+            ? [[WAIT_S + 12, -14, WAIT_S + 30, -TRACK - 4.6], [WAIT_S + 6, -15, WAIT_S + 27, -TRACK - 5.2]]
+            : [[-26, -14, -17, -TRACK - 6.8], [-22, -15, -15, -TRACK - 7.2]];
     for (const [s0, l0, s1, l1] of spots) {
       const w = buildWorker();
-      const base = this.at(this.sampleAt(s0), l0, PLAT_Y);
-      const work = this.at(this.sampleAt(s1), l1, PLAT_Y);
+      const base = this.at(this.sampleAt(s0), l0, 0.3);
+      const work = this.at(this.sampleAt(s1), l1, BED_Y);
       w.root.position.copy(base);
-      this.incidentGroup.add(w.root);
-      this.crew.push({ w, base, work });
+      this.group.add(w.root);
+      this.crew.push({ w, base, work, lookout: false });
       this.pop.push({ obj: w.root, delay: 0.2 });
     }
+    const look = buildWorker({ lantern: "#ffcc33" });
+    const lp = this.at(this.sampleAt(-32), -14, 0.3);
+    look.root.position.copy(lp);
+    this.group.add(look.root);
+    this.crew.push({ w: look, base: lp, work: lp.clone(), lookout: true });
+    this.pop.push({ obj: look.root, delay: 0.25 });
 
-    for (let s = 20; s <= 46; s += 6.5) {
-      const cone = buildCone();
-      this.at(this.sampleAt(s), -(PLAT_IN + 0.9), PLAT_Y, cone.position);
-      this.incidentGroup.add(cone);
-      this.pop.push({ obj: cone, delay: 0.1 + (s - 20) * 0.01 });
+    for (const [s, color] of [[-24, "#ffb020"], [45, "#3dff7a"]] as const) {
+      const lantern = buildLantern(color);
+      this.at(this.sampleAt(s), -TRACK - 3.4, BED_Y, lantern.group.position);
+      this.group.add(lantern.group);
+      if (color === "#ffb020") this.lamps.push(lantern.mat);
+      this.pop.push({ obj: lantern.group, delay: 0.3 });
     }
+    for (const [s, kind] of [[-62, "speed"], [52, "resume"]] as const) {
+      const sign = buildTrackSign(kind);
+      const p = this.sampleAt(s);
+      this.at(p, -(MEDIAN - 2.6), 0.3, sign.position);
+      sign.rotation.y = -(p.angle + Math.PI / 2);
+      this.group.add(sign);
+      this.pop.push({ obj: sign, delay: 0.3 });
+    }
+    for (const s of [-8, 12]) {
+      const tower = buildLightTower();
+      this.at(this.sampleAt(s), -(MEDIAN - 4), 0.3, tower.group.position);
+      this.group.add(tower.group);
+      this.pop.push({ obj: tower.group, delay: 0.25 });
+    }
+    for (let s = -20; s <= 30; s += 6.5) {
+      const cone = buildCone();
+      this.at(this.sampleAt(s), -TRACK - 4.8, BED_Y, cone.position);
+      this.group.add(cone);
+      this.pop.push({ obj: cone, delay: 0.1 + (s + 20) * 0.006 });
+    }
+    // The near traffic lane is coned off for the truck, with a police detail's barricades.
     for (const s of [-24, 0, 24]) {
       const b = buildBarricade();
       const p = this.sampleAt(s);
       this.at(p, -(MEDIAN + 4.5), 0, b.group.position);
       b.group.rotation.y = -p.angle;
       this.lamps.push(b.lampMat);
-      this.incidentGroup.add(b.group);
+      this.group.add(b.group);
       this.pop.push({ obj: b.group, delay: 0.35 });
     }
     const truck = buildTruck();
@@ -348,9 +329,8 @@ export class SurfaceStation extends TrackCorridor {
     this.at(tp, -(MEDIAN + 10), 0, truck.group.position);
     truck.group.rotation.y = -tp.angle;
     this.lamps.push(truck.lampMat);
-    this.incidentGroup.add(truck.group);
+    this.group.add(truck.group);
     this.pop.push({ obj: truck.group, delay: 0 });
-    return cabinet;
   }
 
   // ------------------------------------------------------------ state
@@ -384,11 +364,11 @@ export class SurfaceStation extends TrackCorridor {
   }
 
   get floorY() {
-    return PLAT_Y;
+    return BED_Y;
   }
 
   weldPoint(out = new T.Vector3()) {
-    return out.copy(this.mouthWorld);
+    return out.copy(this.fault === "signal" || this.fault === "power" ? this.mouthWorld : this.focus);
   }
 
   bearing() {
@@ -404,7 +384,7 @@ export class SurfaceStation extends TrackCorridor {
     const fixed = this.restoredAt !== null;
     const live = this.incidentAt !== null && !(this.clearAt !== null && out > 1.3);
 
-    this.incidentGroup.visible = live;
+    this.group.visible = live;
     for (const p of this.pop) {
       let k = inc < 0 ? 0 : easeInOut((inc - p.delay) / 0.5);
       if (out >= 0) k = Math.min(k, 1 - easeInOut((out - p.delay * 0.5) / 0.6));
@@ -415,18 +395,33 @@ export class SurfaceStation extends TrackCorridor {
     for (const m of this.lamps) m.color.set("#ffb020").multiplyScalar(blink);
 
     const fault = live && !fixed;
-    for (const sig of this.signals) sig.set(fault ? "red" : "green", fault ? 0.85 + 0.15 * Math.sin(time * 6) : 1);
+    for (const sig of this.signals) sig.set(fault ? "red" : "green", fault ? (this.fault === "signal" ? (Math.sin(time * 5) > 0.3 ? 1 : 0) : 0.9) : 1);
     this.cabinet.set(fault ? "fault" : "ok", 1, time);
     this.cabinet.group.updateMatrixWorld();
     this.cabinetTop.set(0, 7.6, 0).applyMatrix4(this.cabinet.group.matrixWorld);
     this.mouthWorld.copy(this.cabinet.mouth).applyMatrix4(this.cabinet.group.matrixWorld);
-    if (fault && now > this.nextSmoke) {
+    if (this.cabinet.group.visible && fault && now > this.nextSmoke) {
       this.nextSmoke = now + 220;
       fx.puffs.emit(this.cabinetTop.x, this.cabinetTop.y, this.cabinetTop.z, SMOKE, 34, 4, 1.4, 3);
     }
-    if (fault && this.repairAt === null && now > this.nextSpark) {
+    if (this.fault === "signal" && fault && this.repairAt === null && now > this.nextSpark) {
       this.nextSpark = now + 300 + Math.random() * 500;
-      fx.sparks.emit(this.mouthWorld.x, this.mouthWorld.y, this.mouthWorld.z, 6 + Math.floor(Math.random() * 8), HOT, 16, 0.9, PLAT_Y);
+      fx.sparks.emit(this.mouthWorld.x, this.mouthWorld.y, this.mouthWorld.z, 6 + Math.floor(Math.random() * 8), HOT, 16, 0.9, BED_Y);
+    }
+    if (this.arcLight) {
+      const arcing = fault && Math.random() < 0.35;
+      this.arcLight.intensity = arcing ? 600 + Math.random() * 900 : 0;
+      if (arcing && Math.random() < 0.5) {
+        const p = this.arcLight.position;
+        fx.sparks.emit(p.x, p.y, p.z, 6, ARC, 14, 1, BED_Y);
+      }
+    }
+    if (this.brokenWire) this.brokenWire.visible = !fixed;
+    const cool = this.restoredAt === null ? 0 : clamp((now - this.restoredAt) / 1500, 0, 1);
+    this.crackMat.color.set("#ff7a1a").lerp(new T.Color("#aab1b9"), cool);
+    if (this.ice.length) {
+      const melt = this.repairAt === null ? 0 : clamp((now - this.repairAt) / 3000, 0, 1);
+      for (const blob of this.ice) blob.scale.set(Math.max(0.01, 1 - melt), Math.max(0.01, 0.55 * (1 - melt)), Math.max(0.01, 1 - melt));
     }
 
     this.updateCrew(now, time);
@@ -436,14 +431,23 @@ export class SurfaceStation extends TrackCorridor {
   private updateCrew(now: number, time: number) {
     const r = this.repairAt === null ? -1 : (now - this.repairAt) / 1000;
     const cheer = this.restoredAt === null ? -1 : (now - this.restoredAt) / 1000;
-    this.crew.forEach(({ w, base, work }, i) => {
+    const target = this.weldPoint(new T.Vector3());
+    this.crew.forEach(({ w, base, work, lookout }, i) => {
+      if (lookout) {
+        w.root.lookAt(this.at(this.sampleAt(-80), -14, w.root.position.y, this.v));
+        w.armL.rotation.x = -1.2 + Math.sin(time * 2 + i) * 0.1;
+        w.armR.rotation.x = -0.2;
+        w.beam.visible = false;
+        return;
+      }
       const walk = r < 0 ? 0 : clamp(r / 1.3, 0, 1);
       w.root.position.lerpVectors(base, work, easeInOut(walk));
       const moving = r >= 0 && r < 1.3;
       const swing = moving ? Math.sin(time * 11 + i) * 0.6 : 0;
       w.hipL.rotation.x = swing;
       w.hipR.rotation.x = -swing;
-      w.root.lookAt(this.v.set(moving ? work.x : this.mouthWorld.x, w.root.position.y, moving ? work.z : this.mouthWorld.z));
+      const face = moving ? work : target;
+      w.root.lookAt(this.v.set(face.x, w.root.position.y, face.z));
       if (cheer >= 0 && cheer < 1.8) {
         w.armL.rotation.x = w.armR.rotation.x = -2.7 + Math.sin(time * 14 + i) * 0.25;
         w.beam.visible = false;
@@ -462,31 +466,29 @@ export class SurfaceStation extends TrackCorridor {
   private updateTrains(list: CutawayTrain[], now: number, live: boolean): Set<string> {
     const inside = new Set<string>();
     const drawn = new Set<string>();
-    const occupied = new Set<number>();
-    for (const pt of this.platformTrains) {
-      const go = this.restoredAt === null ? -1 : (now - this.restoredAt) / 1000 - pt.delay;
-      const s = pt.s0 + (go > 0 ? pt.dir * 0.5 * 10 * go * go : 0);
-      pt.model.group.visible = live && Math.abs(s) < HALF - 30;
-      if (!pt.model.group.visible) continue;
-      occupied.add(pt.dir);
-      this.placeTrain(pt.model, s, pt.dir > 0, RAIL_Y, TRACK);
-    }
-    for (const tr of list) {
-      if (this.routeLine(tr.route) !== this.line) continue;
-      const hit = this.project(tr.x, tr.z);
-      if (!hit || Math.abs(hit.lat) > 30 || Math.abs(hit.s) > HALF - 34) continue;
-      inside.add(tr.id);
-      const p = this.sampleAt(hit.s);
-      const forward = Math.cos(tr.angle - p.angle) >= 0;
-      if (occupied.has(forward ? 1 : -1)) continue;
-      let model = this.trains.get(tr.id);
-      if (!model) {
-        model = buildTrain("lrv", this.lineColor, forward ? "BOSTON COLLEGE" : "GOV'T CENTER");
-        this.trains.set(tr.id, model);
-        this.group.add(model.group);
+    // The next train waits short of the zone, then rolls through once the line's clear.
+    const go = this.restoredAt === null ? -1 : (now - this.restoredAt) / 1000 - 0.6;
+    const s = WAIT_S + (go > 0 ? 0.5 * 9 * go * go : 0);
+    this.waiting.group.visible = live && s < HALF - 20;
+    if (this.waiting.group.visible) this.placeTrain(this.waiting, s, true, RAIL_Y, TRACK);
+    if (live) {
+      for (const tr of list) {
+        if (this.routeLine(tr.route) !== this.line) continue;
+        const hit = this.project(tr.x, tr.z);
+        if (!hit || Math.abs(hit.lat) > 30 || Math.abs(hit.s) > HALF - 34) continue;
+        inside.add(tr.id);
+        const p = this.sampleAt(hit.s);
+        const forward = Math.cos(tr.angle - p.angle) >= 0;
+        if (forward && this.waiting.group.visible) continue;
+        let model = this.trains.get(tr.id);
+        if (!model) {
+          model = buildTrain(consistFor(this.line, seedOf(tr.id)), trainSign(tr.route, forward === this.westward));
+          this.trains.set(tr.id, model);
+          this.group.add(model.group);
+        }
+        this.placeTrain(model, hit.s, forward, RAIL_Y, TRACK);
+        drawn.add(tr.id);
       }
-      this.placeTrain(model, hit.s, forward, RAIL_Y, TRACK);
-      drawn.add(tr.id);
     }
     for (const [id, model] of this.trains) {
       if (drawn.has(id)) continue;
