@@ -200,6 +200,9 @@ export function createMapStyle(): StyleSpecification {
   };
 }
 
+/** How much of each line shows through a 3D building that hides it (Mapbox only; 0 hides it, 1 shows it all). */
+const LINE_OCCLUSION: Record<string, number> = { "rail-glow": 0.35, "rail-core": 0.75, "rail-hot": 0.6, "ride-core": 1, "curb-path": 0.85 };
+
 /** Standard owns its basemap. Install only the application's GeoJSON, icons and labels. */
 export function addStandardTransit(map: StandardMap) {
   for (const [id, source] of Object.entries(transitSources)) {
@@ -214,6 +217,9 @@ export function addStandardTransit(map: StandardMap) {
     const paint = { ...layer.paint };
     if (layer.type === "symbol") Object.assign(paint, { "icon-emissive-strength": 1, "text-emissive-strength": 1 });
     else Object.assign(paint, { [`${layer.type}-emissive-strength`]: 1 });
+    // Buildings never swallow the T: lines, the planned trip and stop names show through 3D buildings.
+    if (layer.type === "line") Object.assign(paint, { "line-occlusion-opacity": LINE_OCCLUSION[layer.id] ?? 0.6 });
+    if (layer.type === "symbol") Object.assign(paint, { "icon-occlusion-opacity": 0.85, "text-occlusion-opacity": 0.85 });
     map.addLayer({ ...layer, slot, layout, paint } as StandardLayer);
   }
 }

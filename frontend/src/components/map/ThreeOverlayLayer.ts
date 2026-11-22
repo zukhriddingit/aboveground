@@ -448,6 +448,11 @@ interface Wave {
 const TRAIN_Y = 16;
 const STATION_BEAM_H = 135;
 const ALERT_Y = 79;
+/** X-ray: parts of our models hidden by basemap buildings draw as see-through silhouettes in their own colours. */
+const XRAY_LAYER = 1;
+const XRAY_MIN_ZOOM = 14.6;
+const XRAY_OPACITY = 0.42;
+const XRAY_RESCAN_S = 0.5;
 const MODEL_SCALE = 12;
 const SIGNAL_SCALE = 15;
 const LANDMARK_H = 300;
@@ -461,6 +466,11 @@ export class ThreeOverlayLayer implements CustomLayerInterface {
   readonly frameListeners = new Set<() => void>();
 
   private disposed = false;
+  private readonly xrayMats = new WeakMap<T.Material, T.Material>();
+  private readonly xrayHidden = new T.MeshBasicMaterial({ visible: false });
+  private xrayMeshes: T.Mesh[] = [];
+  private xraySolid: Array<T.Material | T.Material[]> = [];
+  private xrayScanAt = -Infinity;
 
   get isDisposed() { return this.disposed; }
   private map?: MapLibreMap;
@@ -642,9 +652,62 @@ export class ThreeOverlayLayer implements CustomLayerInterface {
     this.sparks.frame(dt, this.map.getPixelRatio?.() ?? window.devicePixelRatio);
 
     this.renderer.resetState();
+    if (this.zoom >= XRAY_MIN_ZOOM) this.renderXray(now);
     this.renderer.render(this.scene, this.camera);
     this.map.triggerRepaint();
     for (const listener of this.frameListeners) listener();
+  }
+
+  // ------------------------------------------------------------ x-ray through buildings
+
+  /** A flat, see-through twin of a solid material that only draws where a basemap building is in front. */
+  private xrayOf(src: T.Material): T.Material {
+    const cached = this.xrayMats.get(src);
+    if (cached) return cached;
+    let ghost: T.Material = this.xrayHidden;
+    const glow = src.blending !== T.NormalBlending || (src.transparent && src.opacity < 0.6);
+    if (src.visible && src.depthTest && !glow) {
+      const m = src as T.MeshStandardMaterial;
+      const color = m.color ? m.color.clone() : new T.Color("#ffffff");
+      if (m.emissive && m.emissive.getHex() !== 0 && (m.emissiveIntensity ?? 1) >= 1 && !m.map) color.copy(m.emissive);
+      ghost = new T.MeshBasicMaterial({
+        color, map: m.map ?? null, transparent: true, opacity: XRAY_OPACITY, depthWrite: false,
+        depthFunc: T.GreaterDepth, side: T.FrontSide, toneMapped: false, fog: false,
+      });
+    }
+    this.xrayMats.set(src, ghost);
+    return ghost;
+  }
+
+  /** Before the normal pass, while the depth buffer holds only the basemap: draw what buildings hide. */
+  private renderXray(now: number) {
+    if (now - this.xrayScanAt > XRAY_RESCAN_S) {
+      this.xrayScanAt = now;
+      this.xrayMeshes = [];
+      this.scene.traverse((o) => {
+        const mesh = o as T.Mesh;
+        if (!mesh.isMesh) return;
+        const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+        const solid = mats.some((mat) => this.xrayOf(mat) !== this.xrayHidden);
+        if (solid) {
+          mesh.layers.enable(XRAY_LAYER);
+          this.xrayMeshes.push(mesh);
+        } else {
+          mesh.layers.disable(XRAY_LAYER);
+        }
+      });
+    }
+    if (!this.xrayMeshes.length || !this.renderer) return;
+    this.xraySolid.length = 0;
+    for (const mesh of this.xrayMeshes) {
+      const src = mesh.material;
+      this.xraySolid.push(src);
+      mesh.material = Array.isArray(src) ? src.map((m) => this.xrayOf(m)) : this.xrayOf(src);
+    }
+    this.camera.layers.set(XRAY_LAYER);
+    this.renderer.render(this.scene, this.camera);
+    this.camera.layers.set(0);
+    this.xrayMeshes.forEach((mesh, i) => { mesh.material = this.xraySolid[i]; });
   }
 
   // ------------------------------------------------------------ scale with zoom
