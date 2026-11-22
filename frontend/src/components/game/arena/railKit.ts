@@ -291,9 +291,10 @@ export interface LrvModel {
 
 /**
  * A Green Line light-rail car (one section, ~11 m) running along +X: silver body with the green
- * belt, tinted windows, a sloped cab, pantograph, trucks and knuckle couplers.
+ * belt, tinted windows, a sloped cab, pantograph, trucks and knuckle couplers. `belt` and
+ * `pantograph: false` give a third-rail line's car its livery.
  */
-export function buildLrv(opts: { length?: number; dest?: string; lit?: boolean } = {}): LrvModel {
+export function buildLrv(opts: { length?: number; dest?: string; lit?: boolean; belt?: string; pantograph?: boolean } = {}): LrvModel {
   const L = opts.length ?? 11;
   const g = new T.Group();
   const floorY = 0.95;
@@ -303,7 +304,7 @@ export function buildLrv(opts: { length?: number; dest?: string; lit?: boolean }
   body.position.y = floorY + bodyH / 2;
   body.castShadow = body.receiveShadow = true;
   g.add(body);
-  const belt = new T.Mesh(new RoundedBoxGeometry(L + 0.02, 0.38, W + 0.03, 2, 0.05), carPaint("#00843D"));
+  const belt = new T.Mesh(new RoundedBoxGeometry(L + 0.02, 0.38, W + 0.03, 2, 0.05), carPaint(opts.belt ?? "#00843D"));
   belt.position.y = floorY + 0.55;
   g.add(belt);
   const skirt = new T.Mesh(new T.BoxGeometry(L - 0.4, 0.42, W - 0.12), carPaint("#2a2d31"));
@@ -391,7 +392,7 @@ export function buildLrv(opts: { length?: number; dest?: string; lit?: boolean }
   shoe.position.set(-0.3, 1.47, 0);
   panto.add(shoe);
   panto.position.set(-L * 0.05, roofY + 0.05, 0);
-  g.add(panto);
+  if (opts.pantograph !== false) g.add(panto);
   // Trucks: frames, wheels.
   for (const x of [-L * 0.36, L * 0.36]) {
     const frame = new T.Mesh(new T.BoxGeometry(2.1, 0.32, 2.0), blackPlastic());

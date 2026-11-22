@@ -108,7 +108,7 @@ repair started in 2D tilts back to 3D so the opened street shows.
    | --- | --- |
    | Signal relay case | Drag each tagged field wire (1TR, 2TR, HR, DR) onto its relay's brass terminal post; the nut runs down, the relay picks up behind its clear cover, and with all four the signal clears to green |
    | Thermite weld | Hold the oxy-propane torch until the rail ends reach about 1,700 °F (they glow with their real color), tap the crucible as the reaction peaks, grind the riser flush with a profile grinder, then open the track once the weld is below 700 °F |
-   | Junction | Click the switch machines to throw them (the lit preview shows the route), then send the Green Line car; twice, to two destinations |
+   | Junction | The real junction nearest the station on its line (`junctions.ts`): Columbia Junction (Ashmont, Braintree, Cabot Yard) on the southern Red Line, a crossover elsewhere on the Red Line, Kenmore (B, the Blandford St pocket track, C, D), Copley Junction (E or Kenmore) and the GLX junction (Union Square or Medford/Tufts) on the Green Line, Wellington and Orient Heights yards on the Orange and Blue Lines. Throw the switch machines (the lit preview shows the route) and send that line's car to two destinations; in a planned closure the trains are parked, so you test the new switches by running a test train over every route |
    | Substation switchgear | Watch the amber READY lamps light the dispatcher's order, then turn the pistol-grip handles to CLOSE in that order; the bus voltmeter climbs to 600 V DC, a breaker out of order arcs |
    | Tunnel rescue | Feather the throttle to couple under 2 mph (faster and the knuckles bounce), drag the glad hand across to connect the brake pipe, hold the valve until 90 psi, then tow the stalled car clear |
    | Frozen switch | Play the hand torch over the ice wedged between the point and the stock rail; once it's all melted the point slams shut |
@@ -119,6 +119,13 @@ repair started in 2D tilts back to 3D so the opened street shows.
    `fx` (spark streaks, smoke and steam, torch flames, hot-steel color from temperature), `railKit` (a 115RE
    rail section swept along any path, ties, ballast, a Green Line car), `ArenaShell` (the HUD) and `sfx`
    (synthesized sounds, with a mute button in the HUD).
+
+   **Planned closures** (`workItems` in `mbtaV3.ts`) are split into the jobs they cover, in the MBTA's order: from
+   the MBTA's announcement of that closure when it published one (the Nov 20–22 Red Line closure is signal
+   pre-commissioning near North Quincy, then switch areas and the rail at them between Broadway and North Quincy,
+   though its alert only says "switch and rail upgrades"), else from the alert's own reason. The card explains
+   each job, lists its real steps and marks the ones the puzzle has you do; the puzzles play back to back
+   (signal, switch, weld for that closure), and the card after them says how the work adds up.
 
    After a win the card says how long that repair really takes on the T, with a real MBTA example and its
    source (`realRepairs.ts`), then plays the 3D repair after 9 seconds or when you tap "Watch the crew fix it".
