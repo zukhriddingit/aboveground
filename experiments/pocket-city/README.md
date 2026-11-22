@@ -30,3 +30,15 @@ python3 $S/scripts/plot.py --osm copley/work/osm.json --out copley/work/plot.jso
 python3 $S/scripts/prep.py --osm copley/work/osm.json --plot copley/work/plot.json --drive right --out copley/work/scene.json
 python3 $S/scripts/build.py --scene copley/work/scene.json --city copley/work/city.json --landmarks copley/work/landmarks.js --out ../../frontend/public/pocket/copley.html
 ```
+
+Then add the weather control (AboveGround's addition to the kit; it skips pages that already have it):
+
+```bash
+python3 add_weather.py ../../frontend/public/pocket/copley.html
+```
+
+It puts a Weather picker (Season's weather, Live · Boston now, Clear, Drizzle, Rain, Snow, Heavy snow, Fog) and a
+Night toggle under the season buttons. Live reads the latest observation at Logan Airport from the National Weather
+Service (api.weather.gov), falls back to Open-Meteo, and turns night on after sunset. Pages also take
+`?weather=live|clear|drizzle|rain|snow|heavysnow|fog` and `&night=1` or `&night=0`; the app's Street view opens with
+`?weather=live`.
