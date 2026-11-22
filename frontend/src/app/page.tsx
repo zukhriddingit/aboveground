@@ -23,6 +23,7 @@ import {
   closureStatus,
   closureTiming,
   IncidentSim,
+  isSurfaceStation,
   IncidentTag,
   LiveMarkers,
   describeEvent,
@@ -92,6 +93,10 @@ const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve,
 const flagKey = (id: StationId) => `flag:${id}`;
 const liveKey = (alert: LiveAlert) => `live-${alert.id}`;
 const NOTIFY_KEY = "tverse-notify-closures";
+/** After the walk-in drops onto the platform, how long before a live alert's card opens. */
+const LANDED_MS = 3000;
+/** Street-level stops have no walk-in: the card opens once the camera has flown over. */
+const SURFACE_ARRIVE_MS = 2800;
 const VIEW_KEY = "tverse-map-view";
 const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? "").replace(/\/$/, "");
 const FLAT_FOOTPRINTS = 0.85;
@@ -387,36 +392,53 @@ export default function Home() {
     [],
   );
 
-  /** Once the street over a station has opened, drop the camera in onto the platform. */
+  /** Once the street over a station has opened, drop the camera in onto the platform; `then` runs after landing. */
   const walkInWhenOpen = useCallback(
-    (id: StationId) => {
+    (id: StationId, then?: () => void) => {
       const giveUp = Date.now() + 10000;
       const attempt = () => {
-        if (scene.current?.isTunnelOpen(id)) window.setTimeout(() => enterTunnel(id), 900);
-        else if (Date.now() < giveUp) window.setTimeout(attempt, 300);
+        if (scene.current?.isTunnelOpen(id)) {
+          window.setTimeout(() => {
+            const entered = enterTunnel(id);
+            if (then) window.setTimeout(then, entered ? LANDED_MS : 400);
+          }, 900);
+        } else if (Date.now() < giveUp) window.setTimeout(attempt, 300);
+        else then?.();
       };
       window.setTimeout(attempt, 1800);
     },
     [enterTunnel],
   );
 
+  /** A live alert's card waits until the camera is at the station; one at a time. */
+  const pendingCard = useRef<string | null>(null);
+
   /** "Explore a simulated repair" for a live alert: the tunnel opens, but the real trains keep moving. */
   const exploreLive = useCallback(
     (a: LiveAlert, pick?: { station: Station; scenario: { game: GameKind; label: string } }) => {
       const scenario = pick?.scenario ?? scenarioFor(a.cause);
       const station = pick?.station ?? featuredStationFor(a, stationsRef.current, live.index);
-      if (!scenario || !station || repairing) return;
+      if (!scenario || !station || repairing || pendingCard.current) return;
       const busy = simAlerts.find((s) => s.stationId === station.id);
       if (busy) return openAlert(busy);
       const id = liveKey(a);
       setAlertsOpen(false);
       setExplore({ id, ...scenario, alert: a });
-      setFixAlert(staged.get(id)?.alert ?? translateForGame(station, a.header, id, scenario.game));
       if (!sim.incidents.has(id)) sim.startIncident(id, station.id, { holds: false, fault: faultForGame(scenario.game) });
+      // Fly to the station and go down onto the platform first; the card (and its mini-game) follows.
+      const card = staged.get(id)?.alert ?? translateForGame(station, a.header, id, scenario.game);
+      pendingCard.current = id;
+      const showCard = () => {
+        if (pendingCard.current !== id) return;
+        pendingCard.current = null;
+        setFixAlert(card);
+      };
+      push(`Heading to ${shortName(station)}`, { description: "The repair card opens once you're there.", durationMs: 3500 });
       viewTunnel(station.id);
-      walkInWhenOpen(station.id);
+      if (isSurfaceStation(station.id)) window.setTimeout(showCard, SURFACE_ARRIVE_MS);
+      else walkInWhenOpen(station.id, showCard);
     },
-    [live.index, openAlert, repairing, sim, simAlerts, staged, viewTunnel, walkInWhenOpen],
+    [live.index, openAlert, push, repairing, sim, simAlerts, staged, viewTunnel, walkInWhenOpen],
   );
 
   /** A red X: explore a simulated repair at that closed station, whether or not the map features it. */
