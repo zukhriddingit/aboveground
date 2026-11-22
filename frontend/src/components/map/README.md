@@ -60,6 +60,8 @@ On macOS the executable is also available at `/Applications/Blender.app/Contents
 
 **Runtime.** `stationModels.ts` caches each GLB request. A missing site falls back to its generic entrance or platform. A procedural beacon stays visible during loading or if both requests fail. Bespoke structures scale and pick independently around their ground pivots. Generic entrances use the nearest track bearing. The main entrance has a socket for the alert cabinet. Line trim, signs and halo materials belong to the instance. Geometry, textures and fixed materials are shared. The layer caps building heights below the 90 m story anchor and moves the floating warning sideways when that bubble would cover it.
 
+**Loading.** A station's GLB is only requested once the camera is close: `TVerseMap` calls `allowStationModel(id)` at zoom 14.8 or more within 1.5 km of the station, so the overview shows the procedural beacons and the first load skips about 3.6 MB of models. From zoom 12 to 15 only towers of 40 m or more are extruded (`buildings-skyline`) over flat `building-footprints`; the full `buildings` layer fades in from 14.5.
+
 ## Files
 
 | File | What |

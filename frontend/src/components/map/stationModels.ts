@@ -37,7 +37,28 @@ export const BESPOKE_STATIONS: ReadonlySet<StationId> = new Set<StationId>([
   "place-bucen", "place-kencl", "place-hymnl", "place-coecl", "place-boyls", "place-pktrm", "place-harsq", "place-knncl",
 ]);
 
+/**
+ * A station's model (200-600 KB each) waits until the camera comes close to it; TVerseMap opens the
+ * gate. At the overview the procedural beacons stand in, so the first load skips ~3.6 MB of GLBs.
+ */
+const gates = new Map<StationId, { open: () => void; ready: Promise<void> }>();
+function gate(id: StationId) {
+  let g = gates.get(id);
+  if (!g) {
+    let open = () => {};
+    const ready = new Promise<void>((resolve) => (open = resolve));
+    g = { open, ready };
+    gates.set(id, g);
+  }
+  return g;
+}
+
+export function allowStationModel(id: StationId) {
+  gate(id).open();
+}
+
 export async function loadStationSite(id: StationId) {
+  await gate(id).ready;
   // Only ask for a bespoke GLB we actually ship, so other stops don't log a 404 before the generic model.
   const bespoke = BESPOKE_STATIONS.has(id) ? await loadStationModel(id) : null;
   return bespoke ?? loadStationModel(STATION_MODEL[id] ?? "headhouse_modern");

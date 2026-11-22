@@ -7,6 +7,8 @@ import { LINE_COLORS, LINE_GLOW } from "@/lib/theme";
 
 const height: ExpressionSpecification = ["to-number", ["get", "render_height"], 8];
 const roadClass: ExpressionSpecification = ["get", "class"];
+/** Towers this tall (m) stay extruded at the overview. */
+const SKYLINE_HEIGHT = 40;
 
 /** Feature `color` (official MBTA hex) or `line` name -> bright glow colour. */
 export const railColor: ExpressionSpecification = ["match", ["coalesce", ["get", "line"], ""],
@@ -145,10 +147,22 @@ const transit: LayerSpecification[] = [
 
 const city: LayerSpecification[] = [
   // Neon kerb line around every footprint; reads as street-level glow between the towers.
-  { id: "building-edges", type: "line", source: "boston", "source-layer": "building", minzoom: 14,
-    paint: { "line-color": "#46c8ff", "line-width": ["interpolate", ["linear"], ["zoom"], 14, 0.3, 17, 1.2],
-      "line-opacity": ["interpolate", ["linear"], ["zoom"], 14, 0.1, 16, 0.35] } },
-  { id: "buildings", type: "fill-extrusion", source: "boston", "source-layer": "building", minzoom: 12,
+  { id: "building-edges", type: "line", source: "boston", "source-layer": "building", minzoom: 15,
+    paint: { "line-color": "#46c8ff", "line-width": ["interpolate", ["linear"], ["zoom"], 15, 0.3, 17, 1.2],
+      "line-opacity": ["interpolate", ["linear"], ["zoom"], 15, 0.1, 16, 0.35] } },
+  // From the overview only the skyline stands up; every footprint rises as you zoom in. Extruding the
+  // whole city with window patterns at zoom 12-14 was the heaviest thing on the GPU.
+  { id: "buildings-skyline", type: "fill-extrusion", source: "boston", "source-layer": "building", minzoom: 12, maxzoom: 15.2,
+    filter: [">=", height, SKYLINE_HEIGHT],
+    paint: {
+      "fill-extrusion-color": ["interpolate", ["linear"], height, 40, "#374684", 150, "#5062ad", 260, "#7286d6"],
+      "fill-extrusion-pattern": ["step", height, WINDOW_IMAGES[1], 70, WINDOW_IMAGES[2]],
+      "fill-extrusion-base": ["to-number", ["get", "render_min_height"], 0],
+      "fill-extrusion-height": height,
+      "fill-extrusion-vertical-gradient": true,
+      "fill-extrusion-opacity": 0.96,
+    } },
+  { id: "buildings", type: "fill-extrusion", source: "boston", "source-layer": "building", minzoom: 14.5,
     paint: {
       "fill-extrusion-color": ["interpolate", ["linear"], height,
         0, "#1b2547", 25, "#26325f", 70, "#374684", 150, "#5062ad", 260, "#7286d6"],
@@ -157,8 +171,14 @@ const city: LayerSpecification[] = [
       "fill-extrusion-base": ["to-number", ["get", "render_min_height"], 0],
       "fill-extrusion-height": height,
       "fill-extrusion-vertical-gradient": true,
-      "fill-extrusion-opacity": 0.96,
+      "fill-extrusion-opacity": ["interpolate", ["linear"], ["zoom"], 14.5, 0, 15.2, 0.96],
     } },
+];
+
+/** Flat footprints under the skyline at the overview, so city blocks still read. */
+const footprints: LayerSpecification[] = [
+  { id: "building-footprints", type: "fill", source: "boston", "source-layer": "building", minzoom: 12, maxzoom: 15.2,
+    paint: { "fill-color": "#1f2a52", "fill-opacity": ["interpolate", ["linear"], ["zoom"], 12, 0.5, 14.5, 0.85, 15.2, 0] } },
 ];
 
 const labels: LayerSpecification[] = [
@@ -208,6 +228,6 @@ export function createMapStyle(): StyleSpecification {
       ride: { type: "geojson", data: empty },
       stations: { type: "geojson", data: empty },
     },
-    layers: [...ground, ...roads, ...transit, ...city, ...labels],
+    layers: [...ground, ...footprints, ...roads, ...transit, ...city, ...labels],
   };
 }
