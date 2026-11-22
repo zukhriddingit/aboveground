@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AboveGround · Pocket Cities</title>
+<style>
+  :root { --paper: #f4efe4; --ink: #22302b; --muted: #6b6a5e; --rule: #d9d1bf; --card: #fbf8f1; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--paper); color: var(--ink); font: 15px/1.5 Georgia, "Iowan Old Style", serif; }
+  header { padding: 40px 24px 16px; max-width: 1040px; margin: 0 auto; }
+  h1 { margin: 0; font-size: clamp(30px, 5vw, 46px); font-weight: 600; letter-spacing: -0.01em; }
+  header p { margin: 8px 0 0; color: var(--muted); max-width: 640px; }
+  main { max-width: 1040px; margin: 0 auto; padding: 8px 24px 48px; display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); }
+  a.card { display: block; text-decoration: none; color: inherit; background: var(--card); border: 1px solid var(--rule); border-radius: 12px; padding: 16px 16px 14px; transition: transform .15s ease, box-shadow .15s ease; }
+  a.card:hover { transform: translateY(-2px); box-shadow: 0 8px 22px -12px rgba(34,48,43,.45); }
+  .line { display: inline-flex; gap: 6px; align-items: center; font: 600 11px/1 ui-monospace, Menlo, monospace; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  .dot { width: 9px; height: 9px; border-radius: 50%; }
+  .name { margin: 8px 0 2px; font-size: 21px; font-weight: 600; }
+  .what { margin: 0; color: var(--muted); font-size: 13.5px; }
+  footer { max-width: 1040px; margin: 0 auto; padding: 0 24px 32px; color: var(--muted); font: 12px/1.6 ui-monospace, Menlo, monospace; }
+  footer a { color: inherit; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Pocket Cities of the T</h1>
+  <p>Hand-drawn isometric dioramas of the block around each AboveGround station: real buildings, streets and trees from OpenStreetMap, hand-built landmarks, seasons and special occasions. Drag to turn, scroll to zoom.</p>
+</header>
+<main>
+  <a class="card" href="bu-central.html"><span class="line"><span class="dot" style="background:#00843D"></span>Green Line · B</span><p class="name">BU Central</p><p class="what">Commonwealth Ave median stop, Marsh Plaza, Mugar Library</p></a>
+  <a class="card" href="kenmore.html"><span class="line"><span class="dot" style="background:#00843D"></span>Green Line · B C D</span><p class="name">Kenmore Square</p><p class="what">The CITGO sign, Hotel Commonwealth, the busway canopy</p></a>
+  <a class="card" href="hynes.html"><span class="line"><span class="dot" style="background:#00843D"></span>Green Line · B C D</span><p class="name">Hynes Convention Center</p><p class="what">Mass Ave entrance, Newbury Street brownstones</p></a>
+  <a class="card" href="copley.html"><span class="line"><span class="dot" style="background:#00843D"></span>Green Line</span><p class="name">Copley Square</p><p class="what">Boston Public Library, Old South Church, the iron headhouse</p></a>
+  <a class="card" href="boylston.html"><span class="line"><span class="dot" style="background:#00843D"></span>Green Line</span><p class="name">Boylston</p><p class="what">America's first subway: the 1897 granite headhouses on the Common</p></a>
+  <a class="card" href="park-street.html"><span class="line"><span class="dot" style="background:#DA291C"></span>Red · Green</span><p class="name">Park Street</p><p class="what">Park Street Church, the Granary, the Freedom Trail</p></a>
+  <a class="card" href="harvard.html"><span class="line"><span class="dot" style="background:#DA291C"></span>Red Line</span><p class="name">Harvard Square</p><p class="what">The kiosk, Johnston Gate, Harvard Yard, First Parish</p></a>
+  <a class="card" href="kendall.html"><span class="line"><span class="dot" style="background:#DA291C"></span>Red Line</span><p class="name">Kendall/MIT</p><p class="what">The new glass headhouses, the MIT Museum, Main Street</p></a>
+</main>
+<footer>
+  Built with the <a href="https://april-zhu.com/pocketcity">Pocket City</a> kit (MIT, April Zhu) for AboveGround. Map data © OpenStreetMap contributors (ODbL). Each page lists its sources and what is illustrative in its field notes.
+</footer>
+</body>
+</html>

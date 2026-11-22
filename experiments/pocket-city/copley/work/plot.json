@@ -1,0 +1,26 @@
+{
+ "lat": 42.3500651,
+ "lon": -71.0781422,
+ "rotation": 20,
+ "size": 240.0,
+ "asked": {
+  "lat": 42.34975,
+  "lon": -71.0776
+ },
+ "moved_m": 56.6,
+ "famous_inside": [
+  "BosTix Booth",
+  "Boston Public Library",
+  "Old South Church",
+  "way/1361403249",
+  "way/29605327",
+  "way/813505803",
+  "way/813505804"
+ ],
+ "famous_cut": [],
+ "keep_missing": [
+  "Trinity Church"
+ ],
+ "place": "",
+ "osm_base": "2026-11-22T02:26:47Z"
+}

@@ -1,0 +1,671 @@
+{
+  "name": "BU Central",
+  "title": "BU Central, Boston",
+  "region": "Boston · Green Line B",
+  "place": "Commonwealth Avenue at Saint Mary’s Street",
+  "timezone": "America/New_York",
+  "level": 3.65,
+  "styles": {
+    "default": {
+      "facade": "brick",
+      "wall": [
+        "#ac7662",
+        "#bd8b71",
+        "#a86f5c"
+      ],
+      "flatRoof": "#a69e90",
+      "roof": "flat",
+      "floor": 3.5,
+      "levels": 3,
+      "bay": 3.2,
+      "trim": "#d9c5aa",
+      "glass": [
+        "#a8bcba",
+        "#899e9e",
+        "#c2cebf"
+      ],
+      "frame": "#716b5e",
+      "shop": "none",
+      "awning": false,
+      "parapet": 0.42
+    },
+    "rules": [
+      {
+        "if": {
+          "type": "dormitory"
+        },
+        "set": {
+          "facade": "brick",
+          "wall": [
+            "#ad725f",
+            "#ac6956"
+          ],
+          "floor": 3.15,
+          "bay": 2.85,
+          "parapet": 0.4
+        }
+      },
+      {
+        "if": {
+          "type": "retail"
+        },
+        "set": {
+          "facade": "brick",
+          "wall": [
+            "#b38a75",
+            "#ae816a"
+          ],
+          "shop": "poi",
+          "shopHeight": 3.6,
+          "fascia": "#465a51",
+          "bay": 3.7,
+          "awning": false
+        }
+      },
+      {
+        "if": {
+          "type": "university"
+        },
+        "set": {
+          "facade": "civic",
+          "wall": [
+            "#d0c5a9",
+            "#c5baa5"
+          ],
+          "roof": "flat",
+          "floor": 3.75,
+          "trim": "#e1d7bd",
+          "bay": 3.45
+        }
+      }
+    ]
+  },
+  "buildings": {
+    "w29513001": {
+      "facade": "glass",
+      "floor": 3.9,
+      "wall": "#758784",
+      "frame": "#5b645e",
+      "bars": false,
+      "rooftop": "none",
+      "flatRoof": "#b2aea2"
+    },
+    "w1235201681": {
+      "facade": "office",
+      "wall": "#af8976",
+      "floor": 3.4
+    },
+    "w1007090939": {
+      "facade": "civic",
+      "wall": "#d2c6a8",
+      "floor": 3.95
+    }
+  },
+  "palette": {
+    "ground": "#deceb2",
+    "road": "#aba7a2",
+    "pavement": "#ded4c0",
+    "walk": "#d4c6af",
+    "grass": "#a7c77a",
+    "water": "#71a9ad",
+    "slab": "#c7b59a",
+    "marking": "#f5eedb",
+    "kerb": "#c6beb0",
+    "paving": "#b8a996",
+    "rail": "#756b5f"
+  },
+  "paving": {
+    "style": "slabs",
+    "size": 0.9,
+    "colour": "#bcb09c",
+    "stone": "#d9ceba"
+  },
+  "lamp": {
+    "colour": "#45554f",
+    "head": "#f2e7c8",
+    "height": 4.65,
+    "auto": false
+  },
+  "shops": {
+    "signs": [
+      ""
+    ],
+    "font": "Arial, sans-serif",
+    "fascias": [
+      "#465f52",
+      "#8a5f49"
+    ],
+    "awnings": [
+      "#ae7868"
+    ]
+  },
+  "people": {
+    "skin": [
+      "#805445",
+      "#ba8668",
+      "#e0ad87",
+      "#b57b5e",
+      "#865d4f"
+    ],
+    "clothes": [
+      "#587982",
+      "#883e49",
+      "#bd8c51",
+      "#464858",
+      "#4f7059"
+    ],
+    "pants": [
+      "#48566c",
+      "#675d57",
+      "#45484d"
+    ],
+    "hair": [
+      "#49372d",
+      "#695144",
+      "#ad8359"
+    ],
+    "umbrellas": [
+      "#536578",
+      "#b85c50",
+      "#e7c66a"
+    ],
+    "bikes": [
+      "#3c759b",
+      "#485c56",
+      "#923e37"
+    ]
+  },
+  "vehicles": {
+    "kinds": [
+      "sedan",
+      "hatch",
+      "suv",
+      "mpv"
+    ],
+    "colours": [
+      "#e3ddd2",
+      "#434950",
+      "#7a8891",
+      "#a9554b",
+      "#c4c7c4"
+    ],
+    "plate": "#eeeae1",
+    "taxi": {
+      "share": 0.09,
+      "colours": [
+        "#f3eee1",
+        "#f6f4e9"
+      ],
+      "kind": "sedan",
+      "sign": "#f2e0b0"
+    }
+  },
+  "trees": {
+    "default": {
+      "style": 2,
+      "colours": [
+        "#83ac60",
+        "#95b76a",
+        "#78a45c"
+      ],
+      "spring": "#b1ca77",
+      "autumn": "#d39843",
+      "height": 7.75,
+      "vary": 0.3,
+      "mix": [
+        {
+          "style": 2,
+          "share": 3,
+          "autumn": "#dba449"
+        },
+        {
+          "style": 3,
+          "share": 2,
+          "autumn": "#bb7544"
+        },
+        {
+          "style": 4,
+          "share": 1,
+          "autumn": "#d8b751"
+        }
+      ]
+    },
+    "rules": [
+      {
+        "match": "Conifer",
+        "style": 5,
+        "mix": [],
+        "evergreen": true,
+        "height": 7.5,
+        "colours": [
+          "#678c61",
+          "#729261"
+        ]
+      },
+      {
+        "match": "Plaza tree",
+        "mix": [],
+        "style": 3,
+        "height": 8.7,
+        "vary": 0.08,
+        "autumn": "#c78748"
+      }
+    ],
+    "extra": [
+      [
+        81.55,
+        -33.54,
+        8.1,
+        "Plaza tree"
+      ],
+      [
+        87.1,
+        -39.03,
+        8.8,
+        "Plaza tree"
+      ],
+      [
+        107.71,
+        -47.19,
+        8.7,
+        "Plaza tree"
+      ],
+      [
+        114.87,
+        -47.35,
+        8.2,
+        "Plaza tree"
+      ]
+    ]
+  },
+  "boats": {
+    "hulls": [
+      "#e4ddc8"
+    ],
+    "stripes": [
+      "#7c8f87"
+    ],
+    "covers": [
+      "#7a9598"
+    ],
+    "inside": "#aa9577",
+    "cabin": "#e6dfce"
+  },
+  "seasonLabel": "Boston seasons",
+  "seasons": [
+    {
+      "id": "spring",
+      "label": "April showers",
+      "leaves": "spring",
+      "wet": true,
+      "wx": "drizzle",
+      "umbrellas": true,
+      "crowd": 0.92,
+      "grass": "#b4c989",
+      "boats": 0,
+      "note": {
+        "text": "Boston Logan averages 3.63 inches of precipitation in April.",
+        "source": "NOAA",
+        "url": "https://www.ncei.noaa.gov/access/services/data/v1?dataset=normals-monthly-1991-2020&endDate=9996-12-31&format=pdf&startDate=0001-01-01&stations=USW00014739"
+      }
+    },
+    {
+      "id": "summer",
+      "label": "Summer",
+      "leaves": "summer",
+      "crowd": 0.85,
+      "grass": "#a0be70",
+      "boats": 1,
+      "note": {
+        "text": "The average July high at Boston Logan is 82.1°F.",
+        "source": "NOAA",
+        "url": "https://www.ncei.noaa.gov/access/services/data/v1?dataset=normals-monthly-1991-2020&endDate=9996-12-31&format=pdf&startDate=0001-01-01&stations=USW00014739"
+      }
+    },
+    {
+      "id": "autumn",
+      "label": "Fall color",
+      "leaves": "autumn",
+      "crowd": 1.12,
+      "grass": "#aebd76",
+      "boats": 0,
+      "note": {
+        "text": "Boston’s Arnold Arboretum documents fall color in its maple collection.",
+        "source": "Arnold Arboretum",
+        "url": "https://arboretum.harvard.edu/plants/maple-collection-directions-and-accessibility-information/"
+      }
+    },
+    {
+      "id": "winter",
+      "label": "Snow day",
+      "leaves": "bare",
+      "snow": true,
+      "coats": true,
+      "wx": "snow",
+      "crowd": 0.66,
+      "cafes": false,
+      "boats": 0,
+      "note": {
+        "text": "Boston Logan averages 14.3 inches of snow in January.",
+        "source": "NOAA",
+        "url": "https://www.ncei.noaa.gov/access/services/data/v1?dataset=normals-monthly-1991-2020&endDate=9996-12-31&format=pdf&startDate=0001-01-01&stations=USW00014739"
+      }
+    }
+  ],
+  "occasions": [
+    {
+      "id": "commencement",
+      "label": "Step on the Seal",
+      "leaves": "spring",
+      "crowd": 1.35,
+      "grass": "#adc878",
+      "boats": 0,
+      "dress": {
+        "colours": [
+          "#ba443e",
+          "#ac3833"
+        ],
+        "share": 0.2
+      },
+      "note": {
+        "text": "Graduates pose in scarlet gowns at the Marsh Plaza seal.",
+        "source": "BU Today",
+        "url": "https://www.bu.edu/today/close-ups/2022/step-on-the-seal/"
+      }
+    },
+    {
+      "id": "market",
+      "label": "GSU Farmers Market",
+      "leaves": "autumn",
+      "grass": "#afbf7a",
+      "crowd": 1.32,
+      "boats": 0,
+      "note": {
+        "text": "BU Dining brings local vendors to the George Sherman Union Plaza for its farmers market.",
+        "source": "BU Dining",
+        "url": "https://www.bu.edu/dining/local-food/"
+      }
+    }
+  ],
+  "occasionLabel": "Campus occasions",
+  "months": [
+    "winter",
+    "winter",
+    "spring",
+    "spring",
+    "spring",
+    "summer",
+    "summer",
+    "summer",
+    "autumn",
+    "autumn",
+    "autumn",
+    "winter"
+  ],
+  "cameras": {
+    "iso": {
+      "x": 0.0,
+      "y": 0.0,
+      "z": 9,
+      "yaw": -58,
+      "pitch": 35,
+      "zoom": 0.65
+    },
+    "bird": {
+      "x": 0.0,
+      "y": 0.0,
+      "z": 5,
+      "yaw": -78,
+      "pitch": 71,
+      "zoom": 0.515
+    }
+  },
+  "views": [
+    {
+      "id": "platform",
+      "label": "Platform edge",
+      "camera": {
+        "x": 26.77,
+        "y": -61.45,
+        "z": 2.5,
+        "yaw": -49,
+        "pitch": 23,
+        "zoom": 3.5
+      }
+    },
+    {
+      "id": "chapel",
+      "label": "Marsh Plaza",
+      "camera": {
+        "x": 102.72,
+        "y": -31.19,
+        "z": 9.5,
+        "yaw": -94,
+        "pitch": 24,
+        "zoom": 2.95
+      }
+    },
+    {
+      "id": "mugar",
+      "label": "Mugar Library",
+      "camera": {
+        "x": -7.17,
+        "y": 46.89,
+        "z": 12,
+        "yaw": -77,
+        "pitch": 27,
+        "zoom": 2.4
+      }
+    },
+    {
+      "id": "union",
+      "label": "George Sherman Union",
+      "camera": {
+        "x": -62.13,
+        "y": 41.43,
+        "z": 8,
+        "yaw": -63,
+        "pitch": 29,
+        "zoom": 2.12
+      }
+    },
+    {
+      "id": "tower",
+      "label": "Law Tower",
+      "camera": {
+        "x": 64.01,
+        "y": 39.99,
+        "z": 38,
+        "yaw": -24,
+        "pitch": 24,
+        "zoom": 1.55
+      }
+    }
+  ],
+  "legend": [
+    {
+      "name": "BU Central",
+      "source": "Two side platforms",
+      "icon": "streets",
+      "camera": {
+        "x": 26.77,
+        "y": -61.45,
+        "z": 2.5,
+        "yaw": -49,
+        "pitch": 23,
+        "zoom": 3.5
+      }
+    },
+    {
+      "name": "Marsh Chapel",
+      "source": "Limestone and stained glass",
+      "icon": "landmark",
+      "camera": {
+        "x": 102.72,
+        "y": -31.19,
+        "z": 9.5,
+        "yaw": -94,
+        "pitch": 24,
+        "zoom": 2.95
+      }
+    },
+    {
+      "name": "Mugar Library",
+      "source": "Stepped reading rooms",
+      "icon": "buildings",
+      "camera": {
+        "x": -7.17,
+        "y": 46.89,
+        "z": 12,
+        "yaw": -77,
+        "pitch": 27,
+        "zoom": 2.4
+      }
+    },
+    {
+      "name": "George Sherman Union",
+      "source": "Brick forecourt and Link",
+      "icon": "buildings",
+      "camera": {
+        "x": -62.13,
+        "y": 41.43,
+        "z": 8,
+        "yaw": -63,
+        "pitch": 29,
+        "zoom": 2.12
+      }
+    }
+  ],
+  "notes": [
+    {
+      "title": "One diagonal through campus",
+      "text": "The 250 m square turns 17° to include both BU Central platforms, all of Marsh Plaza, Marsh Chapel, Mugar Memorial Library and the George Sherman Union. The Charles meets the far corner.",
+      "links": [
+        {
+          "label": "OpenStreetMap",
+          "url": "https://www.openstreetmap.org/#map=18/42.35055/-71.10777"
+        }
+      ]
+    },
+    {
+      "title": "Along the platform edge",
+      "text": "BU Central sits in the Commonwealth Avenue median. The crosswalk at Saint Mary’s Street leads to the low platforms. The glass panels, arched shelter roofs and tactile strips follow the station photographs.",
+      "links": [
+        {
+          "label": "MBTA",
+          "url": "https://www.mbta.com/stops/place-bucen"
+        },
+        {
+          "label": "From the median",
+          "url": "https://commons.wikimedia.org/wiki/File:BU_Central_from_median.JPG"
+        },
+        {
+          "label": "From above",
+          "url": "https://commons.wikimedia.org/wiki/File:BU_Central_from_Photonics_1.JPG"
+        }
+      ]
+    },
+    {
+      "title": "Two generations of trolley",
+      "text": "A Breda Type 8 and a CAF Type 9 follow the B branch tracks. The cars’ fittings, arrivals, dwell times, passengers and road traffic are illustrative.",
+      "links": [
+        {
+          "label": "B branch photographs",
+          "url": "https://orenstransitpage.com/transit-photography/united-states/boston/mbta-green-line/"
+        },
+        {
+          "label": "Type 9 profile",
+          "url": "https://onlinepubs.trb.org/onlinepubs/conferences/2015/LRT/Furmaniak.pdf"
+        }
+      ]
+    },
+    {
+      "title": "The chapel and the plaza",
+      "text": "Marsh Chapel’s Indiana limestone walls enclose a single nave. The large rear rose window faces the river. Sergio Castillo’s Free at Last rises in front of the chapel in tribute to Martin Luther King Jr.",
+      "links": [
+        {
+          "label": "BU chapel history",
+          "url": "https://www.bu.edu/articles/2009/icons-among-us-marsh-chapel/"
+        },
+        {
+          "label": "BU ground plan",
+          "url": "https://open.bu.edu/server/api/core/bitstreams/5814a7dd-9b37-4bbe-9650-021eed94b771/content"
+        },
+        {
+          "label": "BU’s sculpture photograph",
+          "url": "https://www.bu.edu/today/close-ups/2015/free-at-last-marsh-plaza/"
+        }
+      ]
+    },
+    {
+      "title": "Mugar and the GSU",
+      "text": "Mugar’s eastern reading rooms step up to the six-story stack block. Concrete fins shade the south and east walls. The low glazed Link connects the library to the GSU beside the brick forecourt.",
+      "links": [
+        {
+          "label": "BU preservation survey",
+          "url": "https://www.bu.edu/community/files/2012/06/FinalPNF-EENF6-15-12Small.pdf"
+        },
+        {
+          "label": "GSU entrance",
+          "url": "https://www.bu.edu/meetatbu/campus-venues/george-sherman-union/"
+        }
+      ]
+    },
+    {
+      "title": "Above the reading rooms",
+      "text": "The Law Tower rises 265 feet. Look for the colored ventilation panels, the glazed Redstone addition and the four north-facing clerestories on Pappas Library.",
+      "links": [
+        {
+          "label": "Bruner/Cott",
+          "url": "https://brunercott.com/projects/boston-university-school-of-law/"
+        },
+        {
+          "label": "BU’s restoration photographs",
+          "url": "https://www.bu.edu/articles/2015/school-of-law-tower-renovation/"
+        },
+        {
+          "label": "Plans and elevations",
+          "url": "https://www.bu.edu/community/files/2012/06/FinalPNF-EENF6-15-12Small.pdf"
+        }
+      ]
+    },
+    {
+      "title": "Campus traditions",
+      "text": "The Commencement group gathers for photographs at the bronze crest. Market stalls occupy the GSU plaza. Their arrangement, produce, gowns and visitors represent typical scenes.",
+      "links": [
+        {
+          "label": "BU Alumni",
+          "url": "https://www.bu.edu/alumni/events-landing/commencement/"
+        },
+        {
+          "label": "BU Dining",
+          "url": "https://www.bu.edu/dining/local-food/"
+        }
+      ]
+    },
+    {
+      "title": "Reading the drawing",
+      "text": "The map supplies footprints, track alignments, crossings and 91 tree positions. Four plaza trees follow photographs. Seven ordinary buildings meet the cut edge. Three prepared features lack both height and level tags. Unmeasured heights, colors, glazing, carving, tree species, the crest and folded birds, parked cars, boat and weather are illustrative.",
+      "links": [
+        {
+          "label": "OpenStreetMap",
+          "url": "https://www.openstreetmap.org/#map=18/42.35055/-71.10777"
+        },
+        {
+          "label": "Chapel exterior",
+          "url": "https://www.bu.edu/articles/2025/photo-gallery-marsh-chapels-history/"
+        },
+        {
+          "label": "NOAA normals",
+          "url": "https://www.ncei.noaa.gov/access/services/data/v1?dataset=normals-monthly-1991-2020&endDate=9996-12-31&format=pdf&startDate=0001-01-01&stations=USW00014739"
+        }
+      ]
+    }
+  ],
+  "credits": [
+    {
+      "label": "Pocket City",
+      "url": "https://april-zhu.com"
+    }
+  ]
+}

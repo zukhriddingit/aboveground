@@ -1,0 +1,719 @@
+{
+  "name": "Boylston",
+  "title": "Boylston Station, Boston Common",
+  "region": "Boston · Green Line",
+  "place": "Tremont Street × Boylston Street",
+  "timezone": "America/New_York",
+  "level": 3.45,
+  "styles": {
+    "default": {
+      "facade": "brick",
+      "floor": 3.35,
+      "wall": [
+        "#ad785f",
+        "#b68471",
+        "#ae7867"
+      ],
+      "trim": "#d5c0a5",
+      "frame": "#70685f",
+      "glass": [
+        "#8fa6a6",
+        "#a8b9b3",
+        "#819b9c"
+      ],
+      "roof": "flat",
+      "flatRoof": [
+        "#97948c",
+        "#858880"
+      ],
+      "parapet": 0.35,
+      "bay": 3.0,
+      "shop": "poi",
+      "shopHeight": 3.6,
+      "awning": false
+    },
+    "rules": [
+      {
+        "if": {
+          "type": "shed"
+        },
+        "set": {
+          "facade": "house",
+          "shop": "none",
+          "wall": "#b5a48b",
+          "roof": "gabled",
+          "roofColour": "#76796c"
+        }
+      },
+      {
+        "if": {
+          "type": "college"
+        },
+        "set": {
+          "facade": "civic",
+          "wall": [
+            "#d0c4b2",
+            "#cebaa9"
+          ],
+          "shop": "none",
+          "bay": 3.1
+        }
+      },
+      {
+        "if": {
+          "minLevels": 14
+        },
+        "set": {
+          "facade": "apartment",
+          "shop": "none",
+          "floor": 3.0,
+          "bay": 3.1,
+          "wall": [
+            "#bd9b82",
+            "#c6a18b"
+          ]
+        }
+      },
+      {
+        "if": {
+          "minLevels": 7
+        },
+        "set": {
+          "facade": "civic",
+          "wall": [
+            "#cac0ac",
+            "#bdb09d"
+          ],
+          "bay": 3.18
+        }
+      }
+    ]
+  },
+  "buildings": {
+    "w29859536": {
+      "facade": "civic",
+      "wall": "#d2c8b3",
+      "trim": "#e8d9c1",
+      "shop": "none",
+      "bay": 2.7
+    },
+    "w213204868": {
+      "facade": "civic",
+      "wall": "#d1c6b2",
+      "shop": "none",
+      "floor": 3.46,
+      "bay": 2.8
+    },
+    "w815970302": {
+      "facade": "glass",
+      "wall": "#9da9a7",
+      "frame": "#65777b",
+      "bay": 2.65,
+      "floor": 3.5,
+      "shop": "none"
+    },
+    "w408746610": {
+      "facade": "civic",
+      "wall": "#cabcaa",
+      "shop": "poi",
+      "fascia": [
+        "#3d4f47"
+      ],
+      "floor": 3.45,
+      "bay": 3.1
+    },
+    "w815989024": {
+      "wall": "#ab745b",
+      "fascia": [
+        "#493e39"
+      ],
+      "awning": false
+    },
+    "w485205443": {
+      "facade": "apartment",
+      "wall": "#b98c74",
+      "bay": 3.1
+    }
+  },
+  "palette": {
+    "ground": "#d7cbb8",
+    "road": "#a9a7a6",
+    "pavement": "#d1cabb",
+    "walk": "#cbbfab",
+    "grass": "#a3c67b",
+    "slab": "#c3b198",
+    "marking": "#f3ecdf",
+    "kerb": "#c5c0b2",
+    "paving": "#beb6a8"
+  },
+  "paving": {
+    "style": "tiles",
+    "size": 0.92,
+    "colour": "#c1b9ab",
+    "stone": "#d1cabd"
+  },
+  "lamp": {
+    "colour": "#444a43",
+    "height": 5.0,
+    "head": "#eee5d0",
+    "auto": false
+  },
+  "shops": {
+    "signs": [
+      ""
+    ],
+    "font": "Arial, sans-serif",
+    "fascias": [
+      "#365749",
+      "#664442",
+      "#4a5058",
+      "#965d46"
+    ],
+    "awnings": [
+      "#345d4a",
+      "#893e36",
+      "#e0cdab",
+      "#333e45"
+    ]
+  },
+  "cafes": {
+    "umbrellas": [
+      "#d7bc8c",
+      "#887d65",
+      "#49695a"
+    ],
+    "table": "#b48764",
+    "chair": "#625c52"
+  },
+  "people": {
+    "skin": [
+      "#805445",
+      "#ba8668",
+      "#e0ad87",
+      "#b57b5e",
+      "#865d4f"
+    ],
+    "clothes": [
+      "#587982",
+      "#883e49",
+      "#bd8c51",
+      "#464858",
+      "#4f7059"
+    ],
+    "pants": [
+      "#48566c",
+      "#675d57",
+      "#45484d"
+    ],
+    "hair": [
+      "#49372d",
+      "#695144",
+      "#ad8359"
+    ],
+    "umbrellas": [
+      "#536578",
+      "#b85c50",
+      "#e7c66a"
+    ],
+    "bikes": [
+      "#3c759b",
+      "#485c56",
+      "#923e37"
+    ]
+  },
+  "vehicles": {
+    "kinds": [
+      "sedan",
+      "hatch",
+      "suv",
+      "mpv"
+    ],
+    "colours": [
+      "#e3ddd2",
+      "#434950",
+      "#7a8891",
+      "#a9554b",
+      "#c4c7c4"
+    ],
+    "plate": "#eeeae1",
+    "taxi": {
+      "share": 0.09,
+      "colours": [
+        "#f3eee1",
+        "#f6f4e9"
+      ],
+      "kind": "sedan",
+      "sign": "#f2e0b0"
+    }
+  },
+  "trees": {
+    "default": {
+      "style": 2,
+      "colours": [
+        "#739a4b",
+        "#8bb15c",
+        "#70a052",
+        "#97b561"
+      ],
+      "height": 9.1,
+      "vary": 0.46,
+      "spring": "#accc79",
+      "autumn": "#d69643",
+      "mix": [
+        {
+          "share": 4,
+          "style": 2,
+          "autumn": "#dfa746"
+        },
+        {
+          "share": 3,
+          "style": 3,
+          "autumn": "#be7042"
+        },
+        {
+          "share": 2,
+          "style": 4,
+          "autumn": "#d9b952"
+        }
+      ]
+    }
+  },
+  "months": [
+    "winter",
+    "winter",
+    "spring",
+    "spring",
+    "spring",
+    "summer",
+    "summer",
+    "summer",
+    "fall",
+    "fall",
+    "fall",
+    "winter"
+  ],
+  "credits": [
+    {
+      "label": "Pocket City",
+      "url": "https://april-zhu.com"
+    }
+  ],
+  "seasons": [
+    {
+      "id": "spring",
+      "label": "Spring",
+      "note": {
+        "text": "Boston Logan averages 3.63 inches of precipitation in April.",
+        "source": "NOAA · Boston Logan normals",
+        "url": "https://www.ncei.noaa.gov/access/services/data/v1?dataset=normals-monthly-1991-2020&endDate=9996-12-31&format=pdf&startDate=0001-01-01&stations=USW00014739"
+      },
+      "leaves": "spring",
+      "wet": true,
+      "wx": "drizzle",
+      "umbrellas": true,
+      "cafes": "closed",
+      "grass": "#accd80"
+    },
+    {
+      "id": "summer",
+      "label": "Summer",
+      "note": {
+        "text": "Boston Logan averages a daily high of 82.1°F in July.",
+        "source": "NOAA · Boston Logan normals",
+        "url": "https://www.ncei.noaa.gov/access/services/data/v1?dataset=normals-monthly-1991-2020&endDate=9996-12-31&format=pdf&startDate=0001-01-01&stations=USW00014739"
+      },
+      "leaves": "summer",
+      "grass": "#a1bf72"
+    },
+    {
+      "id": "fall",
+      "label": "Fall",
+      "note": {
+        "text": "Sugar maples turn color in fall at Boston’s Arnold Arboretum.",
+        "source": "Arnold Arboretum of Harvard University",
+        "url": "https://arboretum.harvard.edu/plants/maple-collection-directions-and-accessibility-information/"
+      },
+      "leaves": "autumn",
+      "grass": "#b6ba78",
+      "icon": "autumn"
+    },
+    {
+      "id": "winter",
+      "label": "Winter",
+      "note": {
+        "text": "Boston Logan averages 14.3 inches of snow in January.",
+        "source": "NOAA · Boston Logan normals",
+        "url": "https://www.ncei.noaa.gov/access/services/data/v1?dataset=normals-monthly-1991-2020&endDate=9996-12-31&format=pdf&startDate=0001-01-01&stations=USW00014739"
+      },
+      "leaves": "bare",
+      "coats": true,
+      "snow": true,
+      "wx": "snow",
+      "cafes": false,
+      "crowd": 0.72
+    }
+  ],
+  "occasions": [
+    {
+      "id": "matinee",
+      "label": "Shakespeare matinee",
+      "leaves": "summer",
+      "crowd": 1.28,
+      "grass": "#a7c17b",
+      "note": {
+        "text": "The 2026 Shakespeare on the Common schedule included two 1:30 p.m. matinees at the bandstand.",
+        "source": "Commonwealth Shakespeare Company",
+        "url": "https://commshakes.org/production/dream26/"
+      }
+    },
+    {
+      "id": "lights",
+      "label": "Common holiday lights",
+      "leaves": "bare",
+      "night": 0.88,
+      "coats": true,
+      "cafes": false,
+      "crowd": 1.18,
+      "litShare": 0.74,
+      "grass": "#b5b288",
+      "note": {
+        "text": "Boston lights trees across the Common for its evening holiday celebration.",
+        "source": "Boston Parks and Recreation",
+        "url": "https://www.boston.gov/departments/parks-and-recreation/help-boston-common-glow-holidays"
+      }
+    }
+  ],
+  "occasionLabel": "On the Common",
+  "cameras": {
+    "iso": {
+      "yaw": -151,
+      "pitch": 34,
+      "zoom": 0.63,
+      "x": 0,
+      "y": 0,
+      "z": 37
+    },
+    "bird": {
+      "yaw": -101,
+      "pitch": 72,
+      "zoom": 0.55,
+      "x": 0,
+      "y": 0,
+      "z": 37
+    }
+  },
+  "views": [
+    {
+      "id": "inbound",
+      "label": "Inbound doors",
+      "camera": {
+        "yaw": -130,
+        "pitch": 25,
+        "zoom": 6.6,
+        "x": 13.25,
+        "y": -84.8,
+        "z": 2.7
+      }
+    },
+    {
+      "id": "outbound",
+      "label": "Outbound doors",
+      "camera": {
+        "yaw": -84,
+        "pitch": 28,
+        "zoom": 6.6,
+        "x": 17.6,
+        "y": -3.45,
+        "z": 2.7
+      }
+    },
+    {
+      "id": "bandstand",
+      "label": "Parkman Bandstand",
+      "camera": {
+        "yaw": 129,
+        "pitch": 22,
+        "zoom": 6.4,
+        "x": -67.9,
+        "y": 104.2,
+        "z": 3.3
+      }
+    },
+    {
+      "id": "lodge",
+      "label": "Masonic corner",
+      "camera": {
+        "yaw": -139,
+        "pitch": 24,
+        "zoom": 1.97,
+        "x": 58.6,
+        "y": -89.5,
+        "z": 18
+      }
+    },
+    {
+      "id": "parkside",
+      "label": "Tremont storefronts",
+      "camera": {
+        "yaw": 166,
+        "pitch": 23,
+        "zoom": 2.14,
+        "x": 72.0,
+        "y": 39.9,
+        "z": 19
+      }
+    },
+    {
+      "id": "burial",
+      "label": "Burying ground",
+      "camera": {
+        "yaw": -118,
+        "pitch": 40,
+        "zoom": 2.37,
+        "x": -74,
+        "y": -51,
+        "z": 2
+      }
+    },
+    {
+      "id": "wheel",
+      "label": "The brick wheel",
+      "camera": {
+        "yaw": -103,
+        "pitch": 54,
+        "zoom": 2.7,
+        "x": -68,
+        "y": 86,
+        "z": 2
+      }
+    }
+  ],
+  "legend": [
+    {
+      "name": "Inbound headhouse",
+      "source": "At the Boylston corner",
+      "icon": "streets",
+      "camera": {
+        "yaw": -130,
+        "pitch": 25,
+        "zoom": 6.6,
+        "x": 13.25,
+        "y": -84.8,
+        "z": 2.7
+      }
+    },
+    {
+      "name": "Outbound headhouse",
+      "source": "Along the Common path",
+      "icon": "streets",
+      "camera": {
+        "yaw": -84,
+        "pitch": 28,
+        "zoom": 6.6,
+        "x": 17.6,
+        "y": -3.45,
+        "z": 2.7
+      }
+    },
+    {
+      "name": "Parkman Bandstand",
+      "source": "The hub of the brick paths",
+      "icon": "landmark",
+      "camera": {
+        "yaw": 129,
+        "pitch": 22,
+        "zoom": 6.4,
+        "x": -67.9,
+        "y": 104.2,
+        "z": 3.3
+      }
+    },
+    {
+      "name": "Masonic Grand Lodge",
+      "source": "Granite above Tremont",
+      "icon": "buildings",
+      "camera": {
+        "yaw": -139,
+        "pitch": 24,
+        "zoom": 1.97,
+        "x": 58.6,
+        "y": -89.5,
+        "z": 18
+      }
+    }
+  ],
+  "notes": [
+    {
+      "title": "Two doors to the first subway",
+      "text": "Boylston and Park Street opened on September 1, 1897. Their granite headhouses sheltered the stairs to America’s first subway. At Boylston the two surviving entrances face south along Tremont.",
+      "links": [
+        {
+          "label": "Boston Society of Civil Engineers Section",
+          "url": "https://www.bscesjournal.org/wp-content/uploads/CEP-Vol-13-No-2-03.pdf"
+        },
+        {
+          "label": "Boston Transit Commission · 1898 plan",
+          "url": "https://commons.wikimedia.org/wiki/File:Boylston_plan.png"
+        },
+        {
+          "label": "Mapped headhouses",
+          "url": "https://www.openstreetmap.org/relation/20345318"
+        }
+      ]
+    },
+    {
+      "title": "Look above the stairs",
+      "text": "Each long wall has three pairs of high windows with black iron grilles. Over the doors, a green Boylston Street strip sits above the white direction strip. The recessed stair walls are faced in pale tile.",
+      "links": [
+        {
+          "label": "Inbound photograph",
+          "url": "https://commons.wikimedia.org/wiki/File:Boylston_station_inbound_headhouse,_July_2016.JPG"
+        },
+        {
+          "label": "Outbound photograph",
+          "url": "https://commons.wikimedia.org/wiki/File:Boylston_station_outbound_headhouse,_July_2016.JPG"
+        },
+        {
+          "label": "Clerestory photograph",
+          "url": "https://commons.wikimedia.org/wiki/File:Outbound_headhouse_at_Boylston_station,_March_2012.jpg"
+        },
+        {
+          "label": "Stair photograph",
+          "url": "https://commons.wikimedia.org/wiki/File:Outbound_stairs_at_Boylston_station,_March_2012.jpg"
+        }
+      ]
+    },
+    {
+      "title": "Parkman Bandstand",
+      "text": "Follow the brick spokes to the open, circular bandstand. Dedicated in 1912, the pavilion stands on a raised base surrounded by a ring of paths. The northern edge of that wheel continues beyond the plate.",
+      "links": [
+        {
+          "label": "Boston Parks and Recreation · Common Master Plan",
+          "url": "https://www.boston.gov/sites/default/files/file/2023/05/bmcp-full-report.pdf"
+        },
+        {
+          "label": "Friends of the Public Garden",
+          "url": "https://friendsofthepublicgarden.org/our-parks/the-common/"
+        }
+      ]
+    },
+    {
+      "title": "Tremont and Boylston",
+      "text": "Loring & Phipps designed the nine-story granite Masonic Temple completed in 1899. The Tremont mosaics here follow a 2010 photograph showing columns and a square and compasses in blue and gold.",
+      "links": [
+        {
+          "label": "National Register · historic theatres district",
+          "url": "https://npgallery.nps.gov/GetAsset/1ccc770c-b917-4b4b-8cc4-dde9a8a89c27"
+        },
+        {
+          "label": "Grand Lodge mosaics",
+          "url": "https://commons.wikimedia.org/wiki/File:Grand_Lodge_of_Masons_in_Boston.JPG"
+        }
+      ]
+    },
+    {
+      "title": "Across from the Common",
+      "text": "The Parkside’s brick frontage rises above the shops at 170 Tremont. Look for its central entrance canopy and Carbon Salon. Farther south, the cinema presents a glazed frontage to the station.",
+      "links": [
+        {
+          "label": "The Parkside · exterior photograph",
+          "url": "https://www.backbayresidential.com/buildings/parkside-condominiums-170-tremont-street/"
+        },
+        {
+          "label": "Inbound photograph",
+          "url": "https://commons.wikimedia.org/wiki/File:Boylston_station_inbound_headhouse,_July_2016.JPG"
+        },
+        {
+          "label": "Clerestory photograph",
+          "url": "https://commons.wikimedia.org/wiki/File:Outbound_headhouse_at_Boylston_station,_March_2012.jpg"
+        },
+        {
+          "label": "OpenStreetMap contributors",
+          "url": "https://www.openstreetmap.org/#map=18/42.35336/-71.06477"
+        }
+      ]
+    },
+    {
+      "title": "Central Burying Ground",
+      "text": "Boston established this burial ground in 1756. The square includes its eastern enclosure and the Deer Park maintenance building beside it. The unlettered stones represent the burial ground collectively.",
+      "links": [
+        {
+          "label": "Boston Parks and Recreation · Central Burying Ground",
+          "url": "https://www.boston.gov/cemeteries/central-burying-ground"
+        },
+        {
+          "label": "Mapped enclosure",
+          "url": "https://www.openstreetmap.org/way/29818933"
+        },
+        {
+          "label": "Boston Parks and Recreation · Common Master Plan",
+          "url": "https://www.boston.gov/sites/default/files/file/2023/05/bmcp-full-report.pdf"
+        }
+      ]
+    },
+    {
+      "title": "Matinee on the lawn",
+      "text": "For its 2026 production, Commonwealth Shakespeare Company invited spectators to bring blankets or chairs. The blankets and seated figures on this lawn are an interpretation of a summer audience.",
+      "links": [
+        {
+          "label": "Commonwealth Shakespeare Company",
+          "url": "https://commshakes.org/production/dream26/"
+        }
+      ]
+    },
+    {
+      "title": "December on the Common",
+      "text": "Boston’s holiday lighting plan outlines the Parkman Bandstand and Deer Park rooflines and lights the tree canopies. The official tree stands farther up Tremont at the visitor center. The choice of lit trees and bulb colors is illustrative.",
+      "links": [
+        {
+          "label": "Boston Parks and Recreation · holiday lighting plan",
+          "url": "https://www.boston.gov/sites/default/files/file/2025/09/Make%20the%20Boston%20Common%20Glow%20sponsorship%20deck_WEB_0.pdf"
+        },
+        {
+          "label": "Boston Parks and Recreation",
+          "url": "https://www.boston.gov/departments/parks-and-recreation/help-boston-common-glow-holidays"
+        },
+        {
+          "label": "City of Boston · tree lighting",
+          "url": "https://www.boston.gov/calendar/boston-common-tree-lighting"
+        }
+      ]
+    },
+    {
+      "title": "Reading the model",
+      "text": "The map supplies building footprints, street and crossing lines, 81 tree positions and the cemetery boundary. Two park trees are illustrative. Tremont’s curb width follows the mapped crossing and sidewalks. The inbound apron, unmeasured heights, roof profiles, windows, colors and shop details follow the photographs.",
+      "links": [
+        {
+          "label": "OpenStreetMap contributors",
+          "url": "https://www.openstreetmap.org/#map=18/42.35336/-71.06477"
+        },
+        {
+          "label": "Mapped headhouses",
+          "url": "https://www.openstreetmap.org/relation/20345318"
+        },
+        {
+          "label": "Boston Parks and Recreation · Common Master Plan",
+          "url": "https://www.boston.gov/sites/default/files/file/2023/05/bmcp-full-report.pdf"
+        }
+      ]
+    },
+    {
+      "title": "A day on the block",
+      "text": "The tree species mix, headstone positions, furnishings, trips, crowd sizes, holiday bulbs and weather are illustrative. Seasonal figures use the 1991–2020 Boston Logan climate normals.",
+      "links": [
+        {
+          "label": "NOAA · Boston Logan normals",
+          "url": "https://www.ncei.noaa.gov/access/services/data/v1?dataset=normals-monthly-1991-2020&endDate=9996-12-31&format=pdf&startDate=0001-01-01&stations=USW00014739"
+        },
+        {
+          "label": "Boston Parks and Recreation",
+          "url": "https://www.boston.gov/departments/parks-and-recreation/help-boston-common-glow-holidays"
+        },
+        {
+          "label": "Boston Parks and Recreation · Central Burying Ground",
+          "url": "https://www.boston.gov/cemeteries/central-burying-ground"
+        }
+      ]
+    }
+  ]
+}

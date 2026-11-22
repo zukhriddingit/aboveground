@@ -1,0 +1,803 @@
+{
+  "name": "Hynes Station",
+  "title": "Hynes Convention Center Station, Boston",
+  "region": "Boston · Green Line B / C / D",
+  "place": "Massachusetts Avenue × Newbury Street",
+  "timezone": "America/New_York",
+  "level": 3.35,
+  "styles": {
+    "default": {
+      "facade": "brick",
+      "wall": [
+        "#ad7057",
+        "#a15d49",
+        "#b38063",
+        "#975c4d"
+      ],
+      "trim": "#c5a382",
+      "frame": "#645651",
+      "glass": [
+        "#89a4a9",
+        "#a4b6b4",
+        "#9caeb1"
+      ],
+      "roof": "flat",
+      "flatRoof": [
+        "#7d807c",
+        "#908a80"
+      ],
+      "roofColour": "#5a6269",
+      "roofTex": "slate",
+      "levels": 4,
+      "floor": 3.35,
+      "bay": 2.5,
+      "parapet": 0.35,
+      "shop": "poi",
+      "shopHeight": 3.45,
+      "awning": "some",
+      "awningDepth": 0.85,
+      "stripes": false
+    },
+    "rules": [
+      {
+        "if": {
+          "type": [
+            "shed",
+            "service",
+            "elevator"
+          ]
+        },
+        "set": {
+          "facade": "plain",
+          "levels": 1,
+          "floor": 2.8,
+          "shop": "none",
+          "rooftop": "none"
+        }
+      },
+      {
+        "if": {
+          "type": "apartments"
+        },
+        "set": {
+          "wall": [
+            "#ad7b64",
+            "#aa7155"
+          ],
+          "facade": "apartment",
+          "floor": 3.25,
+          "bay": 2.63
+        }
+      },
+      {
+        "if": {
+          "type": "university"
+        },
+        "set": {
+          "facade": "civic",
+          "wall": "#b58e75",
+          "bay": 3.3
+        }
+      }
+    ]
+  },
+  "buildings": {
+    "w29804411": {
+      "levels": 3
+    },
+    "w29805588": {
+      "levels": 2
+    },
+    "w29869265": {
+      "levels": 3
+    },
+    "w405397865": {
+      "levels": 3
+    },
+    "w405397870": {
+      "levels": 3
+    },
+    "w405397909": {
+      "levels": 3
+    },
+    "w405397935": {
+      "levels": 3
+    },
+    "w405397961": {
+      "levels": 2
+    },
+    "w405397993": {
+      "levels": 3
+    },
+    "w405398000": {
+      "levels": 2
+    },
+    "w405398036": {
+      "levels": 3
+    },
+    "w405398099": {
+      "levels": 2
+    },
+    "w405398119": {
+      "levels": 3
+    },
+    "w405398174": {
+      "levels": 3
+    },
+    "w405398183": {
+      "levels": 3
+    },
+    "w405398193": {
+      "levels": 3
+    }
+  },
+  "palette": {
+    "ground": "#cdbba5",
+    "road": "#999b99",
+    "pavement": "#c9b7a5",
+    "walk": "#c2ad9b",
+    "grass": "#a6c87c",
+    "water": "#72a6a1",
+    "slab": "#c7af91",
+    "marking": "#f3ebd6",
+    "kerb": "#c7c1b7",
+    "paving": "#ab9082"
+  },
+  "paving": {
+    "style": "slabs",
+    "size": 0.68,
+    "colour": "#b5a38f",
+    "stone": "#d3c3b0"
+  },
+  "lamp": {
+    "colour": "#4e5650",
+    "height": 5.25,
+    "head": "#f5e5c3",
+    "auto": true
+  },
+  "shops": {
+    "signs": [
+      ""
+    ],
+    "font": "Georgia, serif",
+    "fascias": [
+      "#384f49",
+      "#494d51",
+      "#875246",
+      "#625648",
+      "#773e3c"
+    ],
+    "awnings": [
+      "#345d4a",
+      "#893e36",
+      "#e0cdab",
+      "#333e45"
+    ]
+  },
+  "cafes": {
+    "umbrellas": [
+      "#d7bc8c",
+      "#887d65",
+      "#49695a"
+    ],
+    "table": "#b48764",
+    "chair": "#625c52"
+  },
+  "trees": {
+    "default": {
+      "style": 2,
+      "colours": [
+        "#86ad64",
+        "#779c57",
+        "#95b86d"
+      ],
+      "height": 8.5,
+      "vary": 0.3,
+      "spring": "#a7c87c",
+      "autumn": "#d69643",
+      "mix": [
+        {
+          "share": 4,
+          "style": 2,
+          "autumn": "#dfa746"
+        },
+        {
+          "share": 3,
+          "style": 3,
+          "autumn": "#be7042"
+        },
+        {
+          "share": 2,
+          "style": 4,
+          "autumn": "#d9b952"
+        }
+      ]
+    },
+    "extra": [
+      [
+        12,
+        17.5,
+        5,
+        "Street planting"
+      ],
+      [
+        65,
+        11.6,
+        4.9,
+        "Street planting"
+      ],
+      [
+        87,
+        9.1,
+        5.3,
+        "Street planting"
+      ],
+      [
+        55,
+        -2.7,
+        4.8,
+        "Street planting"
+      ],
+      [
+        79,
+        -5,
+        5.1,
+        "Street planting"
+      ],
+      [
+        -32,
+        -33,
+        5.0,
+        "Street planting"
+      ],
+      [
+        -51,
+        -19,
+        4.4,
+        "Street planting"
+      ],
+      [
+        88,
+        -54,
+        6.4,
+        "Street planting"
+      ],
+      [
+        98,
+        -52,
+        6.1,
+        "Street planting"
+      ],
+      [
+        47.5,
+        88.7,
+        6.5,
+        "Street planting"
+      ],
+      [
+        74,
+        86.3,
+        6.0,
+        "Street planting"
+      ]
+    ]
+  },
+  "people": {
+    "skin": [
+      "#805445",
+      "#ba8668",
+      "#e0ad87",
+      "#b57b5e",
+      "#865d4f"
+    ],
+    "clothes": [
+      "#587982",
+      "#883e49",
+      "#bd8c51",
+      "#464858",
+      "#4f7059"
+    ],
+    "pants": [
+      "#48566c",
+      "#675d57",
+      "#45484d"
+    ],
+    "hair": [
+      "#49372d",
+      "#695144",
+      "#ad8359"
+    ],
+    "umbrellas": [
+      "#536578",
+      "#b85c50",
+      "#e7c66a"
+    ],
+    "bikes": [
+      "#3c759b",
+      "#485c56",
+      "#923e37"
+    ]
+  },
+  "vehicles": {
+    "kinds": [
+      "sedan",
+      "hatch",
+      "suv",
+      "mpv"
+    ],
+    "colours": [
+      "#e3ddd2",
+      "#434950",
+      "#7a8891",
+      "#a9554b",
+      "#c4c7c4"
+    ],
+    "plate": "#eeeae1",
+    "taxi": {
+      "share": 0.09,
+      "colours": [
+        "#f3eee1",
+        "#f6f4e9"
+      ],
+      "kind": "sedan",
+      "sign": "#f2e0b0"
+    }
+  },
+  "seasons": [
+    {
+      "id": "spring",
+      "label": "Spring",
+      "leaves": "spring",
+      "wet": true,
+      "wx": "drizzle",
+      "umbrellas": true,
+      "cafes": false,
+      "grass": "#a4c779",
+      "note": {
+        "text": "April afternoons at Boston Logan average a high of 56.4°F.",
+        "source": "NOAA · Boston Logan climate normals",
+        "url": "https://www.ncei.noaa.gov/access/services/data/v1?dataset=normals-monthly-1991-2020&endDate=9996-12-31&format=pdf&startDate=0001-01-01&stations=USW00014739"
+      }
+    },
+    {
+      "id": "summer",
+      "label": "Summer",
+      "leaves": "summer",
+      "grass": "#96b76a",
+      "note": {
+        "text": "July’s average daily high at Boston Logan is 82.1°F.",
+        "source": "NOAA · Boston Logan climate normals",
+        "url": "https://www.ncei.noaa.gov/access/services/data/v1?dataset=normals-monthly-1991-2020&endDate=9996-12-31&format=pdf&startDate=0001-01-01&stations=USW00014739"
+      }
+    },
+    {
+      "id": "autumn",
+      "label": "Autumn",
+      "leaves": "autumn",
+      "grass": "#a5ad6b",
+      "crowd": 0.92,
+      "note": {
+        "text": "The average October high at Boston Logan is 62.1°F.",
+        "source": "NOAA · Boston Logan climate normals",
+        "url": "https://www.ncei.noaa.gov/access/services/data/v1?dataset=normals-monthly-1991-2020&endDate=9996-12-31&format=pdf&startDate=0001-01-01&stations=USW00014739"
+      }
+    },
+    {
+      "id": "winter",
+      "label": "Winter",
+      "leaves": "bare",
+      "coats": true,
+      "snow": true,
+      "wx": "snow",
+      "cafes": false,
+      "crowd": 0.76,
+      "note": {
+        "text": "Boston Logan’s average January low is 23.1°F.",
+        "source": "NOAA · Boston Logan climate normals",
+        "url": "https://www.ncei.noaa.gov/access/services/data/v1?dataset=normals-monthly-1991-2020&endDate=9996-12-31&format=pdf&startDate=0001-01-01&stations=USW00014739"
+      }
+    }
+  ],
+  "occasions": [
+    {
+      "id": "open-newbury",
+      "label": "Open Newbury Street",
+      "leaves": "summer",
+      "crowd": 1.45,
+      "note": {
+        "text": "On Open Newbury days, the pedestrian route reaches Massachusetts Avenue.",
+        "source": "City of Boston · Open Newbury",
+        "url": "https://content.boston.gov/departments/transportation/open-newbury-street"
+      }
+    },
+    {
+      "id": "patio",
+      "label": "Bookstore patio set",
+      "leaves": "summer",
+      "crowd": 1.15,
+      "note": {
+        "text": "Berklee students played Thursday afternoon sets outside the Boylston Street bookstore.",
+        "source": "Berklee College of Music · patio concerts",
+        "url": "https://www.berklee.edu/berklee-now/news/students-jam-at-thursday-bookstore-patio-concert-series"
+      }
+    }
+  ],
+  "months": [
+    "winter",
+    "winter",
+    "spring",
+    "spring",
+    "spring",
+    "summer",
+    "summer",
+    "summer",
+    "autumn",
+    "autumn",
+    "autumn",
+    "winter"
+  ],
+  "cameras": {
+    "iso": {
+      "yaw": 39,
+      "pitch": 33,
+      "zoom": 0.656,
+      "x": -1,
+      "y": 0,
+      "z": 13
+    },
+    "bird": {
+      "yaw": 81,
+      "pitch": 71,
+      "zoom": 0.605,
+      "x": 0,
+      "y": 0,
+      "z": 5
+    }
+  },
+  "views": [
+    {
+      "id": "door",
+      "label": "Mass Ave doors",
+      "camera": {
+        "yaw": 120,
+        "pitch": 16,
+        "zoom": 16.5,
+        "x": 0,
+        "y": -19.7,
+        "z": 2.6
+      }
+    },
+    {
+      "id": "transit",
+      "label": "Transit Building",
+      "camera": {
+        "yaw": 112,
+        "pitch": 37,
+        "zoom": 2.3,
+        "x": 17,
+        "y": -18,
+        "z": 14
+      }
+    },
+    {
+      "id": "newbury",
+      "label": "Newbury shops",
+      "camera": {
+        "yaw": -52,
+        "pitch": 35,
+        "zoom": 4.7,
+        "x": 60,
+        "y": 15,
+        "z": 5
+      }
+    },
+    {
+      "id": "east",
+      "label": "Brick headhouse",
+      "camera": {
+        "yaw": -30,
+        "pitch": 28,
+        "zoom": 5.25,
+        "x": 103.8,
+        "y": -65.1,
+        "z": 2.4
+      }
+    },
+    {
+      "id": "plaza",
+      "label": "Lyrik plaza",
+      "camera": {
+        "yaw": 2,
+        "pitch": 36,
+        "zoom": 1.89,
+        "x": -59,
+        "y": -11,
+        "z": 13
+      }
+    },
+    {
+      "id": "club",
+      "label": "Harvard Club & Eliot",
+      "camera": {
+        "yaw": 69,
+        "pitch": 28,
+        "zoom": 2.65,
+        "x": -43,
+        "y": 95,
+        "z": 9
+      }
+    },
+    {
+      "id": "brownstones",
+      "label": "Brownstone stoops",
+      "camera": {
+        "yaw": 77,
+        "pitch": 39,
+        "zoom": 5.3,
+        "x": 66,
+        "y": 85,
+        "z": 5
+      }
+    },
+    {
+      "id": "patio-view",
+      "label": "Bookstore patio",
+      "camera": {
+        "yaw": 145,
+        "pitch": 30,
+        "zoom": 6.55,
+        "x": -79.8,
+        "y": -89.9,
+        "z": 2.1
+      }
+    }
+  ],
+  "legend": [
+    {
+      "name": "Hynes entrance",
+      "source": "Round T under the glass canopy",
+      "icon": "streets",
+      "camera": {
+        "yaw": 120,
+        "pitch": 16,
+        "zoom": 16.5,
+        "x": 0,
+        "y": -19.7,
+        "z": 2.6
+      }
+    },
+    {
+      "name": "360 Newbury",
+      "source": "Gehry’s braced roof cornice",
+      "icon": "buildings",
+      "camera": {
+        "yaw": 112,
+        "pitch": 37,
+        "zoom": 2.3,
+        "x": 17,
+        "y": -18,
+        "z": 14
+      }
+    },
+    {
+      "name": "Stable block",
+      "source": "Carriage bays and shop windows",
+      "icon": "shops",
+      "camera": {
+        "yaw": -52,
+        "pitch": 35,
+        "zoom": 4.7,
+        "x": 60,
+        "y": 15,
+        "z": 5
+      }
+    },
+    {
+      "name": "Boylston headhouse",
+      "source": "Brick entrance and railed footbridge",
+      "icon": "landmark",
+      "camera": {
+        "yaw": -30,
+        "pitch": 28,
+        "zoom": 5.25,
+        "x": 103.8,
+        "y": -65.1,
+        "z": 2.4
+      }
+    }
+  ],
+  "credits": [
+    {
+      "label": "Pocket City",
+      "url": "https://april-zhu.com"
+    }
+  ],
+  "notes": [
+    {
+      "title": "The station and the hall",
+      "text": "This square follows the B, C and D station at Mass Ave and Newbury. Boylston crosses its south end. The convention hall and its 900 Boylston frontage lie beyond the eastern edge.",
+      "links": [
+        {
+          "label": "OpenStreetMap contributors",
+          "url": "https://www.openstreetmap.org/#map=19/42.34803/-71.08795"
+        },
+        {
+          "label": "Massachusetts Convention Center Authority",
+          "url": "https://s3.amazonaws.com/massconvention/pdf/attendee_guide/hynes/Hynes_Attendee_Guide.pdf"
+        }
+      ]
+    },
+    {
+      "title": "At the T doors",
+      "text": "Look beneath the projecting glass canopy on Mass Ave. Metal doors and a double-sided T blade mark the fare lobby in the Transit Building. The separate brick headhouse faces the footbridge toward Boylston.",
+      "links": [
+        {
+          "label": "OSM · Massachusetts Avenue threshold",
+          "url": "https://www.openstreetmap.org/node/7846627501"
+        },
+        {
+          "label": "Main entrance to Hynes Convention Center station, March 2016.JPG",
+          "url": "https://commons.wikimedia.org/wiki/File:Main_entrance_to_Hynes_Convention_Center_station,_March_2016.JPG"
+        },
+        {
+          "label": "Roof of Hynes station viewed from the Prudential Tower, July 2015.jpg",
+          "url": "https://commons.wikimedia.org/wiki/File:Roof_of_Hynes_station_viewed_from_the_Prudential_Tower,_July_2015.jpg"
+        },
+        {
+          "label": "Second headhouse at Hynes Convention Center station, December 2018.JPG",
+          "url": "https://commons.wikimedia.org/wiki/File:Second_headhouse_at_Hynes_Convention_Center_station,_December_2018.JPG"
+        },
+        {
+          "label": "Boston Transit Commission · plate 11",
+          "url": "https://upload.wikimedia.org/wikipedia/commons/4/40/First%28-Twenty-Fourth_and_Final%29_Report_of_the_Boston_Transit_Commission_%28IA_firsttwentyfourt1918bost%29.pdf"
+        }
+      ]
+    },
+    {
+      "title": "360 Newbury",
+      "text": "Bowditch’s brick and stone Transit Building has two street fronts. Gehry and Schwartz/Silver drew a new skyline with diagonal struts, a projecting cornice and a recessed penthouse.",
+      "links": [
+        {
+          "label": "Back Bay Houses · south stable block",
+          "url": "https://backbayhouses.org/newbury-street-stable-block-south-side/"
+        },
+        {
+          "label": "Stantec · 360 Newbury",
+          "url": "https://www.stantec.com/en/projects/united-states-projects/-/360-newbury-street"
+        },
+        {
+          "label": "Progressive Architecture · February 1989",
+          "url": "https://www.usmodernist.org/PA/PA-1989-02.pdf"
+        },
+        {
+          "label": "Pi.1415926535 · 360 Newbury, March 2016",
+          "url": "https://commons.wikimedia.org/wiki/File:360_Newbury_Street,_March_2016.jpg"
+        }
+      ]
+    },
+    {
+      "title": "The stable block",
+      "text": "The narrow brick shops at 349–355 Newbury began as three-story stables with dwellings above. Look across the street for the lower carriage-house lots and across the alley for the Commonwealth Avenue houses.",
+      "links": [
+        {
+          "label": "Back Bay Houses · north stable block",
+          "url": "https://backbayhouses.org/newbury-street-stable-block-north-side/"
+        },
+        {
+          "label": "Back Bay Houses · south stable block",
+          "url": "https://backbayhouses.org/newbury-street-stable-block-south-side/"
+        },
+        {
+          "label": "MUJI · Newbury storefront submission",
+          "url": "https://www.boston.gov/sites/default/files/imce-uploads/2019-07/muji_newbury_sign_presentation_7.10.19.pdf"
+        },
+        {
+          "label": "Back Bay Houses · 350 Commonwealth",
+          "url": "https://backbayhouses.org/350-commonwealth/"
+        }
+      ]
+    },
+    {
+      "title": "Across Mass Ave",
+      "text": "The Lyrik hotel and office tower share a two-level public plaza built over the Turnpike. A stair climbs between their curved façades. The Sherman Building across Newbury combines restored brick with a glass addition.",
+      "links": [
+        {
+          "label": "Elkus Manfredi Architects · Lyrik",
+          "url": "https://www.elkus-manfredi.com/project/lyrik-back-bay/"
+        },
+        {
+          "label": "Elkus Manfredi · Parcel 12 plans",
+          "url": "https://www.bostonplans.org/getattachment/cd77ecdd-bb17-4dd3-8cf5-95ebc4263fef"
+        },
+        {
+          "label": "LeBlanc Jones Landscape Architects",
+          "url": "https://www.leblancjones.com/placemaking/p/lyrik-parcel-12-under-construction"
+        },
+        {
+          "label": "The Architectural Team · 375 Newbury",
+          "url": "https://architecturalteam.com/project/375-newbury-street/"
+        }
+      ]
+    },
+    {
+      "title": "Along Commonwealth",
+      "text": "Four columns mark the Harvard Club’s front door. Its fifth story steps back from Commonwealth. The Eliot Hotel stands beside it on the Mass Ave corner.",
+      "links": [
+        {
+          "label": "Meyer & Meyer · clubhouse elevations",
+          "url": "https://www.boston.gov/sites/default/files/file/2023/06/374%20Commonwealth%20Avenue%20Presentation.pdf"
+        },
+        {
+          "label": "Back Bay Houses · Harvard Club",
+          "url": "https://backbayhouses.org/374-commonwealth/"
+        },
+        {
+          "label": "Back Bay Houses · The Eliot",
+          "url": "https://backbayhouses.org/370-commonwealth/"
+        },
+        {
+          "label": "Boston · Commonwealth Avenue site photographs",
+          "url": "https://www.boston.gov/sites/default/files/file/2023/07/374commonwealthavenuepresentation.pdf"
+        }
+      ]
+    },
+    {
+      "title": "Two ways to hear the street",
+      "text": "Open Newbury gives the carriageway east of Mass Ave to people on foot. The separate patio scene recalls Berklee’s Thursday student concerts at 1090 Boylston. The performers, instruments, book displays and crowds are illustrative.",
+      "links": [
+        {
+          "label": "City of Boston · Open Newbury",
+          "url": "https://content.boston.gov/departments/transportation/open-newbury-street"
+        },
+        {
+          "label": "Berklee College of Music · patio concerts",
+          "url": "https://www.berklee.edu/berklee-now/news/students-jam-at-thursday-bookstore-patio-concert-series"
+        },
+        {
+          "label": "Berklee College of Music · bookstore",
+          "url": "https://college.berklee.edu/bt/212/bb_bookstore_expands.html"
+        }
+      ]
+    },
+    {
+      "title": "What was measured",
+      "text": "The cached map supplies 58 building outlines, 20 crossings and 16 tree positions. Forty-six buildings have neither a mapped height nor a storey count. Eleven additional street trees and the plaza planting approximate the photographed greenery.",
+      "links": [
+        {
+          "label": "OpenStreetMap contributors",
+          "url": "https://www.openstreetmap.org/#map=19/42.34803/-71.08795"
+        },
+        {
+          "label": "Elkus Manfredi · Parcel 12 plans",
+          "url": "https://www.bostonplans.org/getattachment/cd77ecdd-bb17-4dd3-8cf5-95ebc4263fef"
+        },
+        {
+          "label": "Roof of Hynes station viewed from the Prudential Tower, July 2015.jpg",
+          "url": "https://commons.wikimedia.org/wiki/File:Roof_of_Hynes_station_viewed_from_the_Prudential_Tower,_July_2015.jpg"
+        }
+      ]
+    },
+    {
+      "title": "What was drawn by eye",
+      "text": "Heights without measurements, bay spacing, roof equipment, materials, glazing, paving, trees, weather and trips are illustrative. Road and rail levels are compressed into one plate. The four seasons use Logan normals.",
+      "links": [
+        {
+          "label": "OpenStreetMap contributors",
+          "url": "https://www.openstreetmap.org/#map=19/42.34803/-71.08795"
+        },
+        {
+          "label": "NOAA · Boston Logan climate normals",
+          "url": "https://www.ncei.noaa.gov/access/services/data/v1?dataset=normals-monthly-1991-2020&endDate=9996-12-31&format=pdf&startDate=0001-01-01&stations=USW00014739"
+        },
+        {
+          "label": "Arnold Arboretum · maples",
+          "url": "https://arboretum.harvard.edu/plants/maple-collection-directions-and-accessibility-information/"
+        },
+        {
+          "label": "Boston Police · Rule 403",
+          "url": "https://police.boston.gov/wp-content/uploads/2024/03/Rule-403.pdf"
+        }
+      ]
+    }
+  ]
+}

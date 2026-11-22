@@ -1,0 +1,638 @@
+{
+  "name": "Kendall/MIT",
+  "title": "Kendall/MIT · Kendall Square, Cambridge",
+  "region": "RED LINE · CAMBRIDGE",
+  "place": "Main Street at the MIT gateway",
+  "timezone": "America/New_York",
+  "level": 3.55,
+  "styles": {
+    "default": {
+      "facade": "office",
+      "levels": 6,
+      "floor": 3.85,
+      "wall": [
+        "#c0b9aa",
+        "#c2beb2"
+      ],
+      "flatRoof": [
+        "#cecbc0",
+        "#d8d6ca"
+      ],
+      "roof": "flat",
+      "parapet": 0.42,
+      "shop": "poi",
+      "awning": false,
+      "shopHeight": 4.0,
+      "bay": 3.3,
+      "glass": [
+        "#91adb1",
+        "#a8bfc0",
+        "#7598a4"
+      ],
+      "frame": "#6e7979",
+      "trim": "#d6d6c9"
+    },
+    "rules": [
+      {
+        "if": {
+          "mat": "brick"
+        },
+        "set": {
+          "facade": "brick",
+          "wall": [
+            "#b88770",
+            "#ac7967"
+          ],
+          "glass": [
+            "#91abac",
+            "#7b939a"
+          ],
+          "floor": 3.75,
+          "bars": false
+        }
+      },
+      {
+        "if": {
+          "name": "Proto"
+        },
+        "set": {
+          "facade": "apartment",
+          "wall": [
+            "#d3d2c8",
+            "#b6b6ae"
+          ],
+          "floor": 3.05,
+          "bay": 3.1,
+          "bars": false
+        }
+      },
+      {
+        "if": {
+          "minLevels": 10
+        },
+        "set": {
+          "facade": "office",
+          "wall": [
+            "#adb1aa",
+            "#b8b4aa"
+          ],
+          "glass": [
+            "#668c99",
+            "#92b0b6",
+            "#83a4ac"
+          ],
+          "floor": 3.55,
+          "bay": 3.0
+        }
+      },
+      {
+        "if": {
+          "maxH": 6
+        },
+        "set": {
+          "facade": "warehouse",
+          "shop": "none",
+          "flatRoof": "#aba9a1",
+          "bars": false
+        }
+      }
+    ]
+  },
+  "buildings": {
+    "w29743556": {
+      "facade": "office",
+      "wall": "#b17d6d",
+      "floor": 3.7,
+      "trim": "#d0b6a0",
+      "glass": [
+        "#79949c",
+        "#677f88"
+      ]
+    }
+  },
+  "palette": {
+    "ground": "#dbd3c2",
+    "slab": "#d4bea0",
+    "walk": "#d1cabe",
+    "pavement": "#d6d2c9",
+    "road": "#969599",
+    "marking": "#f4efe1",
+    "kerb": "#c7c4b9",
+    "grass": "#91ba65",
+    "paving": "#b1aca2"
+  },
+  "paving": {
+    "style": "slabs",
+    "size": 0.72,
+    "colour": "#aea99e"
+  },
+  "lamp": {
+    "colour": "#576369",
+    "height": 5.0,
+    "head": "#f5ebd4",
+    "auto": false
+  },
+  "shops": {
+    "signs": [
+      "CAFÉ",
+      "KENDALL SQUARE"
+    ],
+    "font": "sans-serif",
+    "fascias": [
+      "#485355",
+      "#695e55"
+    ],
+    "awnings": [
+      "#ded6bc"
+    ]
+  },
+  "cafes": {
+    "umbrellas": [
+      "#e6e2d1",
+      "#d3c7ab"
+    ],
+    "stripes": false,
+    "chair": "#77755e",
+    "table": "#b19878"
+  },
+  "trees": {
+    "default": {
+      "style": 3,
+      "height": 6.3,
+      "vary": 0.35,
+      "colours": [
+        "#6f9f52",
+        "#86ae5c",
+        "#9bbc70"
+      ],
+      "spring": "#a9cb79",
+      "autumn": "#d5a342"
+    },
+    "rules": [
+      {
+        "match": "Broadleaf",
+        "mix": [
+          {
+            "style": 3,
+            "share": 4,
+            "autumn": "#d79b41"
+          },
+          {
+            "style": 2,
+            "share": 3,
+            "autumn": "#c77a42"
+          },
+          {
+            "style": 1,
+            "share": 2,
+            "autumn": "#ddba4a"
+          }
+        ]
+      }
+    ]
+  },
+  "people": {
+    "skin": [
+      "#ebbd97",
+      "#ad785a",
+      "#7c503e",
+      "#e0a983",
+      "#c38c69"
+    ],
+    "clothes": [
+      "#397b8b",
+      "#af5944",
+      "#546984",
+      "#dbc085",
+      "#4b6a65",
+      "#af8d9b",
+      "#ece2cd"
+    ],
+    "pants": [
+      "#454d5b",
+      "#6d6359",
+      "#384c62"
+    ],
+    "hair": [
+      "#352b29",
+      "#624435",
+      "#8c7151"
+    ],
+    "bikes": [
+      "#5685a4",
+      "#484952",
+      "#9f614d"
+    ],
+    "umbrellas": [
+      "#356b85",
+      "#bc6d56",
+      "#d4ad5b"
+    ]
+  },
+  "vehicles": {
+    "kinds": [
+      "sedan",
+      "small",
+      "hatch",
+      "mpv"
+    ],
+    "colours": [
+      "#e1e1d9",
+      "#516170",
+      "#999c9f",
+      "#3f454e",
+      "#a7544c"
+    ],
+    "plate": "#f4f2e7"
+  },
+  "seasons": [
+    {
+      "id": "spring",
+      "label": "Spring",
+      "leaves": "spring",
+      "wet": true,
+      "wx": "drizzle",
+      "umbrellas": true,
+      "cafes": "closed",
+      "crowd": 0.85,
+      "grass": "#a8c878",
+      "note": {
+        "text": "At nearby Logan, April averages 11.6 days with measurable precipitation.",
+        "source": "NOAA",
+        "url": "https://www.ncei.noaa.gov/access/services/data/v1?dataset=normals-monthly-1991-2020&endDate=9996-12-31&format=pdf&startDate=0001-01-01&stations=USW00014739"
+      }
+    },
+    {
+      "id": "summer",
+      "label": "Summer",
+      "leaves": "summer",
+      "crowd": 1.15,
+      "note": {
+        "text": "The normal July afternoon high at nearby Logan is 82.1°F.",
+        "source": "NOAA",
+        "url": "https://www.ncei.noaa.gov/access/services/data/v1?dataset=normals-monthly-1991-2020&endDate=9996-12-31&format=pdf&startDate=0001-01-01&stations=USW00014739"
+      }
+    },
+    {
+      "id": "autumn",
+      "label": "Autumn",
+      "leaves": "autumn",
+      "grass": "#a0b16a",
+      "crowd": 1,
+      "note": {
+        "text": "Cambridge maps its street trees by fall foliage colour.",
+        "source": "City of Cambridge",
+        "url": "https://www.cambridgema.gov/news/detail?path=%2Fsitecore%2Fcontent%2Fhome%2Fgis%2Fnews%2F2025%2F10%2Ffallfoliagemap"
+      }
+    },
+    {
+      "id": "winter",
+      "label": "Winter",
+      "leaves": "bare",
+      "snow": true,
+      "wx": "snow",
+      "coats": true,
+      "cafes": false,
+      "crowd": 0.65,
+      "note": {
+        "text": "January averages 14.3 inches of snow at nearby Logan.",
+        "source": "NOAA",
+        "url": "https://www.ncei.noaa.gov/access/services/data/v1?dataset=normals-monthly-1991-2020&endDate=9996-12-31&format=pdf&startDate=0001-01-01&stations=USW00014739"
+      }
+    }
+  ],
+  "occasions": [
+    {
+      "id": "carnival",
+      "label": "Cambridge Science Carnival",
+      "leaves": "autumn",
+      "crowd": 1.55,
+      "note": {
+        "text": "The Science Carnival brings hands-on demonstrations to Kendall/MIT Open Space.",
+        "source": "MIT News",
+        "url": "https://news.mit.edu/2025/hands-on-kid-friendly-learning-cambridge-science-carnival-1023"
+      }
+    },
+    {
+      "id": "afterdark",
+      "label": "Museum After Dark",
+      "leaves": "summer",
+      "night": 0.78,
+      "litShare": 0.6,
+      "crowd": 1.12,
+      "cafes": "closed",
+      "note": {
+        "text": "MIT Museum hosted its August After Dark evening from 6 to 9 p.m.",
+        "source": "MIT Events",
+        "url": "https://calendar.mit.edu/event/womens-league-goes-to-mit-museum-after-dark"
+      }
+    }
+  ],
+  "months": [
+    "winter",
+    "winter",
+    "spring",
+    "spring",
+    "spring",
+    "summer",
+    "summer",
+    "summer",
+    "autumn",
+    "autumn",
+    "autumn",
+    "winter"
+  ],
+  "occasionLabel": "On the square",
+  "cameras": {
+    "iso": {
+      "yaw": -61,
+      "pitch": 43,
+      "zoom": 0.58,
+      "x": 0,
+      "y": 0,
+      "z": 25
+    },
+    "bird": {
+      "yaw": -71,
+      "pitch": 73,
+      "zoom": 0.495,
+      "x": 0,
+      "y": 0,
+      "z": 25
+    }
+  },
+  "views": [
+    {
+      "id": "inbound",
+      "label": "Inbound canopy",
+      "camera": {
+        "yaw": -74,
+        "pitch": 13,
+        "zoom": 6.0,
+        "x": 37,
+        "y": -52,
+        "z": 4.4
+      }
+    },
+    {
+      "id": "outbound",
+      "label": "Alewife entrance",
+      "camera": {
+        "yaw": -73,
+        "pitch": 31,
+        "zoom": 6.0,
+        "x": 29,
+        "y": 15,
+        "z": 4.1
+      }
+    },
+    {
+      "id": "museum",
+      "label": "MIT Museum",
+      "camera": {
+        "yaw": -47,
+        "pitch": 19,
+        "zoom": 6,
+        "x": 28,
+        "y": -55,
+        "z": 4
+      }
+    },
+    {
+      "id": "tower",
+      "label": "314 Main tower",
+      "camera": {
+        "yaw": -49,
+        "pitch": 42,
+        "zoom": 1.15,
+        "x": 0,
+        "y": -48,
+        "z": 42
+      }
+    },
+    {
+      "id": "engine",
+      "label": "Engine 7",
+      "camera": {
+        "yaw": 148,
+        "pitch": 45,
+        "zoom": 4.55,
+        "x": -52.6,
+        "y": -29.1,
+        "z": 8.5
+      }
+    },
+    {
+      "id": "open",
+      "label": "Kendall/MIT Open Space",
+      "camera": {
+        "yaw": -76,
+        "pitch": 33,
+        "zoom": 3.1,
+        "x": 70,
+        "y": -101,
+        "z": 2.3
+      }
+    },
+    {
+      "id": "plaza",
+      "label": "Kendall Plaza",
+      "camera": {
+        "yaw": -86,
+        "pitch": 36,
+        "zoom": 2.4,
+        "x": 42,
+        "y": 15,
+        "z": 8
+      }
+    },
+    {
+      "id": "site4",
+      "label": "Graduate Tower",
+      "camera": {
+        "yaw": -63,
+        "pitch": 50,
+        "zoom": 1.55,
+        "x": 85,
+        "y": -55,
+        "z": 42
+      }
+    }
+  ],
+  "legend": [
+    {
+      "name": "Inbound gateway",
+      "source": "Three kiosks under one roof",
+      "icon": "landmark",
+      "camera": {
+        "yaw": -74,
+        "pitch": 13,
+        "zoom": 6.0,
+        "x": 37,
+        "y": -52,
+        "z": 4.4
+      }
+    },
+    {
+      "name": "Outbound headhouse",
+      "source": "Alewife and the roof patio",
+      "icon": "streets",
+      "camera": {
+        "yaw": -73,
+        "pitch": 31,
+        "zoom": 6.0,
+        "x": 29,
+        "y": 15,
+        "z": 4.1
+      }
+    },
+    {
+      "name": "MIT Museum",
+      "source": "314 Main Street",
+      "icon": "landmark",
+      "camera": {
+        "yaw": -47,
+        "pitch": 19,
+        "zoom": 6,
+        "x": 28,
+        "y": -55,
+        "z": 4
+      }
+    },
+    {
+      "name": "The Kendall Hotel",
+      "source": "Former Engine 7 firehouse",
+      "icon": "buildings",
+      "camera": {
+        "yaw": 148,
+        "pitch": 45,
+        "zoom": 4.55,
+        "x": -52.6,
+        "y": -29.1,
+        "z": 8.5
+      }
+    }
+  ],
+  "notes": [
+    {
+      "title": "Under Main Street",
+      "text": "The Red Line tracks run beneath Main Street. At each cut edge, two rail sections mark where the mapped tracks leave the block. Their depth is compressed to fit the model. Paul Matisse’s Kendall Band hangs between the tracks.",
+      "links": [
+        {
+          "label": "Red Line track 1",
+          "url": "https://www.openstreetmap.org/way/361558867"
+        },
+        {
+          "label": "Red Line track 2",
+          "url": "https://www.openstreetmap.org/way/340542803"
+        },
+        {
+          "label": "Paul Matisse",
+          "url": "https://www.paulmatisse.com/kendall-band"
+        }
+      ]
+    },
+    {
+      "title": "One canopy, three entrances",
+      "text": "A stair, an escalator and a lift each have their own pavilion. Thin steel columns hold a composite shell above the passage between the museum and the Welcome Center.",
+      "links": [
+        {
+          "label": "NADAAA",
+          "url": "https://www.nadaaa.com/portfolio/kendall-mit-gateway/"
+        },
+        {
+          "label": "Northstar",
+          "url": "https://northstar-pres.com/kendall-mit-mbta-station-opens-to-the-public/"
+        },
+        {
+          "label": "August 2024 photograph",
+          "url": "https://commons.wikimedia.org/wiki/File:Inbound_headhouse_Kendall_MIT_August_2024.jpg"
+        }
+      ]
+    },
+    {
+      "title": "Across Main Street",
+      "text": "The rebuilt Alewife entrance opened in April 2026. An elevator connects the platform, street and rooftop patio, which joins the public porch at 325 Main.",
+      "links": [
+        {
+          "label": "Cambridge Redevelopment Authority",
+          "url": "https://www.cambridgeredevelopment.org/in-the-news/kendall-headhouse-is-open-press-release"
+        },
+        {
+          "label": "Pickard Chilton",
+          "url": "https://www.pickardchilton.com/work/google-cambridge"
+        },
+        {
+          "label": "October 2026 photograph",
+          "url": "https://commons.wikimedia.org/wiki/File:Outbound_headhouse_at_Kendall_MIT_station,_October_2026.jpg"
+        }
+      ]
+    },
+    {
+      "title": "Glass and fired-clay colours",
+      "text": "At 314 Main, the museum and retail spaces occupy the base of a 17-storey building. Terracotta-coloured glass and fins give way to clearer glazing up the faceted tower.",
+      "links": [
+        {
+          "label": "WEISS/MANFREDI",
+          "url": "https://www.weissmanfredi.com/projects/2140-multi-use-building-for-mit-s-kendall-square-initiative"
+        },
+        {
+          "label": "City design submission",
+          "url": "https://www.cambridgema.gov/-/media/files/cdd/zoningdevel/specialpermitsadvisory/sp302_303_mit/sp303_bldg5_design_submission.pdf"
+        }
+      ]
+    },
+    {
+      "title": "Two industrial survivors",
+      "text": "The Kendall Hotel preserves two cupolas on the old Engine 7 firehouse. East of the gateway, a concrete warehouse became MIT InnovationHQ beside the Graduate Tower.",
+      "links": [
+        {
+          "label": "The Kendall Hotel",
+          "url": "https://www.kendallhotel.com/about-us/engine-7/"
+        },
+        {
+          "label": "NADAAA",
+          "url": "https://www.nadaaa.com/portfolio/mit-mixed-use-development/"
+        }
+      ]
+    },
+    {
+      "title": "Bikes on Main",
+      "text": "Cambridge installed separated bike lanes between Ames Street and Galaxy Park in fall 2024.",
+      "links": [
+        {
+          "label": "City of Cambridge",
+          "url": "https://www.cambridgema.gov/-/media/Files/Traffic/cyclingsafetyordinance/csoyear5report.pdf"
+        }
+      ]
+    },
+    {
+      "title": "Weather and street life",
+      "text": "The seasons use regional Logan normals and Cambridge foliage references. Tree species, colours, weather on any one day, trips, shop displays, kiosk details, booth positions and lit rooms are illustrative. Heights without a survey are estimated.",
+      "links": [
+        {
+          "label": "NOAA",
+          "url": "https://www.ncei.noaa.gov/access/services/data/v1?dataset=normals-monthly-1991-2020&endDate=9996-12-31&format=pdf&startDate=0001-01-01&stations=USW00014739"
+        },
+        {
+          "label": "Cambridge GIS",
+          "url": "https://www.cambridgema.gov/en/gis/news/2024/10/fallfoliagemap"
+        },
+        {
+          "label": "Map survey",
+          "url": "https://www.openstreetmap.org/#map=19/42.36256/-71.08659"
+        },
+        {
+          "label": "Carnival photographs",
+          "url": "https://news.mit.edu/2025/hands-on-kid-friendly-learning-cambridge-science-carnival-1023"
+        }
+      ]
+    }
+  ],
+  "credits": [
+    {
+      "label": "Pocket City",
+      "url": "https://april-zhu.com"
+    }
+  ]
+}

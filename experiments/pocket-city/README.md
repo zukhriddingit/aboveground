@@ -1,0 +1,32 @@
+# Pocket City experiments
+
+Hand-drawn isometric dioramas of the blocks around our stations, made with the
+[Pocket City](https://april-zhu.com/pocketcity) skill (MIT, April Zhu; map data © OpenStreetMap contributors, ODbL).
+
+Eight station blocks, one folder each (`<id>/work/` holds `city.json`, `landmarks.js`, `scene.json`,
+`plot.json` and `sources.md`); each builds one self-contained page in `frontend/public/pocket/<id>.html`:
+
+| Folder | Station | Landmarks drawn by hand |
+| --- | --- | --- |
+| `bu-central/` | BU Central (Green B) | Commonwealth Ave median stop, Marsh Chapel, Mugar Library |
+| `kenmore/` | Kenmore (Green B C D) | CITGO sign, Hotel Commonwealth, the busway canopy |
+| `hynes/` | Hynes Convention Center | Mass Ave entrance, 360 Newbury, Newbury brownstones |
+| `copley/` | Copley | Boston Public Library, Old South Church, both headhouses, the Marathon finish |
+| `boylston/` | Boylston | the 1897 granite headhouses, Parkman Bandstand |
+| `park-street/` | Park Street (Red, Green) | granite headhouses, Park Street Church, Granary entrance |
+| `harvard/` | Harvard (Red) | the copper kiosk, the Pit, Johnston Gate |
+| `kendall/` | Kendall/MIT (Red) | both glass headhouses, MIT Museum, Main Street |
+
+The app opens them from a station card ("Street view", `frontend/src/components/map/PocketCityOverlay.tsx`,
+station map in `pocketCities.ts`); `/pocket/` is a gallery of all eight. Raw OpenStreetMap extracts
+(`work/osm.json`, `work/osm-clean.json`) and screenshots (`shots/`) are git-ignored: re-fetch them to rebuild.
+
+Rebuild (skill installed at `~/.claude/skills/pocket-city`, Python with `shapely`):
+
+```bash
+S=~/.claude/skills/pocket-city
+python3 $S/scripts/fetch_osm.py --lat 42.34975 --lon -71.07760 --size 240 --out copley/work/osm.json
+python3 $S/scripts/plot.py --osm copley/work/osm.json --out copley/work/plot.json --keep "Old South Church;Boston Public Library;Trinity Church"
+python3 $S/scripts/prep.py --osm copley/work/osm.json --plot copley/work/plot.json --drive right --out copley/work/scene.json
+python3 $S/scripts/build.py --scene copley/work/scene.json --city copley/work/city.json --landmarks copley/work/landmarks.js --out ../../frontend/public/pocket/copley.html
+```
