@@ -34,7 +34,7 @@ function subscribe(cb: () => void) {
 }
 
 /**
- * Bottom-centre toast stack, above the drawer and the composer.
+ * Bottom-centre toast stack, above the drawer, the composer and the page's bottom dock.
  * `besideDrawer`: on desktop, centre it over the map area left of the open 420 px drawer.
  */
 export function FeedToaster({ besideDrawer = false }: { besideDrawer?: boolean }) {
@@ -42,7 +42,7 @@ export function FeedToaster({ besideDrawer = false }: { besideDrawer?: boolean }
   if (!list.length) return null;
   return (
     <div
-      className={`pointer-events-none fixed inset-x-0 bottom-[max(1.5rem,env(safe-area-inset-bottom))] z-[80] ${besideDrawer ? "sm:right-[444px]" : ""}`}
+      className={`pointer-events-none fixed inset-x-0 bottom-[calc(6.75rem+env(safe-area-inset-bottom))] z-[80] ${besideDrawer ? "sm:right-[444px]" : ""}`}
       aria-live="polite"
     >
       <FeedStyles />

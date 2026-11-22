@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ChevronDown, TrainFront, X } from "lucide-react";
+import { ChevronDown, TrainFront, TriangleAlert, X } from "lucide-react";
 import { countdownLabel, effectLabel, type Arrival, type LiveAlert } from "@/components/game";
+import { StaleEtaBadge } from "@/components/quickcheck";
+import { branchLabel } from "@/components/transit";
 import { CONTROL, FOCUS, LABEL, MBTA_RED, PANEL } from "@/lib/ui";
 import type { Station, StationId } from "@/types/tverse";
 import { LineBullet } from "./LineBullet";
@@ -19,9 +21,14 @@ function useNow(everyMs: number) {
 /** Amber, like the LED countdown signs on MBTA platforms. */
 const COUNTDOWN = "font-mono text-[13px] font-semibold tabular-nums text-[#ffb547]";
 
+/** Amber for "riders don't trust this number", matching the station card's stale-ETA and branch-gap badges. */
+const AMBER = "#fbbf24";
+
 /**
  * Live countdown for the next trains at one station (MBTA V3 predictions). A button on phones,
  * an always-open panel from `lg`. It fills at most its container's height and scrolls inside.
+ * `station` is the page's enriched station (withTransitData): after riders tap Ghost · Stale it
+ * carries etaStatus "UNVERIFIED", and branchGaps flags branches waiting > 1.5x their headway.
  */
 export function NextTrains({
   station,
@@ -48,6 +55,8 @@ export function NextTrains({
     .map((dir) => upcoming.filter((a) => a.directionId === dir).slice(0, 2))
     .filter((list) => list.length > 0);
   const next = upcoming[0];
+  const stale = station.etaStatus === "UNVERIFIED";
+  const gaps = (station.branchGaps ?? []).filter((g) => g.isGap).slice(0, 2);
 
   return (
     <div className="pointer-events-auto flex max-h-full min-h-0 flex-col" data-hud-panel="next-trains">
@@ -62,8 +71,9 @@ export function NextTrains({
         {closures.length > 0 ? (
           <span className="font-semibold text-[#ff6b5e]">{effectLabel(closures[0])}</span>
         ) : (
-          next && <span className={COUNTDOWN}>{countdownLabel(next, now)}</span>
+          next && <span className={`${COUNTDOWN} ${stale ? "line-through decoration-amber-400/70 opacity-70" : ""}`}>{countdownLabel(next, now)}</span>
         )}
+        {(stale || gaps.length > 0) && <TriangleAlert aria-label="Unverified prediction or branch gap" className="size-3.5 text-amber-300" />}
         <ChevronDown className={`size-3.5 text-zinc-400 transition ${open ? "rotate-180" : ""}`} />
       </button>
 
@@ -94,6 +104,31 @@ export function NextTrains({
         </div>
 
         <div className="min-h-0 overflow-y-auto px-3 py-2.5">
+          {(stale || gaps.length > 0) && (
+            <div className="mb-2 space-y-1.5 border-b border-white/12 pb-2">
+              {stale && (
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <StaleEtaBadge show compact />
+                  <span className="text-[11px] text-zinc-400">Riders say this countdown is off.</span>
+                </div>
+              )}
+              {gaps.map((g) => (
+                <p
+                  key={`${g.branch}|${g.directionId}`}
+                  className="flex items-start gap-1.5 rounded-md border border-white/12 border-l-[3px] bg-white/[0.03] px-2 py-1.5 text-[11.5px] leading-snug text-zinc-100"
+                  style={{ borderLeftColor: AMBER }}
+                >
+                  <TriangleAlert className="mt-px size-3.5 shrink-0 text-amber-300" />
+                  <span>
+                    <span className="font-semibold text-amber-200">Branch gap · {branchLabel(g)}</span>{" "}
+                    {g.nextArrivalMin === null
+                      ? "No train predicted on this branch."
+                      : `Next in ${g.nextArrivalMin} min, usually every ~${g.scheduledHeadwayMin}.`}
+                  </span>
+                </p>
+              ))}
+            </div>
+          )}
           {closures.map((a) => (
             <button
               key={a.id}
@@ -118,7 +153,7 @@ export function NextTrains({
                         <p className="truncate text-[13px] font-medium text-white">{a.headsign || "Train"}</p>
                         {a.status && <p className="truncate text-[10px] text-zinc-400">{a.status}</p>}
                       </div>
-                      <span className={`shrink-0 ${COUNTDOWN}`}>{countdownLabel(a, now)}</span>
+                      <span className={`shrink-0 ${COUNTDOWN} ${stale ? "line-through decoration-amber-400/70 opacity-70" : ""}`}>{countdownLabel(a, now)}</span>
                     </div>
                   ))}
                 </li>

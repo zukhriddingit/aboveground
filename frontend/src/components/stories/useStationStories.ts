@@ -5,6 +5,9 @@ import type { NewStationStory, StationId, StationStory } from "@/types/tverse";
 import { MOCK_STORIES } from "@/lib/mockData";
 import { API_URL } from "./storyData";
 
+/** Fail fast (dead venue Wi-Fi, a tunnel): the demo keeps the stories it already has. */
+const FETCH_TIMEOUT_MS = 4000;
+
 /** POST /api/stories body (alias of the shared NewStationStory). */
 export type NewStoryDraft = NewStationStory;
 
@@ -38,10 +41,16 @@ export function useStationStories({ apiUrl = API_URL, pollMs = 8000, fallback = 
     let alive = true;
     const run = () => loadStories(apiUrl).then((data) => alive && apply(data));
     run();
-    const t = pollMs ? window.setInterval(run, pollMs) : undefined;
+    // Polling pauses while the tab is hidden and catches up the moment it's visible again.
+    const t = pollMs ? window.setInterval(() => !document.hidden && run(), pollMs) : undefined;
+    const onVisible = () => {
+      if (pollMs && !document.hidden) run();
+    };
+    document.addEventListener("visibilitychange", onVisible);
     return () => {
       alive = false;
       window.clearInterval(t);
+      document.removeEventListener("visibilitychange", onVisible);
     };
   }, [apiUrl, apply, pollMs]);
 
@@ -58,6 +67,7 @@ export function useStationStories({ apiUrl = API_URL, pollMs = 8000, fallback = 
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(draft),
+          signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
         });
         if (!res.ok) throw new Error(String(res.status));
         const saved = (await res.json()) as StationStory;
@@ -90,7 +100,7 @@ export function useStationStories({ apiUrl = API_URL, pollMs = 8000, fallback = 
 /** GET /api/stories; null when the backend is unreachable. */
 async function loadStories(apiUrl: string): Promise<StationStory[] | null> {
   try {
-    const res = await fetch(`${apiUrl}/api/stories`, { cache: "no-store" });
+    const res = await fetch(`${apiUrl}/api/stories`, { cache: "no-store", signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
     if (!res.ok) return null;
     const data: unknown = await res.json();
     return Array.isArray(data) ? (data as StationStory[]) : null;
