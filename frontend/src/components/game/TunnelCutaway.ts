@@ -10,6 +10,7 @@ import * as T from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { TrackCorridor, type Sample } from "./TrackCorridor";
 import type { TLine } from "@/types/tverse";
+import { RepairCrew, stageCrew, WORK_AT } from "./repairCrew";
 import type { FaultKind } from "./faults";
 import type { Puffs, Sparks } from "./fx";
 import {
@@ -22,14 +23,14 @@ import {
   buildSwitchMachine,
   buildTrackSign,
   buildTrain,
-  buildWorker,
+  buildAirLine,
   consistFor,
   seedOf,
   trainSign,
   type CabinetModel,
   type SignalModel,
   type TrainModel,
-  type Worker,
+
 } from "./tunnelModels";
 import {
   WALL_DEPTH,
@@ -128,7 +129,8 @@ export class TunnelCutaway extends TrackCorridor {
   private readonly alarm: T.PointLight;
   private readonly signals: SignalModel[] = [];
   private readonly cabinet: CabinetModel;
-  private readonly crew: Array<{ w: Worker; base: T.Vector3; work: T.Vector3; lookout: boolean }> = [];
+  private readonly crew: RepairCrew;
+  private airLine?: ReturnType<typeof buildAirLine>;
   private readonly trains = new Map<string, TrainModel>();
   /** Trains standing by at the platform: one per direction, they pull out after the fix. */
   private readonly platformTrains: Array<{ dir: 1 | -1; s0: number; delay: number; model: TrainModel }> = [];
@@ -184,12 +186,14 @@ export class TunnelCutaway extends TrackCorridor {
       const westbound = (dir > 0) === this.westward;
       const model = buildTrain(consistFor(this.line, seedOf(`${opts.stationId}-${dir}`)), trainSign(opts.track.route, westbound));
       this.interior.add(model.group);
+      this.placeTrain(model, s0, dir > 0, RAIL, TRACK);
       this.platformTrains.push({ dir, s0, delay, model });
     }
     this.cabinet = this.buildCabinetAndSignals();
     const extras = this.buildFaultSite();
     this.arcLight = extras.arcLight;
     this.brokenWire = extras.brokenWire;
+    this.crew = new RepairCrew(this.interior, this.fault);
     this.buildWorkZone();
     this.buildSurface();
     const [lo, hi] = this.extent;
@@ -202,7 +206,7 @@ export class TunnelCutaway extends TrackCorridor {
     this.alarm = new T.PointLight("#ff2a2a", 0, 45, 2);
     this.alarm.position.copy(this.at(this.sampleAt(this.faultS), -(W - 6), this.floorAt(this.faultS) + 8));
     this.interior.add(this.alarm);
-    this.placeFocus();
+
     this.interior.visible = false;
     this.group.add(this.mask, this.interior, this.surface);
     this.group.traverse((o) => (o.frustumCulled = false));
@@ -359,8 +363,8 @@ export class TunnelCutaway extends TrackCorridor {
     const cabinet = buildCabinet();
     const cs = f + 4 * d;
     const cp = this.sampleAt(cs);
-    cabinet.group.position.copy(this.at(cp, -(W - 1.5), this.floorAt(cs)));
-    cabinet.group.lookAt(this.at(cp, 0, this.floorAt(cs)));
+    cabinet.group.position.copy(this.at(cp, -15.1, FLOOR));
+    cabinet.group.lookAt(this.at(this.sampleAt(cs-5*d), -17, FLOOR));
     cabinet.group.visible = this.fault === "signal" || this.fault === "power";
     this.interior.add(cabinet.group);
     return cabinet;
@@ -455,36 +459,29 @@ export class TunnelCutaway extends TrackCorridor {
     const f = this.faultS;
     const d = this.dir;
     const train = this.fault === "train";
-    const spots: Array<[number, number, number, number]> = [];
-    if (this.fault === "signal" || this.fault === "power") {
-      spots.push([f - 14 * d, this.sideLat(f - 14 * d), f + 1 * d, -17.2], [f - 10 * d, this.sideLat(f - 10 * d), f + 5 * d, -16.6]);
-    } else if (this.fault === "track") {
-      spots.push([f - 14 * d, this.sideLat(f - 14 * d), f - 2.5 * d, -TRACK - 4.2], [f - 9 * d, this.sideLat(f - 9 * d), f + 2.5 * d, -TRACK - 4.4]);
-    } else if (train) {
-      const front = this.platformTrains[0];
-      const nose = Math.min(front.s0 + front.model.length / 2, this.platHalf - 6);
-      spots.push([nose - 14, -PLATFORM_LAT - 2, nose - 3, -12.6], [nose - 20, -PLATFORM_LAT - 3, nose - 6, -13.4]);
+    const p = this.sampleAt(f);
+    const axis = new T.Vector3(p.tx*d,0,p.tz*d);
+    const side = new T.Vector3(-p.tz,0,p.tx);
+    let floor = FLOOR;
+    if (train) {
+      this.airLine = buildAirLine(this.platformTrains[0].model);
+      this.airLine.joint.getWorldPosition(this.focus);
+      this.focus.addScaledVector(side,.2);
+      floor = this.platformY;
+    } else if (this.fault === "signal") {
+      this.cabinet.group.localToWorld(this.focus.set(.55,1.98,1.6));
+    } else if (this.fault === "power") {
+      this.focus.copy(this.arcLight!.position);
     } else {
-      spots.push([f - 24 * d, this.sideLat(f - 24 * d), f - 17 * d, -TRACK - 6.8], [f - 20 * d, this.sideLat(f - 20 * d), f - 15 * d, -TRACK - 7.2]);
+      const s = this.fault === "track" ? f : f - (this.fault === "frozen" ? 15 : 16)*d;
+      const machine = this.fault === "switch";
+      this.at(this.sampleAt(s), -TRACK - (machine ? 4.4 : 2.15), machine ? FLOOR+1.78 : RAIL+.04, this.focus);
     }
-    // On the platform, on the safety walk, or down on the track bed (the power is off in a work zone).
-    const standAt = (s: number, lat: number) => (this.onPlatform(s) && Math.abs(lat) >= 10.5 ? this.platformY : Math.abs(lat) >= 19.5 ? WALK_Y : FLOOR);
-    for (const [s0, l0, s1, l1] of spots) {
-      const w = buildWorker();
-      const base = this.at(this.sampleAt(s0), l0, standAt(s0, l0));
-      const work = this.at(this.sampleAt(s1), l1, standAt(s1, l1));
-      w.root.position.copy(base);
-      this.interior.add(w.root);
-      this.crew.push({ w, base, work, lookout: false });
-    }
+    stageCrew(this.crew,this.fault,this.focus,this.cabinet.group,axis,side,floor,FLOOR);
     if (!train) {
-      // The lookout stands upstream, facing the trains that would come.
-      const ls = f - 30 * d;
-      const look = buildWorker({ lantern: "#ffcc33" });
-      const pos = this.at(this.sampleAt(ls), this.sideLat(ls), this.floorAt(ls));
-      look.root.position.copy(pos);
-      this.interior.add(look.root);
-      this.crew.push({ w: look, base: pos, work: pos.clone(), lookout: true });
+      const ls = f-30*d;
+      const pos = this.at(this.sampleAt(ls),this.sideLat(ls),this.floorAt(ls));
+      this.crew.add("lookout",pos,pos,this.at(this.sampleAt(ls-25*d),this.sideLat(ls),pos.y));
 
       for (const [s, color] of [[f - 24 * d, "#ffb020"], [f + 45 * d, "#3dff7a"]] as const) {
         const lantern = buildLantern(color);
@@ -507,17 +504,6 @@ export class TunnelCutaway extends TrackCorridor {
       tower.group.position.copy(this.at(p, this.sideLat(s) - (this.onPlatform(s) ? -2 : 0.5), this.floorAt(s)));
       this.interior.add(tower.group);
     }
-  }
-
-  private placeFocus() {
-    const f = this.faultS;
-    const d = this.dir;
-    if (this.fault === "track") this.at(this.sampleAt(f), -TRACK - 2.15, RAIL + 0.3, this.focus);
-    else if (this.fault === "switch" || this.fault === "frozen") this.at(this.sampleAt(f - 16 * d), -TRACK - 4.4, FLOOR + 1.8, this.focus);
-    else if (this.fault === "train") {
-      const front = this.platformTrains[0];
-      this.at(this.sampleAt(front.s0 + front.model.length / 2), -TRACK, RAIL + 4, this.focus);
-    } else this.focus.set(0, 0, 0);
   }
 
   private buildSurface() {
@@ -720,7 +706,7 @@ export class TunnelCutaway extends TrackCorridor {
 
   /** Where the crew's welding sparks fly from (scene meters). */
   weldPoint(out = new T.Vector3()) {
-    return out.copy(this.fault === "signal" || this.fault === "power" ? this.mouthWorld : this.focus);
+    return out.copy(this.focus);
   }
 
   // ------------------------------------------------------------ for the walk-in view (TunnelView)
@@ -898,7 +884,7 @@ export class TunnelCutaway extends TrackCorridor {
       fx.sparks.emit(this.mouthWorld.x, this.mouthWorld.y, this.mouthWorld.z, 7 + Math.floor(Math.random() * 8), HOT, 16, 0.9, this.floorAt(this.faultS));
     }
     if (this.arcLight) {
-      const arcing = open && !fixed && Math.random() < 0.35;
+      const arcing = open && !fixed && this.repairAt === null && Math.random() < 0.35;
       this.arcLight.intensity = arcing ? 600 + Math.random() * 900 : 0;
       if (arcing && Math.random() < 0.5) {
         const p = this.arcLight.position;
@@ -910,50 +896,14 @@ export class TunnelCutaway extends TrackCorridor {
     const cool = this.restoredAt === null ? 0 : clamp((now - this.restoredAt) / 1500, 0, 1);
     this.crackMeshMat.color.set("#ff7a1a").lerp(new T.Color("#aab1b9"), cool).multiplyScalar(cool > 0 ? 1 : 0.7 + 0.3 * Math.sin(time * 6));
     if (this.ice.length) {
-      const melt = this.repairAt === null ? 0 : clamp((now - this.repairAt) / 3000, 0, 1);
+      const melt = this.repairAt === null ? 0 : clamp(((now - this.repairAt) / 1000 - WORK_AT) / 5.6, 0, 1);
       for (const blob of this.ice) blob.scale.setScalar(Math.max(0.01, 1 - melt)).setY(Math.max(0.01, 0.55 * (1 - melt)));
       this.heaterMat.opacity = repairing ? 0.55 + 0.25 * Math.sin(time * 10) : 0;
     }
 
-    this.updateCrew(now, time);
+    this.crew.update(now, this.repairAt, this.restoredAt, fx.sparks);
+    if (this.airLine) this.airLine.hose.visible = fixed;
     return this.updateTrains(trains, open, now, time);
-  }
-
-  private updateCrew(now: number, time: number) {
-    const r = this.repairAt === null ? -1 : (now - this.repairAt) / 1000;
-    const cheer = this.restoredAt === null ? -1 : (now - this.restoredAt) / 1000;
-    const target = this.weldPoint(this.v.clone());
-    this.crew.forEach(({ w, base, work, lookout }, i) => {
-      if (lookout) {
-        // Faces the approach, lantern up.
-        const back = this.at(this.sampleAt(this.faultS - 60 * this.dir), this.sideLat(this.faultS - 30 * this.dir), w.root.position.y);
-        w.root.lookAt(back);
-        w.armL.rotation.x = -1.2 + Math.sin(time * 2 + i) * 0.1;
-        w.armR.rotation.x = -0.2;
-        w.beam.visible = false;
-        return;
-      }
-      const walk = r < 0 ? 0 : clamp(r / 1.3, 0, 1);
-      w.root.position.lerpVectors(base, work, easeInOut(walk));
-      const moving = r >= 0 && r < 1.3;
-      const swing = moving ? Math.sin(time * 11 + i) * 0.6 : 0;
-      w.hipL.rotation.x = swing;
-      w.hipR.rotation.x = -swing;
-      const face = moving ? work : target;
-      w.root.lookAt(this.v.set(face.x, w.root.position.y, face.z));
-      if (cheer >= 0 && cheer < 1.8) {
-        w.armL.rotation.x = w.armR.rotation.x = -2.7 + Math.sin(time * 14 + i) * 0.25;
-        w.beam.visible = false;
-      } else if (r >= 1.3 && this.restoredAt === null) {
-        w.armR.rotation.x = -1.4 + Math.sin(time * 18 + i * 2) * 0.45;
-        w.armL.rotation.x = -0.9;
-        w.beam.visible = true;
-      } else {
-        w.armR.rotation.x = -1.15 + Math.sin(time * 1.3 + i) * 0.12;
-        w.armL.rotation.x = moving ? -swing : -0.1;
-        w.beam.visible = this.restoredAt === null;
-      }
-    });
   }
 
   private updateTrains(list: CutawayTrain[], open: boolean, now: number, time: number): Set<string> {
@@ -1014,7 +964,7 @@ export class TunnelCutaway extends TrackCorridor {
   dispose() {
     this.group.removeFromParent();
     this.group.traverse((o) => {
-      if (o instanceof T.Mesh) o.geometry.dispose();
+      if (o instanceof T.Mesh && !o.geometry.userData.sharedCrewPart) o.geometry.dispose();
     });
   }
 }

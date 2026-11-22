@@ -5,6 +5,7 @@
 // MBTA truck on the road, and the next train waiting short of the zone.
 import * as T from "three";
 import type { TLine } from "@/types/tverse";
+import { RepairCrew, stageCrew, WORK_AT } from "./repairCrew";
 import type { FaultKind } from "./faults";
 import type { Puffs, Sparks } from "./fx";
 import { TrackCorridor } from "./TrackCorridor";
@@ -19,14 +20,14 @@ import {
   buildSwitchMachine,
   buildTrackSign,
   buildTrain,
-  buildWorker,
+  buildAirLine,
   consistFor,
   seedOf,
   trainSign,
   type CabinetModel,
   type SignalModel,
   type TrainModel,
-  type Worker,
+
 } from "./tunnelModels";
 import { ballastTexture, grassTexture } from "./tunnelTextures";
 import { clamp, compassBearing, easeInOut, type Track } from "./trackGeo";
@@ -99,7 +100,8 @@ export class SurfaceStation extends TrackCorridor {
   private readonly lamps: T.MeshBasicMaterial[] = [];
   private readonly signals: SignalModel[] = [];
   private readonly cabinet: CabinetModel;
-  private readonly crew: Array<{ w: Worker; base: T.Vector3; work: T.Vector3; lookout: boolean }> = [];
+  private readonly crew: RepairCrew;
+  private airLine?: ReturnType<typeof buildAirLine>;
   private readonly trains = new Map<string, TrainModel>();
   private readonly waiting: TrainModel;
   private readonly westward: boolean;
@@ -126,10 +128,11 @@ export class SurfaceStation extends TrackCorridor {
     this.buildGround();
     this.buildOverhead();
     this.cabinet = this.buildFault();
-    this.buildWorkZone();
     this.waiting = buildTrain(consistFor(this.line, seedOf(`${opts.stationId}-wait`)), trainSign(opts.track.route, this.westward));
     this.group.add(this.waiting.group);
     this.placeTrain(this.waiting, WAIT_S, true, RAIL_Y, TRACK);
+    this.crew = new RepairCrew(this.group, this.fault);
+    this.buildWorkZone();
     this.group.visible = false;
     this.group.traverse((o) => (o.frustumCulled = false));
   }
@@ -263,30 +266,20 @@ export class SurfaceStation extends TrackCorridor {
   }
 
   private buildWorkZone() {
-    const spots: Array<[number, number, number, number]> =
-      this.fault === "signal" || this.fault === "power"
-        ? [[-14, -14, 1, -(MEDIAN - 6.2)], [-10, -15, 5, -(MEDIAN - 6.6)]]
-        : this.fault === "track"
-          ? [[-14, -14, -2.5, -TRACK - 4.2], [-9, -15, 2.5, -TRACK - 4.4]]
-          : this.fault === "train"
-            ? [[WAIT_S + 12, -14, WAIT_S + 30, -TRACK - 4.6], [WAIT_S + 6, -15, WAIT_S + 27, -TRACK - 5.2]]
-            : [[-26, -14, -17, -TRACK - 6.8], [-22, -15, -15, -TRACK - 7.2]];
-    for (const [s0, l0, s1, l1] of spots) {
-      const w = buildWorker();
-      const base = this.at(this.sampleAt(s0), l0, 0.3);
-      const work = this.at(this.sampleAt(s1), l1, BED_Y);
-      w.root.position.copy(base);
-      this.group.add(w.root);
-      this.crew.push({ w, base, work, lookout: false });
-      this.pop.push({ obj: w.root, delay: 0.2 });
+    const p = this.sampleAt(0);
+    const axis = new T.Vector3(p.tx,0,p.tz);
+    const side = new T.Vector3(-p.tz,0,p.tx);
+    if (this.fault === "signal") this.cabinet.group.localToWorld(this.focus.set(.55,1.98,1.6));
+    if (this.fault === "power") this.focus.copy(this.arcLight!.position);
+    if (this.fault === "train") {
+      this.airLine = buildAirLine(this.waiting);
+      this.airLine.joint.getWorldPosition(this.focus);
+      this.focus.addScaledVector(side,.2);
     }
-    const look = buildWorker({ lantern: "#ffcc33" });
-    const lp = this.at(this.sampleAt(-32), -14, 0.3);
-    look.root.position.copy(lp);
-    this.group.add(look.root);
-    this.crew.push({ w: look, base: lp, work: lp.clone(), lookout: true });
-    this.pop.push({ obj: look.root, delay: 0.25 });
-
+    if (this.fault === "frozen") this.at(this.sampleAt(-15),-TRACK-2.15,RAIL_Y,this.focus);
+    stageCrew(this.crew,this.fault,this.focus,this.cabinet.group,axis,side,BED_Y,.3);
+    const lp = this.at(this.sampleAt(-32),-14,.3);
+    this.crew.add("lookout",lp,lp,this.at(this.sampleAt(-80),-14,.3));
     for (const [s, color] of [[-24, "#ffb020"], [45, "#3dff7a"]] as const) {
       const lantern = buildLantern(color);
       this.at(this.sampleAt(s), -TRACK - 3.4, BED_Y, lantern.group.position);
@@ -409,7 +402,7 @@ export class SurfaceStation extends TrackCorridor {
       fx.sparks.emit(this.mouthWorld.x, this.mouthWorld.y, this.mouthWorld.z, 6 + Math.floor(Math.random() * 8), HOT, 16, 0.9, BED_Y);
     }
     if (this.arcLight) {
-      const arcing = fault && Math.random() < 0.35;
+      const arcing = fault && this.repairAt === null && Math.random() < 0.35;
       this.arcLight.intensity = arcing ? 600 + Math.random() * 900 : 0;
       if (arcing && Math.random() < 0.5) {
         const p = this.arcLight.position;
@@ -420,47 +413,13 @@ export class SurfaceStation extends TrackCorridor {
     const cool = this.restoredAt === null ? 0 : clamp((now - this.restoredAt) / 1500, 0, 1);
     this.crackMat.color.set("#ff7a1a").lerp(new T.Color("#aab1b9"), cool);
     if (this.ice.length) {
-      const melt = this.repairAt === null ? 0 : clamp((now - this.repairAt) / 3000, 0, 1);
+      const melt = this.repairAt === null ? 0 : clamp(((now - this.repairAt) / 1000 - WORK_AT) / 5.6, 0, 1);
       for (const blob of this.ice) blob.scale.set(Math.max(0.01, 1 - melt), Math.max(0.01, 0.55 * (1 - melt)), Math.max(0.01, 1 - melt));
     }
 
-    this.updateCrew(now, time);
+    this.crew.update(now, this.repairAt, this.restoredAt, fx.sparks);
+    if (this.airLine) this.airLine.hose.visible = fixed;
     return this.updateTrains(trains, now, live);
-  }
-
-  private updateCrew(now: number, time: number) {
-    const r = this.repairAt === null ? -1 : (now - this.repairAt) / 1000;
-    const cheer = this.restoredAt === null ? -1 : (now - this.restoredAt) / 1000;
-    const target = this.weldPoint(new T.Vector3());
-    this.crew.forEach(({ w, base, work, lookout }, i) => {
-      if (lookout) {
-        w.root.lookAt(this.at(this.sampleAt(-80), -14, w.root.position.y, this.v));
-        w.armL.rotation.x = -1.2 + Math.sin(time * 2 + i) * 0.1;
-        w.armR.rotation.x = -0.2;
-        w.beam.visible = false;
-        return;
-      }
-      const walk = r < 0 ? 0 : clamp(r / 1.3, 0, 1);
-      w.root.position.lerpVectors(base, work, easeInOut(walk));
-      const moving = r >= 0 && r < 1.3;
-      const swing = moving ? Math.sin(time * 11 + i) * 0.6 : 0;
-      w.hipL.rotation.x = swing;
-      w.hipR.rotation.x = -swing;
-      const face = moving ? work : target;
-      w.root.lookAt(this.v.set(face.x, w.root.position.y, face.z));
-      if (cheer >= 0 && cheer < 1.8) {
-        w.armL.rotation.x = w.armR.rotation.x = -2.7 + Math.sin(time * 14 + i) * 0.25;
-        w.beam.visible = false;
-      } else if (r >= 1.3 && this.restoredAt === null) {
-        w.armR.rotation.x = -1.4 + Math.sin(time * 18 + i * 2) * 0.45;
-        w.armL.rotation.x = -0.9;
-        w.beam.visible = true;
-      } else {
-        w.armR.rotation.x = -1.15 + Math.sin(time * 1.3 + i) * 0.12;
-        w.armL.rotation.x = moving ? -swing : -0.1;
-        w.beam.visible = this.restoredAt === null;
-      }
-    });
   }
 
   private updateTrains(list: CutawayTrain[], now: number, live: boolean): Set<string> {
@@ -501,7 +460,7 @@ export class SurfaceStation extends TrackCorridor {
   dispose() {
     this.group.removeFromParent();
     this.group.traverse((o) => {
-      if (o instanceof T.Mesh) o.geometry.dispose();
+      if (o instanceof T.Mesh && !o.geometry.userData.sharedCrewPart) o.geometry.dispose();
     });
   }
 }

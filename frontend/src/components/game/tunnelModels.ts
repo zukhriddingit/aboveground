@@ -1,6 +1,7 @@
 // Low-poly but true-to-life models for the tunnel cutaway. Sizes are scene meters at the
 // cutaway's 3x exaggeration; y = 0 is the top of the rail for trains and the floor for props.
 import * as T from "three";
+import { buildCrewTool } from "./crewModels";
 import type { TLine } from "@/types/tverse";
 import {
   barricadeTexture,
@@ -405,6 +406,25 @@ export function buildTrain(consist: Consist, sign: TrainSign): TrainModel {
   return { group, cars, length: total };
 }
 
+/** Air connections on the outside of the central inter-car gap, reachable from the platform. */
+export function buildAirLine(model: TrainModel) {
+  const car = model.cars[Math.floor(model.cars.length / 2) - 1];
+  const joint = new T.Group();
+  joint.position.set(-car.length / 2 - .28, 4.36, 3.96);
+  car.group.add(joint);
+  for (const x of [0, -.74]) {
+    const port = buildCrewTool("socket");
+    port.position.x = x;
+    joint.add(port);
+  }
+  const hose = buildCrewTool("hose");
+  hose.position.set(-.05,0,.48);
+  hose.rotation.y = Math.PI;
+  joint.add(hose);
+  hose.visible = false;
+  return { joint, hose };
+}
+
 /** What a train's destination sign reads, by route and whether it's heading west (outbound on the Green Line). */
 export function trainSign(route: string, westbound: boolean): TrainSign {
   const west: Record<string, TrainSign> = {
@@ -430,82 +450,7 @@ export function trainSign(route: string, westbound: boolean): TrainSign {
 
 // ---------------------------------------------------------------- crew
 
-export interface Worker {
-  root: T.Group;
-  hipL: T.Group;
-  hipR: T.Group;
-  armL: T.Group;
-  armR: T.Group;
-  beam: T.Mesh;
-}
-
-/** Track worker in MBTA PPE: Class E hard hat and an ANSI Class 2 yellow-green vest with an X on the back. */
-export function buildWorker({ lantern }: { lantern?: string } = {}): Worker {
-  const root = new T.Group();
-  const pants = lambert("#2b3446");
-  const vest = lambert("#c8f21e", { emissive: "#2a3300" });
-  const strip = new T.MeshBasicMaterial({ color: "#e8f0f0", toneMapped: false });
-  const skin = lambert("#d9a77e");
-  const shirt = lambert("#59606b");
-  const mkLimb = (w: number, h: number, mat: T.Material, y: number) => {
-    const pivot = new T.Group();
-    const mesh = new T.Mesh(new T.BoxGeometry(w, h, w), mat);
-    mesh.position.y = -h / 2;
-    pivot.add(mesh);
-    pivot.position.y = y;
-    return pivot;
-  };
-  const hipL = mkLimb(0.75, 2.5, pants, 2.6);
-  hipL.position.x = -0.45;
-  const hipR = mkLimb(0.75, 2.5, pants, 2.6);
-  hipR.position.x = 0.45;
-  for (const hip of [hipL, hipR]) {
-    const boot = new T.Mesh(new T.BoxGeometry(0.85, 0.45, 1.25), lambert("#3a2a1c"));
-    boot.position.set(0, -2.4, 0.2);
-    hip.add(boot);
-  }
-  const torso = new T.Mesh(new T.BoxGeometry(2.0, 1.9, 1.1), vest);
-  torso.position.y = 3.55;
-  for (const y of [3.2, 3.85]) {
-    const band = new T.Mesh(new T.BoxGeometry(2.05, 0.16, 1.15), strip);
-    band.position.y = y;
-    root.add(band);
-  }
-  for (const a of [0.78, -0.78]) {
-    const cross = new T.Mesh(new T.BoxGeometry(0.16, 2.1, 0.05), strip);
-    cross.position.set(0, 3.55, -0.58);
-    cross.rotation.z = a;
-    root.add(cross);
-  }
-  const armL = mkLimb(0.55, 2.0, shirt, 4.35);
-  armL.position.x = -1.3;
-  const armR = mkLimb(0.55, 2.0, shirt, 4.35);
-  armR.position.x = 1.3;
-  const head = new T.Mesh(new T.SphereGeometry(0.55, 12, 10), skin);
-  head.position.y = 5.0;
-  const hat = new T.Mesh(new T.SphereGeometry(0.62, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), lambert("#f2f2f2"));
-  hat.position.y = 5.2;
-  const brim = new T.Mesh(new T.CylinderGeometry(0.75, 0.75, 0.08, 16), lambert("#f2f2f2"));
-  brim.position.set(0, 5.22, 0.12);
-  const torch = new T.Mesh(new T.CylinderGeometry(0.14, 0.14, 0.7, 8), lambert("#222"));
-  torch.rotation.x = Math.PI / 2;
-  torch.position.set(0, -2.0, 0.35);
-  armR.add(torch);
-  const beam = new T.Mesh(new T.CylinderGeometry(0.15, 2.6, 12, 16, 1, true), glow("#fff4d1", 0.18));
-  beam.rotation.x = Math.PI / 2;
-  beam.position.set(0, -2.0, 6.6);
-  armR.add(beam);
-  if (lantern) {
-    const lamp = new T.Mesh(new T.CylinderGeometry(0.3, 0.3, 0.6, 10), new T.MeshBasicMaterial({ color: lantern, toneMapped: false }));
-    lamp.position.set(0, -2.2, 0.2);
-    const halo = new T.Mesh(new T.SphereGeometry(1.1, 12, 8), glow(lantern, 0.35));
-    halo.position.copy(lamp.position);
-    armL.add(lamp, halo);
-  }
-  root.add(hipL, hipR, torso, armL, armR, head, hat, brim);
-  root.traverse((o) => (o.frustumCulled = false));
-  return { root, hipL, hipR, armL, armR, beam };
-}
+export { buildWorker } from "./crewModels";
 
 // ---------------------------------------------------------------- work zone
 
@@ -687,7 +632,7 @@ export function buildCabinet(): CabinetModel {
     for (let c = 0; c < 5; c++) {
       const mat = new T.MeshBasicMaterial({ color: "#ff3b1f", toneMapped: false });
       const led = new T.Mesh(new T.PlaneGeometry(0.35, 0.35), mat);
-      led.position.set(-1.4 + c * 0.7, 5.2 - r * 0.9, 1.23);
+      led.position.set(-1.4 + c * 0.7, 5.65 - r * 1.44, 1.25);
       g.add(led);
       leds.push(mat);
     }
@@ -695,13 +640,18 @@ export function buildCabinet(): CabinetModel {
   const beaconMat = new T.MeshBasicMaterial({ color: "#ff2a2a", toneMapped: false });
   const beacon = new T.Mesh(new T.CylinderGeometry(0.45, 0.5, 0.8, 12), beaconMat);
   beacon.position.y = 7.4;
-  const sweep = new T.Mesh(new T.CylinderGeometry(0.3, 9, 22, 16, 1, true, 0, Math.PI / 3), glow("#ff2a2a", 0.22));
-  sweep.rotation.z = Math.PI / 2;
-  const sweepPivot = new T.Group();
-  sweepPivot.position.y = 7.4;
-  sweepPivot.add(sweep);
-  sweep.position.x = 11;
-  g.add(beacon, sweepPivot);
+  g.add(beacon);
+  // Projecting relay modules, plug bases and a terminal strip inside the open case.
+  const housing = lambert("#46504e"), label = lambert("#d8d2bf");
+  for (const y of [1.9, 3.35, 4.8]) {
+    for (const x of [-1.2, 0, 1.2]) {
+      const relay = new T.Mesh(new T.BoxGeometry(.89, .88, .36), housing);
+      relay.position.set(x, y, 1.37);
+      const tag = new T.Mesh(new T.BoxGeometry(.56, .16, .04), label);
+      tag.position.set(x, y + .19, 1.57);
+      g.add(relay, tag);
+    }
+  }
   g.traverse((o) => (o.frustumCulled = false));
   return {
     group: g,
@@ -712,8 +662,7 @@ export function buildCabinet(): CabinetModel {
         else m.color.set(Math.sin(time * 9 + i * 1.7) > 0.2 ? "#ff3b1f" : "#3a0c06").multiplyScalar(flicker);
       });
       beaconMat.color.set(state === "ok" ? "#103a22" : "#ff2a2a");
-      sweepPivot.visible = state !== "ok";
-      sweepPivot.rotation.y = time * 4;
+
     },
   };
 }

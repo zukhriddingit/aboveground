@@ -7,6 +7,7 @@
 // a protected work zone and the crew. Fixing it plays the repair down there, then the trains pull out
 // and the street closes again. Surface stops get the same work zone down the median (SurfaceStation).
 import * as T from "three";
+import { RESTORE_AT as FIXED_AT } from "./repairCrew";
 import type { CustomLayerInterface, CustomRenderMethodInput, GeoJSONSource, Map as MapLibreMap } from "maplibre-gl";
 import { LINE_COLORS, routeLine } from "@/lib/theme";
 import type { MapViewMode } from "@/components/map";
@@ -37,9 +38,7 @@ const WELD = [new T.Color("#ffffff"), new T.Color("#cfe9ff"), new T.Color("#ffd3
 const RESTORE = [GREEN, new T.Color("#ffffff"), new T.Color("#9fffd0")];
 
 /** Repair timeline, seconds after the crew starts. */
-const WELD_START = 1.3;
-const FIXED_AT = 3.6;
-const CLOSE_AT = 8.6;
+const CLOSE_AT = FIXED_AT + 4;
 
 export interface RepairCallbacks {
   /** Fires when the fix lands: clear the alert and release the trains here. */
@@ -429,12 +428,6 @@ class FixLayer implements CustomLayerInterface {
       cut.beginRepair(now);
     }
 
-    if (t > WELD_START && t < FIXED_AT) {
-      const p = cut.weldPoint();
-      this.sparks.emit(p.x, p.y, p.z, 9, WELD, 22, 1.1, cut.floorY);
-      if (Math.random() < 0.3) this.puffs.emit(p.x, p.y, p.z, new T.Color("#9a978f"), 30, 3, 1, 1.4);
-    }
-
     if (t >= FIXED_AT && !run.restored) {
       cut.restore(now);
       this.restoreAt(run, xz, now);
@@ -481,10 +474,6 @@ class FixLayer implements CustomLayerInterface {
     if (!run.begun) {
       run.begun = true;
       st.beginRepair(now);
-    }
-    if (t > WELD_START && t < FIXED_AT) {
-      const p = st.weldPoint();
-      this.sparks.emit(p.x, p.y, p.z, 9, WELD, 22, 1.1, st.floorY);
     }
     if (t >= FIXED_AT && !run.restored) {
       st.restore(now);
