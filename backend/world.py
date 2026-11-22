@@ -20,6 +20,7 @@ import asyncio
 import json
 import logging
 import os
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -190,7 +191,8 @@ def _fetch_vehicles() -> list[dict[str, Any]]:
 def _fetch_next_minutes() -> dict[str, int]:
     ids = ",".join(STATIONS_BY_ID)
     doc = _mbta_get(
-        f"/predictions?filter[stop]={ids}&include=stop"
+        # Subway only (light rail 0, heavy rail 1): bus/busway arrivals at the same stops must not overwrite it.
+        f"/predictions?filter[stop]={ids}&filter[route_type]=0,1&include=stop"
         "&fields[prediction]=arrival_time,departure_time,schedule_relationship&fields[stop]=name"
     )
     parent: dict[str, str] = {}
@@ -203,6 +205,8 @@ def _fetch_next_minutes() -> dict[str, int]:
         a = p.get("attributes") or {}
         if a.get("schedule_relationship") in ("SKIPPED", "CANCELLED"):
             continue
+        if a.get("departure_time") is None:
+            continue  # a train terminating here: riders can't board it
         at = _iso(a.get("departure_time")) or _iso(a.get("arrival_time"))
         if at is None or at < now - 30:
             continue
@@ -227,12 +231,14 @@ async def _poll_forever() -> None:
                 next_predictions = now + PREDICTION_POLL_S
                 minutes = await asyncio.to_thread(_fetch_next_minutes)
                 _state.update(next_min=minutes, next_min_at=time.time())
-        except (urllib.error.URLError, TimeoutError, OSError, ValueError) as exc:
+        except Exception as exc:  # URLError/HTTPError (429), http.client.HTTPException, bad JSON: never kill the poller
             if _state["last_error"] is None:
                 log.warning("MBTA V3 unreachable, serving mock trains (%s)", exc)
             _state["last_error"] = f"{type(exc).__name__}: {exc}"[:200]
-            # Back off a little more after a failure (and after a 429).
-            next_vehicles = max(next_vehicles, time.monotonic() + 20)
+            # Back off both feeds a little more after a failure (and after a 429).
+            retry_at = time.monotonic() + 20
+            next_vehicles = max(next_vehicles, retry_at)
+            next_predictions = max(next_predictions, retry_at)
         await asyncio.sleep(1)
 
 
@@ -276,14 +282,17 @@ def status() -> dict[str, Any]:
 # so the backend picks the same problem, title and mini-game the page would pick offline.
 # ---------------------------------------------------------------------------
 
+# First match wins. A "track problem" beats PLANNED_WORK's "shuttle" (Chinatown: shuttles *because of* a track
+# problem), and a disabled train beats a signal problem (Harvard: "signal problem and a disabled train").
 _RULES: list[tuple[str, tuple[str, ...]]] = [
     ("EMERGENCY", ("medical", "police", "fire department", "emergency", "unattended", "injur")),
+    ("TRACK", ("track problem", "track defect", "broken rail")),
     ("PLANNED_WORK", ("upgrade", "shuttle", "construction", "maintenance", "accessib", "renovat", "not stopping", "closed", "track work", "scheduled")),
+    ("DISABLED_TRAIN", ("disabled", "mechanical", "stalled")),
     ("SIGNAL", ("signal", "track circuit", "relay")),
     ("FROZEN", ("frozen", "freez", " ice ", "snow")),
     ("SWITCH", ("switch",)),
     ("POWER", ("power", "overhead wire", "third rail", "electrical")),
-    ("DISABLED_TRAIN", ("disabled", "mechanical", "stalled")),
     ("TRACK", ("track", "rail", "screech")),
 ]
 
@@ -338,6 +347,8 @@ _PROBLEMS: list[tuple[str, str]] = [
 
 _SHORT = {"place-hymnl": "Hynes", "place-pktrm": "Park St"}
 
+# trigger_alert runs on the event loop, get_world/resolve_alert in the threadpool: one lock for both dicts.
+_alerts_lock = threading.Lock()
 _trigger_count: dict[str, int] = {}
 _alerts: dict[str, tuple[dict[str, Any], float]] = {}
 
@@ -358,8 +369,9 @@ async def build_alert(station_id: str) -> tuple[dict[str, Any], str]:
     The four 2026 scenarios come first, then a rotation of problems; Gemini only if it answers within 4 s."""
     st = STATIONS_BY_ID.get(station_id) or {"id": station_id, "name": ai.STATION_NAMES.get(station_id, station_id), "line": ai.STATION_LINES.get(station_id, "Green")}
     name, line = st["name"], st["line"]
-    n = _trigger_count.get(station_id, 0)
-    _trigger_count[station_id] = n + 1
+    with _alerts_lock:
+        n = _trigger_count.get(station_id, 0)
+        _trigger_count[station_id] = n + 1
     raw = _raw_for(station_id, name, line, n)
     category = classify(raw)
     alert_id = f"alert-{station_id}-{int(time.time() * 1000):x}"
@@ -393,9 +405,11 @@ async def build_alert(station_id: str) -> tuple[dict[str, Any], str]:
 
 def active_alerts() -> list[dict[str, Any]]:
     now = time.time()
-    for aid in [k for k, (_, at) in _alerts.items() if now - at > ALERT_TTL_S]:
-        _alerts.pop(aid, None)
-    return [a for a, _ in sorted(_alerts.values(), key=lambda x: x[1])]
+    with _alerts_lock:
+        for aid in [k for k, (_, at) in _alerts.items() if now - at > ALERT_TTL_S]:
+            _alerts.pop(aid, None)
+        live = list(_alerts.values())
+    return [a for a, _ in sorted(live, key=lambda x: x[1])]
 
 
 # ---------------------------------------------------------------------------
@@ -430,13 +444,16 @@ def list_alerts() -> list[dict[str, Any]]:
 async def trigger_alert(body: Optional[TriggerAlertRequest] = None) -> dict[str, Any]:
     station_id = (body.station_id if body else None) or "place-boyls"
     alert, source = await build_alert(station_id)
-    _alerts[alert["id"]] = (alert, time.time())
+    with _alerts_lock:
+        _alerts[alert["id"]] = (alert, time.time())
     # `source` is extra to TriggerAlertResponse (which only promises `alert`): who wrote the explanation.
     return {"alert": alert, "source": source}
 
 
 @router.post("/alerts/{alert_id}/resolve")
 def resolve_alert(alert_id: str) -> dict[str, Any]:
-    if _alerts.pop(alert_id, None) is None:
+    with _alerts_lock:
+        removed = _alerts.pop(alert_id, None)
+    if removed is None:
         raise HTTPException(status_code=404, detail="No active alert with that id")
     return {"id": alert_id, "resolved": True, "resolvedAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")}
