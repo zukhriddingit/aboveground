@@ -75,6 +75,7 @@ from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 import ai_translator  # noqa: E402
 import world  # noqa: E402
 from ai_routes import router as ai_router  # noqa: E402
+from auth import router as auth_router  # noqa: E402
 from community import router as community_router  # noqa: E402
 from reports import router as reports_router  # noqa: E402
 from stories import router as stories_router  # noqa: E402
@@ -89,7 +90,7 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(title="AboveGround backend", version="1.0.0", lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
-for router in (world.router, stories_router, community_router, reports_router, ai_router):
+for router in (world.router, stories_router, community_router, reports_router, ai_router, auth_router):
     app.include_router(router)
 
 

@@ -1,6 +1,7 @@
 "use client";
 
-import { Check, Dices, Lock, X } from "lucide-react";
+import { Check, Dices, Lock, Shirt, X } from "lucide-react";
+import { AccountSection } from "@/components/account/AccountSection";
 import { ANONYMOUS_NAME, DEFAULT_RIDER_NAME, setRiderProfile, useRiderProfile } from "@/lib/riderProfile";
 import { BUTTON, FOCUS, LABEL, PANEL } from "@/lib/ui";
 import type { AvatarHat } from "@/types/tverse";
@@ -45,7 +46,14 @@ export function RiderProfilePopover({
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+        <AccountSection />
         <section className="space-y-3 border-b border-white/12 px-3.5 py-3">
+          {/* The avatar customizer (components/avatar) listens for this event and opens over the map. */}
+          <button type="button" onClick={() => { window.dispatchEvent(new Event("aboveground:open-avatar-customizer")); onClose(); }}
+            className={`${BUTTON} ${FOCUS} h-9 w-full px-3 text-sm`}>
+            <Shirt className="size-4" />
+            Customize avatar
+          </button>
           <div>
             <label htmlFor="rider-name" className={LABEL}>
               Display name
