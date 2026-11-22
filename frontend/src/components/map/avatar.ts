@@ -239,7 +239,7 @@ export class AvatarRig {
   }
 
   /** Per-frame pose. `riding` 0..1 blends idle into the board-surfing stance. */
-  update(t: number, dt: number, riding: boolean, speed: number) {
+  update(t: number, dt: number, riding: boolean, speed: number, glowStrength: number) {
     const k = 1 - Math.exp(-dt * 4);
     this.riding += ((riding ? 1 : 0) - this.riding) * k;
     this.lean += (Math.min(1.4, speed) * this.riding - this.lean) * k;
@@ -265,13 +265,13 @@ export class AvatarRig {
     this.legL.rotation.x = r * 0.18;
     this.legR.rotation.x = -r * 0.18;
 
-    this.boardGlow.opacity = 0.7 + 0.3 * Math.sin(t * 6) * 0.5 + 0.3 * r;
-    this.underGlow.opacity = 0.25 + 0.35 * r + 0.08 * Math.sin(t * 3);
+    this.boardGlow.opacity = glowStrength * (0.7 + 0.3 * Math.sin(t * 6) * 0.5 + 0.3 * r);
+    this.underGlow.opacity = glowStrength * (0.25 + 0.35 * r + 0.08 * Math.sin(t * 3));
     this.marker.position.y = 2.95 + Math.sin(t * 2.2) * 0.12;
     this.marker.rotation.y = t * 2;
     const pulse = (t * 0.6) % 1;
     this.ring.scale.setScalar(1 + pulse * 0.8);
-    this.ring.material.opacity = 0.65 * (1 - pulse) * (1 - r * 0.6);
+    this.ring.material.opacity = glowStrength * (0.65 * (1 - pulse) * (1 - r * 0.6));
 
     // Hat pop: overshoot in, with a little drop from above.
     if (this.hat.group && this.hat.born >= 0) {

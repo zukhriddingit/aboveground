@@ -1,5 +1,5 @@
 // The 3D side of Fix the T: a second Three.js layer on Member 2's map (added through
-// TVerseMapHandle.getMap(), so components/map stays untouched) plus a MapLibre line layer that
+// TVerseMapHandle.getMap()) plus a GeoJSON line layer that
 // paints the broken track segment.
 //
 // When something breaks, the street opens over where it really is (TunnelCutaway): usually an
@@ -8,8 +8,10 @@
 // and the street closes again. Surface stops get the same work zone down the median (SurfaceStation).
 import * as T from "three";
 import { RESTORE_AT as FIXED_AT } from "./repairCrew";
-import type { CustomLayerInterface, CustomRenderMethodInput, GeoJSONSource, Map as MapLibreMap } from "maplibre-gl";
+import type { CustomLayerInterface, GeoJSONSource, Map as MapLibreMap } from "maplibre-gl";
 import { LINE_COLORS, routeLine } from "@/lib/theme";
+import { mercatorToClip, type CustomFrame } from "@/components/map/customProjection";
+import { standardMap } from "@/components/map/mapEngine";
 import type { MapViewMode } from "@/components/map";
 import type { Station, StationId } from "@/types/tverse";
 import { Puffs, Sparks } from "./fx";
@@ -167,9 +169,9 @@ class FixLayer implements CustomLayerInterface {
     this.map = undefined;
   }
 
-  render(_gl: WebGLRenderingContext | WebGL2RenderingContext, args: CustomRenderMethodInput) {
+  render(_gl: WebGLRenderingContext | WebGL2RenderingContext, args: CustomFrame) {
     if (!this.renderer || !this.map || !this.enabled) return;
-    const matrix = args.defaultProjectionData.mainMatrix as unknown as ArrayLike<number>;
+    const matrix = mercatorToClip(args);
     if (!matrix || matrix.length !== 16) return;
     const now = performance.now();
     const dt = this.lastFrame ? Math.min(0.1, (now - this.lastFrame) / 1000) : 1 / 60;
@@ -329,10 +331,21 @@ class FixLayer implements CustomLayerInterface {
   private buildingsNear(id: StationId): XZ[][] {
     const map = this.map;
     const center = this.sim.stationXZ(id);
-    if (!map || !center || !map.getSource(BASEMAP_SOURCE)) return [];
+    if (!map || !center) return [];
+    const standard = standardMap(map);
+    // Standard exposes its footprints through a public featureset. Query only the
+    // work zone, once when the street opens, using tiles already on screen.
+    const nearby = () => {
+      if (!standard) return map.getSource(BASEMAP_SOURCE) ? map.querySourceFeatures(BASEMAP_SOURCE, { sourceLayer: "building" }) : [];
+      const corners = [[-260, -260], [-260, 260], [260, -260], [260, 260]]
+        .map(([x, z]) => standard.project(toLngLat(center.x + x, center.z + z)));
+      const xs = corners.map(p => p.x), ys = corners.map(p => p.y);
+      return standard.queryRenderedFeatures([[Math.min(...xs), Math.min(...ys)], [Math.max(...xs), Math.max(...ys)]],
+        { target: { featuresetId: "buildings", importId: "basemap" } });
+    };
     const rings: XZ[][] = [];
-    for (const f of map.querySourceFeatures(BASEMAP_SOURCE, { sourceLayer: "building" })) {
-      if (Number(f.properties?.render_min_height ?? 0) > 3) continue;
+    for (const f of nearby()) {
+      if (Number(f.properties?.render_min_height ?? f.properties?.min_height ?? 0) > 3) continue;
       const g = f.geometry;
       const polys = g.type === "Polygon" ? [g.coordinates] : g.type === "MultiPolygon" ? g.coordinates : [];
       for (const poly of polys) {
@@ -518,7 +531,7 @@ class FixLayer implements CustomLayerInterface {
   }
 }
 
-/** Attach Fix the T's 3D effects to the MapLibre map behind a TVerseMap. */
+/** Attach Fix the T's 3D effects to the active map behind a TVerseMap. */
 export class FixTheTScene {
   private readonly layer: FixLayer;
   private frame = 0;
@@ -538,15 +551,18 @@ export class FixTheTScene {
       map.addSource(TRACK_SOURCE, { type: "geojson", data: { type: "FeatureCollection", features: [] } });
     }
     // Under the buildings, like the T lines themselves, so it never paints across a facade.
-    const before = map.getLayer("building-edges") ? "building-edges" : map.getLayer(MAP_3D_LAYER) ? MAP_3D_LAYER : undefined;
+    const standard = standardMap(map);
+    const before = standard ? undefined : map.getLayer("building-edges") ? "building-edges" : MAP_3D_LAYER;
     if (!map.getLayer(TRACK_LAYER)) {
       map.addLayer(
         {
           id: TRACK_LAYER,
+          ...(standard ? { slot: "middle" } : {}),
           type: "line",
           source: TRACK_SOURCE,
           layout: { "line-cap": "round", "line-join": "round" },
           paint: {
+            ...(standard ? { "line-emissive-strength": 1 } : {}),
             "line-color": ["match", ["get", "status"], "restored", "#38ff9c", "#ff2b4a"],
             "line-width": ["interpolate", ["linear"], ["zoom"], 12, 6, 16, 16, 18, 12],
             "line-blur": 3,
@@ -556,7 +572,7 @@ export class FixTheTScene {
         before,
       );
     }
-    map.addLayer(this.layer, map.getLayer("station-names") ? "station-names" : undefined);
+    map.addLayer(this.layer, standard ? undefined : "station-names");
     this.wake();
   }
 
@@ -565,7 +581,7 @@ export class FixTheTScene {
    * all is quiet it drops to a cheap timer that just watches for the next incident or repair.
    */
   private wake() {
-    if (this.disposed || this.frame) return;
+    if (this.disposed || this.frame || this.mode === "2d") return;
     window.clearTimeout(this.idleTimer);
     this.idleTimer = 0;
     const loop = (t: number) => {
@@ -601,16 +617,18 @@ export class FixTheTScene {
     if (mode === this.mode) return;
     this.mode = mode;
     this.layer.enabled = mode === "3d";
-    try {
-      if (this.map.getLayer(this.layer.id)) this.map.setLayoutProperty(this.layer.id, "visibility", mode === "3d" ? "visible" : "none");
-    } catch {
-      // style mid-reload; `enabled` already keeps the layer from drawing
-    }
+    // A custom layer has no layout properties in Mapbox. Its enabled flag gates
+    // the entire draw; the ordinary incident line has its own visibility switch.
+    this.map.setLayoutProperty(TRACK_LAYER, "visibility", this.layer.enabled ? "visible" : "none");
     if (mode === "2d") {
+      cancelAnimationFrame(this.frame);
+      this.frame = 0;
+      window.clearTimeout(this.idleTimer);
       // Trains hidden inside an open cutaway come back as ordinary map trains.
       this.sim.setHidden(EMPTY);
       this.layer.finishRepair();
     } else {
+      this.wake();
       this.map.triggerRepaint();
     }
   }

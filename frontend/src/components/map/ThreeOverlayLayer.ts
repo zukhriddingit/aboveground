@@ -1,18 +1,21 @@
-// The T-Verse 3D layer: one Three.js scene drawn inside MapLibre's WebGL context.
+// The T-Verse 3D layer: one Three.js scene drawn inside the active map's WebGL context.
 //
 // Scene units are meters around ORIGIN (x east, y up, z south; see geo.ts). Every frame the
-// camera reproduces MapLibre's local-to-clip transform for both rendering and picking.
+// camera reproduces the map's local-to-clip transform for both rendering and picking.
 import * as T from "three";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
-import type { CustomLayerInterface, CustomRenderMethodInput, FilterSpecification, Map as MapLibreMap } from "maplibre-gl";
+import type { CustomLayerInterface, FilterSpecification, Map as MapLibreMap } from "maplibre-gl";
 import type { AvatarHat, Crowdedness, Station, StationId, TLinesGeoJson, TrainVehicle } from "@/types/tverse";
-import { CROWDEDNESS, LINE_GLOW, routeLine } from "@/lib/theme";
+import { CROWDEDNESS, LINE_COLORS, LINE_GLOW, routeLine } from "@/lib/theme";
+import { mercatorToClip, type CustomFrame } from "./customProjection";
+import type { MapTheme } from "./mapTheme";
 import { AvatarRig, AVATAR_HEIGHT } from "./avatar";
 import { angleDelta, bearingToYaw, MODEL_MATRIX, toLngLat, toLocal } from "./geo";
 import { allowStationModel, stationModelAllowed, loadStationModel, loadStationSite, StationModel, STATION_MODEL, stationYaw } from "./stationModels";
 import { landmarkPosition } from "./landmarks";
 import { DEFAULT_MAP_LAYERS, type MapLayerVisibility, type MapViewMode, type ScreenPoint } from "./types";
 
+const WHITE = new T.Color("#ffffff");
 const TAU = Math.PI * 2;
 const UP = new T.Vector3(0, 1, 0);
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
@@ -460,6 +463,12 @@ export class ThreeOverlayLayer implements CustomLayerInterface {
   private map?: MapLibreMap;
   private renderer?: T.WebGLRenderer;
   private readonly scene = new T.Scene();
+  private readonly key = new T.DirectionalLight(0xffddbd, 1.52);
+  private readonly rim = new T.DirectionalLight(0xb0ceff, 1.45);
+  private readonly sky = new T.HemisphereLight(0xdce9ff, 0x596578, .83);
+  private theme: MapTheme = "dark";
+  private glowStrength = 1;
+  private readonly cameraBack = new T.Vector3();
   private readonly camera = new T.PerspectiveCamera();
   private readonly localToClip = new T.Matrix4();
   private readonly localCamera = new T.Matrix4();
@@ -527,7 +536,7 @@ export class ThreeOverlayLayer implements CustomLayerInterface {
     }
   }
 
-  // ------------------------------------------------------------ MapLibre hooks
+  // ------------------------------------------------------------ Custom layer hooks
 
   onAdd(map: MapLibreMap, gl: WebGLRenderingContext | WebGL2RenderingContext) {
     this.map = map;
@@ -542,11 +551,9 @@ export class ThreeOverlayLayer implements CustomLayerInterface {
     this.renderer = new T.WebGLRenderer({ canvas: map.getCanvas(), context: gl, antialias: true });
     this.renderer.autoClear = false;
     this.renderer.outputColorSpace = T.SRGBColorSpace;
-    const key = new T.DirectionalLight(0xffddbd, 1.52);
-    key.position.set(-5, 4, 3);
-    const rim = new T.DirectionalLight(0xb0ceff, 1.45);
-    rim.position.set(3, 2, -4);
-    this.scene.add(key, rim, new T.HemisphereLight(0xdce9ff, 0x596578, .83));
+    this.key.position.set(-5, 4, 3);
+    this.rim.position.set(3, 2, -4);
+    this.scene.add(this.key, this.rim, this.sky);
     if (this.renderer.extensions.has("EXT_color_buffer_float")) {
       const room = new RoomEnvironment();
       const pmrem = new T.PMREMGenerator(this.renderer);
@@ -591,17 +598,21 @@ export class ThreeOverlayLayer implements CustomLayerInterface {
     this.renderer = undefined;
   }
 
-  render(_gl: WebGLRenderingContext | WebGL2RenderingContext, args: CustomRenderMethodInput) {
+  render(_gl: WebGLRenderingContext | WebGL2RenderingContext, args: CustomFrame) {
     if (!this.renderer || !this.map || this.mode === "2d") return;
-    const matrix = args.defaultProjectionData.mainMatrix as unknown as ArrayLike<number>;
+    const matrix = mercatorToClip(args);
     if (!matrix || matrix.length !== 16) return;
     this.measure();
     this.localToClip.fromArray(matrix).multiply(MODEL_MATRIX);
-    // Recover the actual eye and axes from MapLibre's projection. The pixel/metre
-    // scale belongs in the projection so PBR view vectors and billboards use metres.
-    this.camera.projectionMatrix.fromArray(args.projectionMatrix);
-    this.localCamera.copy(this.localToClip).invert().multiply(this.camera.projectionMatrix);
-    this.localCamera.decompose(this.camera.position, this.camera.quaternion, this.v3);
+    // Inverse perspective maps clip (0,0,1,0) to the eye, and clip X and Y
+    // directions to the camera's local right and up. Recover a metre-scale camera
+    // for raycasting, billboards and PBR even when only the combined matrix is given.
+    this.localCamera.copy(this.localToClip).invert();
+    this.camera.position.setFromMatrixColumn(this.localCamera, 2).divideScalar(this.localCamera.elements[11]);
+    this.v3.setFromMatrixColumn(this.localCamera, 0).normalize();
+    this.v3b.setFromMatrixColumn(this.localCamera, 1).normalize();
+    this.cameraBack.crossVectors(this.v3, this.v3b).normalize();
+    this.camera.quaternion.setFromRotationMatrix(this.localCamera.makeBasis(this.v3, this.v3b, this.cameraBack));
     this.camera.updateMatrixWorld();
     this.camera.projectionMatrix.multiplyMatrices(this.localToClip, this.camera.matrixWorld);
     this.camera.projectionMatrixInverse.copy(this.camera.projectionMatrix).invert();
@@ -633,6 +644,32 @@ export class ThreeOverlayLayer implements CustomLayerInterface {
   }
 
   // ------------------------------------------------------------ stations + alerts
+
+  setTheme(theme: MapTheme) {
+    if (theme === this.theme) return;
+    this.theme = theme;
+    const day = theme === "light";
+    this.glowStrength = day ? .35 : 1;
+    this.key.color.set(day ? "#fff2d7" : "#ffddbd");
+    this.key.intensity = day ? 1.8 : 1.52;
+    this.rim.intensity = day ? .7 : 1.45;
+    this.sky.groundColor.set(day ? "#c6baa6" : "#596578");
+    this.sky.intensity = day ? 1.2 : .83;
+    for (const [line, material] of this.coreMats) this.tintTrain(material, line);
+    for (const material of this.haloMats.values()) material.opacity = .26 * this.glowStrength;
+    for (const node of this.stations.values()) this.tintStation(node);
+    for (const node of this.landmarks.values()) node.gem.material.color.set(day ? "#ac751e" : "#fff2c2");
+    this.map?.triggerRepaint();
+  }
+
+  private tintStation(node: StationNode) {
+    const day = this.theme === "light";
+    node.base.set((day ? LINE_COLORS : LINE_GLOW)[node.station.line]);
+    // Normal alpha keeps ink-coloured wayfinding marks legible on sunlit ground.
+    const blend = day ? T.NormalBlending : T.AdditiveBlending;
+    node.beam.material.blending = node.ring.material.blending = blend;
+    node.alert.frame.blending = node.alert.fill.blending = node.alert.bang.blending = blend;
+  }
 
   setPresentation(mode: MapViewMode, visible: MapLayerVisibility) {
     this.mode = mode;
@@ -672,8 +709,8 @@ export class ThreeOverlayLayer implements CustomLayerInterface {
       }
       const wasAlert = node.station.hasActiveAlert;
       node.station = station;
-      node.base.set(LINE_GLOW[station.line] ?? LINE_GLOW.Green);
       if (moved) {
+        this.tintStation(node);
         toLocal(station.lng, station.lat, 0, node.pos);
         if (node.model?.anchor) toLocal(...node.model.anchor, 0, node.group.position);
         else node.group.position.copy(node.pos);
@@ -939,6 +976,8 @@ export class ThreeOverlayLayer implements CustomLayerInterface {
         node.alert.group.position.set(80, 0, 40);
       }
 
+      beamMat.uniforms.strength.value *= this.glowStrength;
+      node.ring.material.opacity *= this.glowStrength;
       const holo = node.alert;
       holo.group.visible = a > .01;
       if (!holo.group.visible) continue;
@@ -1049,7 +1088,7 @@ export class ThreeOverlayLayer implements CustomLayerInterface {
     const group = new T.Group();
     const beam = new T.Mesh(tube, beamMaterial(GOLD));
     beam.scale.set(20, LANDMARK_H, 20);
-    const gem = new T.Mesh(diamondGeo, new T.MeshBasicMaterial({ color: "#fff2c2", toneMapped: false }));
+    const gem = new T.Mesh(diamondGeo, new T.MeshBasicMaterial({ color: this.theme === "light" ? "#ac751e" : "#fff2c2", toneMapped: false }));
     gem.scale.set(22, 32, 22);
     gem.position.y = LANDMARK_H + 34;
     const gemGlow = new T.Mesh(diamondGeo, glow(GOLD, 0.35));
@@ -1085,10 +1124,10 @@ export class ThreeOverlayLayer implements CustomLayerInterface {
       const width = Math.min(1, node.level * 1.6);
       node.group.scale.set(zs * width, zs * Math.max(0.001, rise), zs * width);
       node.beam.material.uniforms.time.value = t * 1.3;
-      node.beam.material.uniforms.strength.value = node.level * (0.95 + 0.2 * Math.sin(t * 2.6));
+      node.beam.material.uniforms.strength.value = this.glowStrength * node.level * (0.95 + 0.2 * Math.sin(t * 2.6));
       node.gem.rotation.y = t * 1.1;
       node.gemGlow.rotation.y = -t * 0.8;
-      node.gemGlow.material.opacity = node.level * (0.28 + 0.12 * Math.sin(t * 3));
+      node.gemGlow.material.opacity = this.glowStrength * node.level * (0.28 + 0.12 * Math.sin(t * 3));
       const u = (t * 0.45) % 1;
       node.ring.scale.setScalar(40 + u * 60);
       node.ring.material.opacity = node.level * (1 - u) * 0.85;
@@ -1170,11 +1209,18 @@ export class ThreeOverlayLayer implements CustomLayerInterface {
     }
   }
 
+  private tintTrain(material: T.MeshBasicMaterial, route: string) {
+    const line = routeLine(route);
+    if (this.theme === "light") material.color.set(LINE_COLORS[line]);
+    else material.color.set(LINE_GLOW[line]).lerp(WHITE, .35);
+  }
+
   private coreMat(route: string) {
     const line = routeLine(route);
     let m = this.coreMats.get(line);
     if (!m) {
-      m = new T.MeshBasicMaterial({ color: new T.Color(LINE_GLOW[line]).lerp(new T.Color("#ffffff"), 0.35), toneMapped: false });
+      m = new T.MeshBasicMaterial({ toneMapped: false });
+      this.tintTrain(m, route);
       this.coreMats.set(line, m);
     }
     return m;
@@ -1184,7 +1230,7 @@ export class ThreeOverlayLayer implements CustomLayerInterface {
     const line = routeLine(route);
     let m = this.haloMats.get(line);
     if (!m) {
-      m = glow(LINE_GLOW[line], 0.26);
+      m = glow(LINE_GLOW[line], .26 * this.glowStrength);
       this.haloMats.set(line, m);
     }
     return m;
@@ -1234,7 +1280,7 @@ export class ThreeOverlayLayer implements CustomLayerInterface {
       node.yaw += angleDelta(node.yaw, targetYaw) * (1 - Math.exp(-dt * 3));
       node.group.rotation.y = node.yaw;
       const moving = u < 1 ? clamp01(node.speed / 12) : 0;
-      node.trail.material.uniforms.opacity.value = 0.18 + 0.5 * moving;
+      node.trail.material.uniforms.opacity.value = this.glowStrength * (0.18 + 0.5 * moving);
       let s = zs * easeOutBack(clamp01((t - node.born) / 0.6));
       if (node.dying !== null) {
         const k = clamp01((t - node.dying) / 0.5);
@@ -1322,13 +1368,13 @@ export class ThreeOverlayLayer implements CustomLayerInterface {
     }
     if (targetYaw !== null) this.avatarYaw += angleDelta(this.avatarYaw, targetYaw) * (1 - Math.exp(-dt * 5));
     root.rotation.y = this.avatarYaw;
-    this.avatar.update(t, dt, this.avatarRiding, this.avatarSpeed);
+    this.avatar.update(t, dt, this.avatarRiding, this.avatarSpeed, this.glowStrength);
 
     // Hover-board trail while riding.
     if (this.avatarRiding && this.avatarSpeed > 0.15) {
       this.trailTimer -= dt;
       while (this.trailTimer <= 0) {
-        this.trailTimer += 1 / 70;
+        this.trailTimer += 1 / (70 * this.glowStrength);
         const s = this.avatarSize / AVATAR_HEIGHT;
         const back = this.v3b.set(Math.sin(this.avatarYaw), 0, Math.cos(this.avatarYaw)); // +z of the rig = behind
         this.v3.set(

@@ -1,11 +1,9 @@
 "use client";
-// The 3D Boston map: MapLibre (OpenFreeMap tiles, dusk style, extruded buildings, glowing
-// T lines) with one Three.js custom layer for trains, station beacons, alert holograms,
-// tourist landmark beacons and the player's avatar. See ./types.ts for the public API.
 import { useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 // Types only: MapLibre itself is imported in an effect so it never runs on the server.
 import type * as maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
+import "mapbox-gl/dist/mapbox-gl.css";
 import type { FeatureCollection, LineString } from "geojson";
 import { MOCK_LINES } from "@/lib/mockData";
 import { BOSTON_CENTER } from "@/lib/theme";
@@ -16,7 +14,9 @@ import { MapOverlayContext, OverlayHub } from "./mapContext";
 import { StationInfoCard, TrainInfoCard } from "./MapInfoCard";
 import { PocketCityOverlay } from "./PocketCityOverlay";
 import { pickFlat, registerTransitIcons, setFlatStations, setFlatTrains } from "./flatTransit";
-import { createMapStyle, setBasemapMode, setTransitVisibility, WINDOW_IMAGES, windowTexture } from "./mapStyle";
+import { getMapEngine, loadMapLibrary, standardMap, switchMapEngine } from "./mapEngine";
+import { useMapLighting } from "./mapTheme";
+import { addStandardTransit, createMapStyle, setBasemapMode, setTransitVisibility } from "./mapStyle";
 import { DemoRide, RIDE_COORDS, RIDE_STOPS } from "./rideRoute";
 import { ThreeOverlayLayer } from "./ThreeOverlayLayer";
 import { resolveMapLayers, type FlyOptions, type MapViewMode, type TVerseMapHandle, type TVerseMapProps } from "./types";
@@ -158,6 +158,9 @@ export default function TVerseMap(props: TVerseMapProps) {
   const mapRef = useRef<maplibregl.Map | null>(null);
   const layerRef = useRef<ThreeOverlayLayer | null>(null);
   const latest = useRef(props);
+  const { theme, preset, mode: themeMode } = useMapLighting();
+  const lighting = useRef({ theme, preset, themeMode });
+  const [mapFailed, setMapFailed] = useState(false);
   const [hub] = useState(() => new OverlayHub());
   const overlay = useMemo(() => ({ project: hub.project, subscribe: hub.subscribe, visibleLayers: layers, viewMode }), [hub, layers, viewMode]);
   const [ride] = useState(() => new RideState());
@@ -168,6 +171,7 @@ export default function TVerseMap(props: TVerseMapProps) {
 
   useEffect(() => {
     latest.current = props;
+    lighting.current = { theme, preset, themeMode };
   });
 
   // ------------------------------------------------------------ map lifecycle
@@ -184,43 +188,65 @@ export default function TVerseMap(props: TVerseMapProps) {
       layer.setAvatarLocal(home.x, home.z, null, false, 0);
     };
 
-    void import("maplibre-gl").then(lib => {
-      if (cancelled) return;
-      lib.setWorkerUrl("/maplibre/maplibre-gl-worker.mjs");
+    const engine = getMapEngine();
+    let leaving = false;
+    const fallback = () => {
+      if (cancelled || leaving) return;
+      leaving = true;
+      switchMapEngine("maplibre");
+    };
+    const toggleEngine = (event: KeyboardEvent) => {
+      if (!event.shiftKey || event.key.toLowerCase() !== "m" || event.repeat || event.ctrlKey || event.metaKey || event.altKey) return;
+      if (event.target instanceof HTMLElement && (event.target.isContentEditable || event.target.closest("input, textarea, select"))) return;
+      event.preventDefault();
+      switchMapEngine(engine === "mapbox" ? "maplibre" : "mapbox");
+    };
+    window.addEventListener("keydown", toggleEngine);
+    // Limit the initial script/style wait. A moving Demo Ride can keep streaming tiles after the map is usable.
+    const watchdog = engine === "mapbox" ? window.setTimeout(fallback, 20_000) : undefined;
+    void loadMapLibrary().then(loaded => {
+      if (cancelled || leaving) return;
       const initial = latest.current.viewMode ?? "3d";
       cameraMode.current = initial;
-      const m = new lib.Map({
-        container: el, style: createMapStyle(), ...OVERVIEW, ...northUp(initial), zoom: overviewZoom(el.clientWidth), maxPitch: initial === "2d" ? 0 : 80,
-        canvasContextAttributes: { antialias: true }, attributionControl: { compact: true },
-      });
+      const options = { container: el, ...OVERVIEW, ...northUp(initial), zoom: overviewZoom(el.clientWidth), maxPitch: initial === "2d" ? 0 : 80 };
+      const initialPreset = lighting.current.themeMode === "auto" ? process.env.NEXT_PUBLIC_MAPBOX_LIGHT : undefined;
+      const m = loaded.engine === "mapbox"
+        ? new loaded.lib.Map({ ...options, style: "mapbox://styles/mapbox/standard", projection: "mercator", antialias: true,
+            config: { basemap: {
+              lightPreset: initialPreset && ["day", "dawn", "dusk", "night"].includes(initialPreset) ? initialPreset : lighting.current.preset,
+              show3dObjects: initial !== "2d", showTransitLabels: false, showPointOfInterestLabels: false,
+            } },
+          }) as unknown as maplibregl.Map
+        : new loaded.lib.Map({ ...options, style: createMapStyle(), canvasContextAttributes: { antialias: true }, attributionControl: { compact: true } });
+      map = m;
+      if (engine === "mapbox") m.on("error", fallback);
       if (initial === "2d") rotationControls(m, true);
       m.on("render", hub.emit);
-      map = m;
       mapRef.current = m;
       // Handy in the console while developing: __tverseMap.getZoom(), etc.
       if (process.env.NODE_ENV !== "production") (window as unknown as { __tverseMap?: maplibregl.Map }).__tverseMap = m;
 
-      // Lit-window facade textures for the buildings layer (generated, no sprite file).
-      const addWindows = (id: string) => {
-        const tier = WINDOW_IMAGES.indexOf(id as (typeof WINDOW_IMAGES)[number]);
-        if (tier >= 0 && !m.hasImage(id)) m.addImage(id, windowTexture(tier));
-      };
-      m.setMissingStyleImageResolver(addWindows);
-
       const loadNearby = () => allowNearbyModels(m, layerRef.current, latest.current);
       m.on("moveend", loadNearby);
 
-      m.on("style.load", () => {
+      const onStyleLoad = () => {
+        if (leaving || cancelled) return;
+        const standard = standardMap(m);
+        if (standard) {
+          standard.setCamera({ "camera-projection": "perspective" });
+          addStandardTransit(standard);
+        }
         const p = latest.current;
-        WINDOW_IMAGES.forEach(addWindows);
+        const { theme, preset } = lighting.current;
         const mode = p.viewMode ?? "3d";
         const visible = resolveMapLayers(p.visibleLayers);
         registerTransitIcons(m);
-        setBasemapMode(m, mode);
-        setTransitVisibility(m, mode, visible, !!p.touristMode);
+        setBasemapMode(m, mode, theme, preset);
+        setTransitVisibility(m, mode, visible, !!p.touristMode, theme);
         const previous = layerRef.current;
         const layer = previous && !previous.isDisposed ? previous : new ThreeOverlayLayer();
-        if (!m.getLayer(layer.id)) m.addLayer(layer, "station-names");
+        if (!m.getLayer(layer.id)) m.addLayer(layer, standard ? undefined : "station-names");
+        layer.setTheme(theme);
         layer.setPresentation(mode, visible);
         layerRef.current = layer;
         hub.connect((lng, lat, alt) => layer.project(lng, lat, alt));
@@ -250,6 +276,14 @@ export default function TVerseMap(props: TVerseMapProps) {
         }
         setReady(true);
         p.onReady?.();
+      };
+      m.on("style.load", () => {
+        if (engine === "mapbox") {
+          try {
+            onStyleLoad();
+            window.clearTimeout(watchdog);
+          } catch { fallback(); }
+        } else onStyleLoad();
       });
 
       // Any hand gesture pauses the ride camera for a moment.
@@ -314,10 +348,15 @@ export default function TVerseMap(props: TVerseMapProps) {
           m.getCanvas().style.cursor = hit ? "pointer" : "";
         });
       });
+    }).catch(() => {
+      if (engine === "mapbox") fallback();
+      else if (!cancelled) setMapFailed(true);
     });
 
     return () => {
       cancelled = true;
+      window.removeEventListener("keydown", toggleEngine);
+      window.clearTimeout(watchdog);
       cancelAnimationFrame(hoverFrame);
       ride.cancel();
       hub.connect(null);
@@ -354,9 +393,15 @@ export default function TVerseMap(props: TVerseMapProps) {
     if (!m || !ready) return;
     layerRef.current?.setPresentation(viewMode, layers);
     layerRef.current?.setTouristMode(touristMode && layers.tourist);
-    setTransitVisibility(m, viewMode, layers, touristMode);
+    setTransitVisibility(m, viewMode, layers, touristMode, theme);
     hub.emit();
-  }, [viewMode, layers, touristMode, ready, hub]);
+  }, [viewMode, layers, touristMode, theme, ready, hub]);
+
+  useEffect(() => {
+    if (!ready || !mapRef.current) return;
+    setBasemapMode(mapRef.current, viewMode, theme, preset);
+    layerRef.current?.setTheme(theme);
+  }, [viewMode, theme, preset, ready]);
 
   useEffect(() => {
     const m = mapRef.current;
@@ -365,7 +410,6 @@ export default function TVerseMap(props: TVerseMapProps) {
     const flat = viewMode === "2d";
     ride.gesture();
     m.stop();
-    setBasemapMode(m, viewMode);
     rotationControls(m, flat);
     const lock = () => {
       if (latest.current.viewMode !== "2d") return;
@@ -524,6 +568,7 @@ export default function TVerseMap(props: TVerseMapProps) {
     <div className={`${/\b(absolute|fixed|relative|sticky)\b/.test(className ?? "") ? "" : "relative"} overflow-hidden bg-[#070b1a] ${className ?? "h-full w-full"}`}>
       {/* Inline position: MapLibre's CSS sets .maplibregl-map { position: relative }, which beats a class. */}
       <div ref={container} style={{ position: "absolute", inset: 0 }} aria-label="Boston transit map with live T trains" />
+      {mapFailed && <p role="alert" className="absolute inset-x-0 top-1/2 text-center text-sm text-white">The map could not start. Check that WebGL is enabled and reload.</p>}
       <MapOverlayContext.Provider value={overlay}>
         <div className="pointer-events-none absolute inset-0 z-10">
           {viewMode === "3d" && touristMode && layers.tourist && stations.filter(s => s.landmark).map(s => (

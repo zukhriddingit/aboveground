@@ -7,10 +7,11 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "postinstall": "mkdir -p public/maplibre && cp node_modules/maplibre-gl/dist/maplibre-gl-worker.mjs public/maplibre/"
+    "postinstall": "mkdir -p public/maplibre public/mapbox && cp node_modules/maplibre-gl/dist/maplibre-gl-worker.mjs public/maplibre/ && cp node_modules/mapbox-gl/dist/mapbox-gl.js public/mapbox/"
   },
   "dependencies": {
     "lucide-react": "^1.77.0",
+    "mapbox-gl": "^3.35.2",
     "maplibre-gl": "^6.19.0",
     "next": "16.4.6",
     "react": "19.3.0",

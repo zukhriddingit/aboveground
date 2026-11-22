@@ -23,7 +23,7 @@ export function resolveMapLayers({
 export const DEFAULT_MAP_LAYERS = resolveMapLayers();
 
 export interface TVerseMapProps {
-  /** Defaults to the pitched dusk view. */
+  /** Defaults to the pitched 3D view. */
   viewMode?: MapViewMode;
   /** Omitted flags are visible. Tourist landmarks also require touristMode. */
   visibleLayers?: Partial<MapLayerVisibility>;
@@ -98,6 +98,6 @@ export interface TVerseMapHandle {
   /** Screen position (CSS px, relative to the map) of a point `altitude` meters above lng/lat. */
   project(lng: number, lat: number, altitude?: number): ScreenPoint | null;
   getAvatarLngLat(): [number, number];
-  /** The underlying MapLibre map, for anything not covered here. null until ready. */
+  /** The active GL map. Camera, events and sources share the MapLibre API. Null before initialization. */
   getMap(): MapLibreMap | null;
 }

@@ -50,7 +50,7 @@ export const FLAT_TRANSIT: LayerSpecification[] = [
     visibility: "none", "text-field": ["get", "title"], "text-font": ["Noto Sans Regular"],
     "text-size": 11, "text-max-width": 12, "text-variable-anchor": ["top", "bottom", "left", "right"],
     "text-radial-offset": 1.3, "text-padding": 3,
-  }, paint: { "text-color": "#705119", "text-halo-color": "#fffcf1", "text-halo-width": 1.6 } },
+  }, paint: { "text-color": "#f1cf85", "text-halo-color": "#181a22", "text-halo-width": 1.6 } },
   symbol("sight-marker", "sights", { "icon-image": "sight-marker" }),
   { ...symbol("delay-badge", "stations", { "icon-image": "delay-badge", "icon-offset": [-8, -9] }), filter: ["==", ["get", "alert"], true] },
 ];
@@ -92,10 +92,12 @@ const PICK_LAYERS: [string, PickHit["kind"]][] = [
   ["curb-pin", "station"], ["stop-disc", "station"], ["station-names", "station"],
 ];
 
+const pickLayers = PICK_LAYERS.map(([id]) => id);
+
 export function pickFlat(map: LibreMap, at: PointLike): PickHit | null {
-  const layers = PICK_LAYERS.map(([id]) => id).filter(id => map.getLayer(id) && map.getLayoutProperty(id, "visibility") !== "none");
-  if (!layers.length) return null;
-  const features = map.queryRenderedFeatures(at, { layers });
+  if (!map.getSource("stations")) return null;
+  // Both engines exclude hidden layers. Avoid serializing each layer on every hover.
+  const features = map.queryRenderedFeatures(at, { layers: pickLayers });
   for (const [layer, kind] of PICK_LAYERS) {
     const feature = features.find(f => f.layer.id === layer);
     if (feature) return { kind, id: feature.properties.id };
