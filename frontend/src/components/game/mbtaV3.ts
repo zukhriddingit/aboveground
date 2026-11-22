@@ -462,6 +462,204 @@ const TEXT_SCENARIOS: Array<[RegExp, GameKind, string]> = [
   [/\brail|\btrack|\bties?\b/i, "TRACK_WELD", "track repair"],
 ];
 
+type WorkId = "signal" | "switch" | "rail" | "power" | "access";
+
+/** One kind of job a planned closure names ("switch and rail upgrades" is two), with its puzzle. */
+export interface WorkItem {
+  id: WorkId;
+  /** For titles: "switch and rail work". */
+  short: string;
+  label: string;
+  game: GameKind;
+  what: string;
+  why: string;
+  /** How the job really goes, in order. */
+  steps: string[];
+  /** The steps the puzzle has you do (indexes into steps). */
+  play: number[];
+  /** What the MBTA says this closure's crews are doing for this job, when it announced the work. */
+  here?: string;
+}
+
+const WORK: Array<WorkItem & { re: RegExp }> = [
+  {
+    id: "signal",
+    re: /\bsignal/i,
+    short: "signal",
+    label: "Signal modernization",
+    game: "WIRE_MATCH",
+    what: "Crews replace old relay-based signals and miles of signal cable with a modern system.",
+    why: "Signals keep trains safely apart. Aging ones cause about 30% of MBTA delays, and the new system fails far less often.",
+    steps: [
+      "Lay new signal cable along the track",
+      "Install the new signals and the equipment cases beside the track",
+      "Land every field wire on its terminal in the cases",
+      "Pre-commissioning: test each circuit and prove each signal clears",
+      "Final testing and commissioning, then the new system takes over",
+    ],
+    play: [2, 3],
+  },
+  {
+    id: "switch",
+    re: /\bswitch/i,
+    short: "switch",
+    label: "Switch upgrades",
+    game: "SWITCH_THROW",
+    what: "Crews replace switches, the moving rails that steer trains from one track to another, and the machines that throw them.",
+    why: "A worn or failing switch stops every train that needs it; new ones throw and lock reliably.",
+    steps: [
+      "Cut out the worn switch and its long ties",
+      "Set in the new switch: the moving points, the frog and guard rails, on new ties",
+      "Connect the switch machine, which throws the points and proves they're locked",
+      "Test it: throw it both ways and run a test train over every route",
+    ],
+    play: [3],
+  },
+  {
+    id: "rail",
+    re: /(?<!commuter )\brail(?!road)|\btrack\b|\bties?\b/i,
+    short: "rail",
+    label: "Rail upgrades",
+    game: "TRACK_WELD",
+    what: "Crews cut out worn rail and ties, lay new rail and join it with thermite welds.",
+    why: "Worn rail forces slow zones where trains crawl to stay safe; new rail lets them run at full speed again.",
+    steps: [
+      "Cut out the worn rail",
+      "Lay in new rail, with new ties where the old ones are worn",
+      "Join the rail ends with thermite welds and grind them smooth",
+      "Tamp the ballast and check the track before trains return",
+    ],
+    play: [2],
+  },
+  {
+    id: "power",
+    re: /\bpower\b|electrical|overhead wire|catenary|third rail|substation/i,
+    short: "power",
+    label: "Power upgrades",
+    game: "BREAKER_SEQUENCE",
+    what: "Crews replace the cables, breakers and wire that feed 600 volts to the trains.",
+    why: "Old feeders trip and leave whole sections dark; new ones keep the power on.",
+    steps: [
+      "Cut the power and ground the section so it's safe to touch",
+      "Replace the worn cables, insulators or overhead wire",
+      "Close the breakers in the dispatcher's order to bring the power back",
+      "Test the section before trains return",
+    ],
+    play: [2],
+  },
+  {
+    id: "access",
+    re: /accessib|elevator|step-free|raised platform/i,
+    short: "accessibility",
+    label: "Accessibility upgrades",
+    game: "ACCESS_UPGRADE",
+    what: "Crews add elevators from the street and raise the platforms so riders can board without steps.",
+    why: "Many older stations can only be reached by stairs, and their platforms sit well below the train floor.",
+    steps: [
+      "Dig and build the elevator shafts and new entrances",
+      "Set new platform edges at the raised height",
+      "Install each elevator car and level it with the platform",
+      "Inspect everything and open it to riders",
+    ],
+    play: [1, 2],
+  },
+];
+
+/** Work the MBTA announced for a closure, which its alert often shortens ("switch and rail upgrades"). */
+interface Announced {
+  /** Any of the alert's routes. */
+  routes: string[];
+  /** Boston days the work runs, inclusive. */
+  from: string;
+  to: string;
+  /** Matched against the alert's header. */
+  where: RegExp;
+  jobs: Array<{ id: WorkId; here: string }>;
+  /** Why it needs a closure, in the MBTA's words. */
+  why?: string;
+  source: { label: string; url: string };
+}
+
+const NOV_2026 = { label: "MBTA, Oct 16 2026", url: "https://www.mbta.com/news/2026-10-16/mbta-continues-modernizing-and-investing-improve-reliability-accessibility-and-more" };
+const MULTI_DAY =
+  "The MBTA says this work can't be done in the overnight hours when the T doesn't run, and would be extremely inefficient and costly in single weekends; closing for several days lets crews work around the clock.";
+
+const ANNOUNCED: Announced[] = [
+  {
+    routes: ["Red"],
+    from: "2026-11-20",
+    to: "2026-11-22",
+    where: /Broadway[\s\S]*North Quincy/i,
+    jobs: [
+      { id: "signal", here: "At Tenean Beach near North Quincy, crews do pre-commissioning work on the Red Line's new signal system, the step before its final testing and commissioning." },
+      { id: "switch", here: "Maintenance of Way crews replace complicated switch areas between Broadway and North Quincy." },
+      { id: "rail", here: "They also replace the rail at those switches." },
+    ],
+    why: MULTI_DAY,
+    source: NOV_2026,
+  },
+  {
+    routes: ["Green-C"],
+    from: "2026-11-16",
+    to: "2026-12-10",
+    where: /Summit|Hawes/i,
+    jobs: [{ id: "access", here: "Part of the C Branch Accessibility Improvements at seven above-ground stops, for faster and more comfortable boarding." }],
+    source: NOV_2026,
+  },
+  {
+    routes: ["Green-E"],
+    from: "2026-06-01",
+    to: "2029-12-31",
+    where: /Symphony/i,
+    jobs: [
+      {
+        id: "access",
+        here: "Symphony gets four new elevators, raised platforms for easier boarding, accessible bathrooms, better wayfinding, more lighting and upgraded safety features.",
+      },
+    ],
+    source: { label: "MBTA Symphony project", url: "https://www.mbta.com/projects/symphony-station-accessibility-improvements" },
+  },
+];
+
+/** The MBTA's announcement for this closure, if it published one. */
+export function announcedWork(alert: Pick<LiveAlert, "header" | "routes" | "periods">, now = Date.now()) {
+  const start = alert.periods[0]?.start ?? now;
+  return ANNOUNCED.find((a) => a.routes.some((r) => alert.routes.includes(r)) && a.where.test(alert.header) && dayKey(Math.max(start, now)) >= a.from && dayKey(start) <= a.to) ?? null;
+}
+
+const item = (w: WorkItem, here?: string): WorkItem => ({
+  id: w.id,
+  short: w.short,
+  label: w.label,
+  game: w.game,
+  what: w.what,
+  why: w.why,
+  steps: w.steps,
+  play: w.play,
+  ...(here ? { here } : {}),
+});
+
+/**
+ * The jobs a closure covers, in the order the MBTA lists them: from its announcement when there is one,
+ * else from the alert's reason ("to allow for switch and rail upgrades"), so "Commuter Rail will be
+ * fare-free" isn't taken for rail work.
+ */
+export function workItems(alert: Pick<LiveAlert, "header" | "routes" | "periods">): WorkItem[] {
+  const announced = announcedWork(alert);
+  if (announced) return announced.jobs.map((j) => item(WORK.find((w) => w.id === j.id)!, j.here));
+  const text = closureReason(alert) ?? alert.header;
+  return WORK.map((w) => ({ w, at: text.search(w.re) }))
+    .filter((x) => x.at >= 0)
+    .sort((a, b) => a.at - b.at)
+    .map(({ w }) => item(w));
+}
+
+/** "switch and rail", "signal, rail and power". */
+export function workTitle(items: Pick<WorkItem, "short">[]) {
+  const s = items.map((i) => i.short);
+  return s.length < 2 ? (s[0] ?? "") : `${s.slice(0, -1).join(", ")} and ${s[s.length - 1]}`;
+}
+
 /**
  * The simulated repair to explore at a closed station: from the published cause, then the alert's wording,
  * else track work (most closures are planned track and station work, often published as UNKNOWN_CAUSE).
