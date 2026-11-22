@@ -1,6 +1,7 @@
 "use client";
 
 import type { FeedSource } from "@/components/game";
+import { CONTROL_STATIC } from "@/lib/ui";
 
 const COPY: Record<FeedSource, { label: string; detail: string; live: boolean }> = {
   backend: { label: "Live", detail: "Trains and alerts from the T-Verse backend.", live: true },
@@ -16,23 +17,17 @@ const COPY: Record<FeedSource, { label: string; detail: string; live: boolean }>
 export function SourceBadge({ source, trainCount }: { source: FeedSource | null; trainCount: number }) {
   const copy = source ? COPY[source] : null;
   return (
-    <div
-      className="flex h-10 items-center gap-2 rounded-xl border border-white/10 bg-slate-950/75 px-3 text-xs whitespace-nowrap shadow-lg backdrop-blur-md"
-      title={copy?.detail ?? "Connecting to the T"}
-    >
+    <div className={`${CONTROL_STATIC} gap-2 px-3 text-xs whitespace-nowrap`} title={copy?.detail ?? "Connecting to the T"}>
       {!copy ? (
         <>
-          <span className="size-2 animate-pulse rounded-full bg-slate-400" />
-          <span className="text-slate-300">Connecting to the T…</span>
+          <span className="size-2 animate-pulse rounded-full bg-zinc-400" />
+          <span className="text-zinc-300">Connecting to the T…</span>
         </>
       ) : (
         <>
-          <span className="relative flex size-2.5">
-            {copy.live && <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />}
-            <span className={`relative inline-flex size-2.5 rounded-full ${copy.live ? "bg-emerald-400" : "bg-amber-400"}`} />
-          </span>
-          <span className={`font-semibold ${copy.live ? "text-emerald-200" : "text-amber-200"}`}>{copy.label}</span>
-          <span className="hidden text-slate-400 sm:inline">{trainCount} trains</span>
+          <span className={`size-2 rounded-full ${copy.live ? "bg-emerald-400" : "bg-amber-400"}`} />
+          <span className="font-semibold text-white">{copy.label}</span>
+          <span className="hidden text-zinc-400 tabular-nums sm:inline">{trainCount} trains</span>
         </>
       )}
     </div>
