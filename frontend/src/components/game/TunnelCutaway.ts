@@ -62,6 +62,9 @@ const CLOSE_TIME = SPREAD_TIME + PANEL_TIME + 0.6;
 /** The raised safety walk along the tunnel wall. */
 const WALK_Y = RAIL + 1.2;
 const WALK_LAT = 21;
+/** Walking room: the platform up to its tactile strip, and the safety walk inside its railing (at 19.7). */
+const PLATFORM_EDGE = 12;
+const WALK_INNER = 20.3;
 const PLATFORM_LAT = 16.5;
 
 const HOT = [new T.Color("#ffffff"), new T.Color("#ffd36b"), new T.Color("#ff9a2b"), new T.Color("#9fe7ff")];
@@ -118,6 +121,8 @@ export class TunnelCutaway extends TrackCorridor {
   private readonly props: Array<{ obj: T.Object3D; delay: number; s?: number; end?: { sign: 1 | -1; lat: number } }> = [];
   /** Part of the cut that is open street (no building over the tunnel); null = all of it. */
   private allowed: [number, number] | null = null;
+  /** Built over end to end: the street stays shut and the tunnel is only seen from the walk-in view. */
+  private underBuildings = false;
   private lip!: T.Mesh;
   private readonly lamps: T.MeshBasicMaterial[] = [];
   private readonly lampHalos: T.MeshBasicMaterial[] = [];
@@ -664,6 +669,15 @@ export class TunnelCutaway extends TrackCorridor {
 
   // ------------------------------------------------------------ state
 
+  /** Keep the street shut (buildings over the whole stretch); the walk-in view still goes down. */
+  bury() {
+    this.underBuildings = true;
+  }
+
+  get buried() {
+    return this.underBuildings;
+  }
+
   open(at: number) {
     if (this.openAt === null) this.openAt = at;
   }
@@ -742,40 +756,53 @@ export class TunnelCutaway extends TrackCorridor {
     return [Math.max(lo + 10, Math.min(-H + 4, this.faultS - 26)), Math.min(hi - 10, Math.max(H - 4, this.faultS + 26))];
   }
 
-  /** Where you stand at `s`: on the platform, then down the steps onto the safety walk. */
-  walkAt(s: number) {
-    const t = clamp((Math.abs(s) - (this.platHalf - 3)) / 6, 0, 1);
-    const k = easeInOut(t);
-    return { lat: -PLATFORM_LAT + (PLATFORM_LAT - WALK_LAT) * k, y: this.platformY + (WALK_Y - this.platformY) * k };
+  /**
+   * Where you can stand at `s` (lat range and floor height): anywhere on the right-hand platform from the
+   * wall to the tactile edge strip, then down the steps past its end onto the safety walk inside the railing.
+   */
+  walkArea(s: number) {
+    const k = easeInOut(clamp((Math.abs(s) - (this.platHalf - 3)) / 6, 0, 1));
+    return {
+      min: -(W - 0.9),
+      max: -PLATFORM_EDGE + (PLATFORM_EDGE - WALK_INNER) * k,
+      y: this.platformY + (WALK_Y - this.platformY) * k,
+    };
   }
 
-  /** Arrive at the platform end nearest the fault, facing it. */
+  /** Arrive at the platform end nearest the fault, mid-platform, facing it. */
   get walkStart() {
-    if (this.faultS === 0) return { s: -12, facing: 1 as const };
-    return { s: this.dir * (this.platHalf - 12), facing: this.dir };
+    if (this.faultS === 0) return { s: -12, lat: -PLATFORM_LAT, facing: 1 as const };
+    return { s: this.dir * (this.platHalf - 12), lat: -PLATFORM_LAT, facing: this.dir };
   }
 
-  /** true while any of the street is open. */
+  /** true while any of the street is open, or (buried) while the tunnel is staged for the walk-in. */
   get isOpen() {
-    return this.interior.visible;
+    return this.underBuildings ? this.openAt !== null && this.closeAt === null : this.interior.visible;
   }
 
   private readonly streetMat = new T.MeshLambertMaterial({ color: "#1b1d25" });
   private maskMat: T.Material | null = null;
+  private interiorShown = false;
 
-  /** The walk-in view has no basemap, so it paints the ground mask as street instead of leaving it invisible. */
+  /**
+   * For the walk-in view's frame: paint the ground mask as street (there's no basemap down there) and draw
+   * the tunnel even where the street above stays shut.
+   */
   showStreet(on: boolean) {
     if (on && !this.maskMat) {
       this.maskMat = this.mask.material as T.Material;
       this.mask.material = this.streetMat;
+      this.interiorShown = this.interior.visible;
+      this.interior.visible = true;
     } else if (!on && this.maskMat) {
       this.mask.material = this.maskMat;
       this.maskMat = null;
+      this.interior.visible = this.interiorShown;
     }
   }
 
   private openness(sc: number, now: number) {
-    if (this.openAt === null) return 0;
+    if (this.openAt === null || this.underBuildings) return 0;
     if (this.allowed && (sc < this.allowed[0] || sc > this.allowed[1])) return 0;
     const t = (now - this.openAt) / 1000;
     const k = Math.abs(sc - this.faultS) / Math.max(this.faultS - this.cutFrom, this.cutTo - this.faultS);
