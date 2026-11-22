@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, useId, useState } from "react";
-import { Bot, CircleCheck, Clock3, RotateCcw, ShieldAlert, Sparkles, Users, X, Zap } from "lucide-react";
+import { useEffect, useEffectEvent, useId, useState } from "react";
+import { Bot, CircleCheck, Clock3, ExternalLink, Eye, RotateCcw, ShieldAlert, Users, X, Zap } from "lucide-react";
 import type { Station, TranslatedAlert } from "@/types/tverse";
 import { canPlay, gameFor, type GameKind } from "./alertTranslator";
 import { BreakerSequenceGame } from "./BreakerSequenceGame";
 import { GameStyles } from "./GameStyles";
+import { formatElapsed } from "./format";
 import { IceThawGame } from "./IceThawGame";
+import { REAL_REPAIRS } from "./realRepairs";
 import type { IncidentStats } from "./incidentSim";
 import { RescueCoupleGame } from "./RescueCoupleGame";
 import { SwitchThrowGame } from "./SwitchThrowGame";
@@ -18,15 +20,15 @@ type GameProps = { onWin: (remainingMs: number) => void; onLose: () => void };
 const GAMES: Record<GameKind, { title: string; hint: string; cta: string; done: string; fail: string; Game: (p: GameProps) => React.ReactNode }> = {
   WIRE_MATCH: {
     title: "Reconnect the 4 signal wires",
-    hint: "Match each colored wire to its relay before the timer hits zero.",
+    hint: "Land each tagged wire on its relay's terminal post before the timer runs out.",
     cta: "Help Fix the Signal",
     done: "Signal restored!",
     fail: "The relay fried.",
     Game: WireMatchGame,
   },
   TRACK_WELD: {
-    title: "Weld the 5 sparking rail joints",
-    hint: "Catch every sparking joint before it hops away.",
+    title: "Thermite-weld the broken rail",
+    hint: "Preheat the rail ends, pour the molten steel, then grind the weld flush.",
     cta: "Help Weld the Track",
     done: "Track welded!",
     fail: "The joint cracked again.",
@@ -42,7 +44,7 @@ const GAMES: Record<GameKind, { title: string; hint: string; cta: string; done: 
   },
   BREAKER_SEQUENCE: {
     title: "Restore the power feed",
-    hint: "Watch the feeder panel, then flip the breakers in the same order.",
+    hint: "Watch the restoration order, then close the feeder breakers in the same order.",
     cta: "Help Restore Power",
     done: "Power restored!",
     fail: "The feeder tripped again.",
@@ -50,7 +52,7 @@ const GAMES: Record<GameKind, { title: string; hint: string; cta: string; done: 
   },
   RESCUE_COUPLE: {
     title: "Tow the stalled train clear",
-    hint: "Couple up, connect the air line and release the brakes, right on time.",
+    hint: "Couple up, connect the air line and charge the brakes, right on time.",
     cta: "Help Clear the Train",
     done: "Train towed clear!",
     fail: "The coupler slipped.",
@@ -58,7 +60,7 @@ const GAMES: Record<GameKind, { title: string; hint: string; cta: string; done: 
   },
   ICE_THAW: {
     title: "Thaw the frozen switch",
-    hint: "Scrub the heater over the ice until the switch points are clear.",
+    hint: "Torch the ice out of the switch point until it can close.",
     cta: "Help Thaw the Switch",
     done: "Switch thawed!",
     fail: "The points froze solid.",
@@ -66,14 +68,10 @@ const GAMES: Record<GameKind, { title: string; hint: string; cta: string; done: 
   },
 };
 
-export const POINTS_PER_FIX = 150;
+/** How long the "how long it really takes" card stays up before the repair plays. */
+const WON_HOLD_MS = 9000;
 
 type Step = "brief" | "game" | "won" | "lost";
-
-export function formatElapsed(ms: number) {
-  const s = Math.max(0, Math.floor(ms / 1000));
-  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
-}
 
 export interface FixTheTModalProps {
   alert: TranslatedAlert | null;
@@ -101,13 +99,18 @@ function FixTheTDialog({ alert, station, stats, simulated, unlockName, explore, 
   const [attempt, setAttempt] = useState(0);
   const titleId = useId();
   const playable = canPlay(alert);
-  const game = GAMES[explore?.game ?? gameFor(alert)];
+  const kind = explore?.game ?? gameFor(alert);
+  const game = GAMES[kind];
+  const real = REAL_REPAIRS[kind];
 
+  // The page re-renders every half second while this is open and hands in a fresh onWin each time,
+  // so the timer must not depend on it.
+  const continueToRepair = useEffectEvent(() => onWin(alert));
   useEffect(() => {
     if (step !== "won") return;
-    const timer = setTimeout(() => onWin(alert), 1700);
+    const timer = setTimeout(continueToRepair, WON_HOLD_MS);
     return () => clearTimeout(timer);
-  }, [step, alert, onWin]);
+  }, [step]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -197,7 +200,7 @@ function FixTheTDialog({ alert, station, stats, simulated, unlockName, explore, 
                 className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-fuchsia-500 to-cyan-400 text-base font-semibold text-slate-950 transition hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
               >
                 <Zap className="size-5" />
-                {explore ? `Explore a simulated ${explore.label}` : game.cta} (+{POINTS_PER_FIX} CharliePoints)
+                {explore ? `Explore a simulated ${explore.label}` : game.cta}
               </button>
             ) : (
               <p className="rounded-xl bg-white/5 p-3 text-sm text-slate-300">
@@ -220,22 +223,56 @@ function FixTheTDialog({ alert, station, stats, simulated, unlockName, explore, 
         )}
 
         {step === "won" && (
-          <div className="space-y-4 py-4 text-center" aria-live="polite">
-            <div className="mx-auto flex size-16 items-center justify-center rounded-full bg-emerald-400/15 shadow-[0_0_40px_rgba(56,255,156,0.45)]">
-              <CircleCheck className="size-9 text-emerald-300" />
+          <div className="space-y-4 py-1" aria-live="polite">
+            <div className="flex items-center gap-3">
+              <div className="flex size-12 shrink-0 items-center justify-center rounded-full bg-emerald-400/15 shadow-[0_0_30px_rgba(56,255,156,0.4)]">
+                <CircleCheck className="size-7 text-emerald-300" />
+              </div>
+              <div>
+                <h2 id={titleId} className="text-xl font-semibold text-white">
+                  {explore ? "Simulated repair complete" : game.done}
+                </h2>
+                <p className="text-sm text-slate-300">
+                  {explore ? "Real crews are still on it: the MBTA alert stays up until they clear it." : "Next, watch the crew finish it down in the tunnel."}
+                </p>
+              </div>
             </div>
-            <h2 id={titleId} className="text-2xl font-semibold text-white">
-              {explore ? "Simulated repair complete" : game.done}
-            </h2>
-            <p className="text-slate-300">
-              {explore ? "Real crews are still on it: the MBTA alert stays up until they clear it." : "Watch the crew finish the repair down in the tunnel."}
-            </p>
-            <div className="flex flex-col items-center gap-2">
-              <span className="inline-flex items-center gap-2 rounded-full bg-amber-400/15 px-4 py-1.5 text-lg font-semibold text-amber-200">
-                <Sparkles className="size-5" />+{POINTS_PER_FIX} CharliePoints
-              </span>
-              {unlockName && <span className="text-sm text-fuchsia-200">Unlocked: {unlockName}</span>}
+
+            <div className="rounded-xl border border-amber-300/20 bg-amber-300/5 p-3.5">
+              <p className="mb-2 flex flex-wrap items-center gap-2 text-[11px] font-semibold tracking-widest text-amber-200 uppercase">
+                <Clock3 className="size-3.5" />
+                How long it really takes
+                <span className="rounded-full bg-amber-300/15 px-2 py-0.5 text-[11px] tracking-normal text-amber-100 normal-case">{real.typical}</span>
+              </p>
+              <p className="text-[14px] leading-relaxed text-slate-100">{real.detail}</p>
+              <p className="mt-2 rounded-lg bg-black/30 p-2.5 text-[13px] leading-relaxed text-slate-300">{real.example}</p>
+              <p className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-slate-400">
+                Sources:
+                {real.sources.map((src) => (
+                  <a key={src.url} href={src.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-cyan-300 underline-offset-2 hover:underline">
+                    {src.label}
+                    <ExternalLink className="size-3" />
+                  </a>
+                ))}
+              </p>
             </div>
+
+            {unlockName && <p className="text-center text-sm text-fuchsia-200">New hat unlocked: {unlockName}</p>}
+
+            <button
+              type="button"
+              autoFocus
+              onClick={() => onWin(alert)}
+              className="relative flex h-11 w-full items-center justify-center gap-2 overflow-hidden rounded-xl bg-emerald-400 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+            >
+              <span
+                aria-hidden
+                className="absolute inset-y-0 left-0 bg-emerald-200/60 [animation-fill-mode:forwards] [animation-name:fixt-fill] [animation-timing-function:linear]"
+                style={{ animationDuration: `${WON_HOLD_MS}ms` }}
+              />
+              <Eye className="relative size-4" />
+              <span className="relative">{explore ? "Close" : "Watch the crew fix it"}</span>
+            </button>
           </div>
         )}
 

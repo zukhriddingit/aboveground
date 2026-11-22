@@ -2,6 +2,7 @@
 // The T-Verse page (Member 4): Member 2's 3D map + Member 3's Stories and Tourist Mode + Fix the T,
 // with live MBTA V3 data: trains, alerts (closure X, notifications), predictions and cause-driven repairs.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import { ChevronLeft, ChevronRight, LogOut } from "lucide-react";
 import type { TVerseMapHandle } from "@/components/map";
 import {
@@ -15,8 +16,6 @@ import {
 import {
   ClosureMarkers,
   FixTheTMap,
-  FixTheTModal,
-  FixTheTScene,
   IncidentSim,
   IncidentTag,
   effectLabel,
@@ -53,7 +52,11 @@ import {
 import { CommunityDrawer, FeedStopPins, TFeedButton, flyToFeedStop, useCommunityFeed } from "@/components/community";
 import { useStationSignals } from "@/components/quickcheck";
 import { useBranchGaps, withTransitData } from "@/components/transit";
+import type { FixTheTScene } from "@/components/game/FixTheTScene";
 import type { AvatarHat, Station, StationId, StationStory, TranslatedAlert } from "@/types/tverse";
+
+// The delay card, its mini-games and the 3D repair scene only download when they're first needed.
+const FixTheTModal = dynamic(() => import("@/components/game/FixTheTModal").then((m) => m.FixTheTModal), { ssr: false });
 
 const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
 const flagKey = (id: StationId) => `flag:${id}`;
@@ -283,10 +286,12 @@ export default function Home() {
   }, [exitTunnel, explore, fixAlert, repairing, sim]);
 
   const onReady = useCallback(() => {
-    const m = map.current?.getMap();
-    if (m && !scene.current) {
-      scene.current = new FixTheTScene(m, sim, (id) => stationsRef.current.find((s) => s.id === id) ?? null);
-    }
+    void import("@/components/game/FixTheTScene").then(({ FixTheTScene }) => {
+      const m = map.current?.getMap();
+      if (m && !scene.current) {
+        scene.current = new FixTheTScene(m, sim, (id) => stationsRef.current.find((s) => s.id === id) ?? null);
+      }
+    });
   }, [sim]);
 
   const simulateDelay = useCallback(async () => {
@@ -327,16 +332,13 @@ export default function Home() {
       const fault = sim.incidents.get(alert.id)?.fault ?? faultForGame(gameFor(alert));
 
       const reveal = async () => {
-        if (!unlockedHat) {
-          push("+150 CharliePoints", { tone: "success", description: "Wardrobe complete. Keep fixing to stack points." });
-          return;
-        }
+        if (!unlockedHat) return;
         const [lng, lat] = map.current?.getAvatarLngLat() ?? [0, 0];
         map.current?.flyTo(lng, lat, { zoom: 16.4, pitch: 62, duration: 1500 });
         await wait(1600);
         setHatHold(null);
         map.current?.celebrate();
-        push(`${HAT_INFO[unlockedHat].name} unlocked!`, { tone: "success", description: "+150 CharliePoints. It just popped onto your avatar." });
+        push(`${HAT_INFO[unlockedHat].name} unlocked!`, { tone: "success", description: "It just popped onto your avatar." });
       };
 
       setRiding(false);
