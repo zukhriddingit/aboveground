@@ -3,11 +3,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { StationId, TransitLine } from "@/types/tverse";
 import { CreatePostModal } from "./CreatePostModal";
-import { LINES, isNarrowScreen, lineColor, lineGlow, selectPosts, useNow, type FeedSort, type LineFilter } from "./feedMeta";
+import { LINE_COLORS } from "@/lib/theme";
+import { FOCUS } from "@/lib/ui";
+import { LINES, isNarrowScreen, lineColor, selectPosts, useNow, type FeedSort, type LineFilter } from "./feedMeta";
 import { QuickCheckBar, useStationSignals } from "@/components/quickcheck";
 import { FEED_STOPS, STOPS_BY_LINE, primaryLine, stopName } from "./feedStops";
 import { FeedStyles } from "./FeedStyles";
 import { FeedToaster } from "./FeedToaster";
+import { LinePulse } from "./LinePulse";
 import { PostCard } from "./PostCard";
 import type { CommunityFeed } from "./useCommunityFeed";
 
@@ -24,11 +27,11 @@ export interface CommunityDrawerProps {
   onStationChange?: (stationId: StationId | null) => void;
   /** A post's 📍 station tag was tapped: fly the 3D camera there (see flyToFeedStop). */
   onJumpToStation?: (stationId: StationId) => void;
-  /** +25 for a post, +5 for a reply, +10 per Quick-Check tap. */
+  /** XP: +25 for a post, +5 for a reply, +10 per Quick-Check tap. */
   onPointsAwarded?: (points: number, line: TransitLine) => void;
 }
 
-/** T-Feed: right-side glass drawer on desktop (slides in), full-screen sheet on phones. */
+/** T-Feed: right-side drawer on desktop (slides in), full-screen sheet on phones. Picking a line shows its Line Pulse. */
 export function CommunityDrawer({
   open,
   onClose,
@@ -89,7 +92,7 @@ export function CommunityDrawer({
     if (isNarrowScreen()) onClose();
   };
 
-  const accent = line === "ALL" ? "#38d283" : lineGlow(line);
+  const accent = line === "ALL" ? "#e4e4e7" : LINE_COLORS[line];
 
   return (
     <>
@@ -99,23 +102,26 @@ export function CommunityDrawer({
         aria-label="T-Feed"
         aria-hidden={!open}
         inert={!open}
-        className={`fixed inset-0 z-[56] flex flex-col overflow-hidden border-white/10 bg-slate-950/85 text-white shadow-[0_0_60px_rgba(0,0,0,.55)] backdrop-blur-xl transition-[transform,opacity] duration-300 ease-[cubic-bezier(.2,.9,.3,1)] sm:inset-auto sm:bottom-3 sm:right-3 sm:top-3 sm:w-[420px] sm:max-w-[95vw] sm:rounded-3xl sm:border ${
+        className={`fixed inset-0 z-[56] flex flex-col overflow-hidden border-white/12 bg-zinc-950/92 text-white shadow-[0_20px_50px_rgba(0,0,0,.55)] backdrop-blur-xl transition-[transform,opacity] duration-300 ease-[cubic-bezier(.2,.9,.3,1)] sm:inset-auto sm:bottom-3 sm:right-3 sm:top-3 sm:w-[420px] sm:max-w-[95vw] sm:rounded-2xl sm:border ${
           open ? "translate-x-0 translate-y-0 opacity-100" : "pointer-events-none translate-y-full opacity-0 sm:translate-x-[calc(100%+1.5rem)] sm:translate-y-0"
         }`}
       >
         {/* Sticky header */}
-        <header className="shrink-0 border-b border-white/[.08] px-4 pb-3 pt-[max(0.9rem,env(safe-area-inset-top))]">
+        <header className="shrink-0 border-b border-white/12 px-4 pb-3 pt-[max(0.9rem,env(safe-area-inset-top))]">
           <div className="flex items-center gap-2">
-            <h2 className="text-xl font-black tracking-tight">
-              <span className="bg-gradient-to-r from-[#38d283] via-[#ffab31] to-[#428dff] bg-clip-text text-transparent">T</span>
-              -Feed
+            <h2 className="flex items-center gap-2 text-lg font-semibold tracking-tight">
+              <span aria-hidden className="grid grid-cols-2 gap-[2px]">
+                {LINES.map((l) => (
+                  <span key={l} className="size-[7px] rounded-full" style={{ background: LINE_COLORS[l] }} />
+                ))}
+              </span>
+              T-Feed
             </h2>
             <LiveCount online={feed.online} count={visible.length} loading={feed.loading} />
             <button
               type="button"
               onClick={() => setComposing(true)}
-              className="ml-auto rounded-full px-3.5 py-2 text-xs font-bold text-black shadow-lg transition active:scale-95"
-              style={{ background: accent, boxShadow: `0 0 18px ${accent}66` }}
+              className={`ml-auto rounded-lg bg-white px-3.5 py-2 text-xs font-bold text-zinc-950 transition hover:bg-zinc-200 active:scale-95 ${FOCUS}`}
             >
               + New Post
             </button>
@@ -123,7 +129,7 @@ export function CommunityDrawer({
               type="button"
               onClick={onClose}
               aria-label="Close T-Feed"
-              className="flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-white/80 transition hover:bg-white/20"
+              className={`flex h-9 w-9 items-center justify-center rounded-lg border border-white/12 text-white/80 transition hover:bg-white/10 ${FOCUS}`}
             >
               ✕
             </button>
@@ -132,7 +138,7 @@ export function CommunityDrawer({
           <div className="tf-no-scrollbar -mx-4 mt-3 flex gap-1.5 overflow-x-auto px-4" role="tablist" aria-label="Filter by line">
             {(["ALL", ...LINES] as LineFilter[]).map((l) => {
               const active = l === line;
-              const c = l === "ALL" ? "#e6ecff" : lineGlow(l);
+              const c = l === "ALL" ? "#e4e4e7" : LINE_COLORS[l];
               return (
                 <button
                   key={l}
@@ -143,11 +149,11 @@ export function CommunityDrawer({
                     setLine(l);
                     toTop();
                   }}
-                  className="flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold transition"
+                  className={`flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold transition ${FOCUS}`}
                   style={
                     active
-                      ? { background: l === "ALL" ? "#e6ecff" : lineColor(l), color: l === "ALL" ? "#070b1a" : "#fff", boxShadow: `0 0 16px ${c}66` }
-                      : { background: "rgba(255,255,255,.05)", color: "rgba(255,255,255,.75)", boxShadow: "inset 0 0 0 1px rgba(255,255,255,.1)" }
+                      ? { background: l === "ALL" ? "#fff" : lineColor(l), color: l === "ALL" ? "#09090b" : "#fff" }
+                      : { background: "rgba(255,255,255,.04)", color: "rgba(255,255,255,.75)", boxShadow: "inset 0 0 0 1px rgba(255,255,255,.12)" }
                   }
                 >
                   {l !== "ALL" && <span className="h-2 w-2 rounded-full" style={{ background: active ? "#fff" : c }} />}
@@ -156,6 +162,8 @@ export function CommunityDrawer({
               );
             })}
           </div>
+
+          {line !== "ALL" && <LinePulse line={line} posts={feed.posts} signalsFor={signals.get} />}
 
           <div className="mt-2.5 flex flex-wrap items-center gap-2">
             <div className="flex rounded-full bg-white/[.05] p-0.5 ring-1 ring-white/10" role="group" aria-label="Sort">
@@ -193,7 +201,7 @@ export function CommunityDrawer({
         </header>
 
         {/* 1-tap Quick-Check for one stop (zero typing, +10 each, queues offline) */}
-        <div className="shrink-0 border-b border-white/[.08] px-4 py-2.5">
+        <div className="shrink-0 border-b border-white/12 px-4 py-2.5">
           <div className="mb-1.5 flex items-center gap-2">
             <button
               type="button"
@@ -243,7 +251,6 @@ export function CommunityDrawer({
               <EmptyState
                 where={station ? stopName(station) : line === "ALL" ? "the T" : `the ${line} Line`}
                 onPost={() => setComposing(true)}
-                accent={accent}
               />
             ) : (
               <div className="space-y-3">
@@ -301,17 +308,16 @@ function LiveCount({ online, count, loading }: { online: boolean | null; count: 
   );
 }
 
-function EmptyState({ where, onPost, accent }: { where: string; onPost: () => void; accent: string }) {
+function EmptyState({ where, onPost }: { where: string; onPost: () => void }) {
   return (
     <div className="flex flex-col items-center px-6 py-16 text-center">
       <div className="mb-3 text-5xl">🚇</div>
       <p className="text-sm font-semibold text-white/85">Nothing posted near {where} yet</p>
-      <p className="mt-1 text-xs text-white/45">Be the first. It takes five seconds and earns CharliePoints.</p>
+      <p className="mt-1 text-xs text-white/45">Be the first. It takes five seconds and earns XP toward your next rank.</p>
       <button
         type="button"
         onClick={onPost}
-        className="mt-4 rounded-full px-4 py-2 text-xs font-bold text-black"
-        style={{ background: accent, boxShadow: `0 0 18px ${accent}66` }}
+        className={`mt-4 rounded-lg bg-white px-4 py-2 text-xs font-bold text-zinc-950 hover:bg-zinc-200 ${FOCUS}`}
       >
         + New Post
       </button>
@@ -328,7 +334,7 @@ function Skeletons() {
   return (
     <div className="space-y-3" aria-label="Loading posts">
       {[0, 1].map((i) => (
-        <div key={i} className="overflow-hidden rounded-3xl border border-white/10 p-3.5">
+        <div key={i} className="overflow-hidden rounded-2xl border border-white/12 p-3.5">
           <div className="flex items-center gap-2.5">
             <div className="h-9 w-9 rounded-full" style={shimmer} />
             <div className="h-3 w-40 rounded-full" style={shimmer} />

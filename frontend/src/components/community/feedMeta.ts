@@ -28,7 +28,7 @@ export const REACTIONS: { key: ReactionKey; emoji: string; label: string }[] = [
 
 export const BADGES: Record<RiderBadge, { emoji: string; color: string }> = {
   BU: { emoji: "🐾", color: "#ff6b6b" },
-  MIT: { emoji: "🪫", color: "#c4b5fd" },
+  MIT: { emoji: "🦫", color: "#c4b5fd" },
   NEU: { emoji: "🐺", color: "#fda4af" },
   Local: { emoji: "🦞", color: "#4ade80" },
   Tourist: { emoji: "📸", color: "#fbbf24" },
