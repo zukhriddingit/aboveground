@@ -319,7 +319,8 @@ def _get_client() -> Any:
     if not key or genai is None or genai_types is None:
         return None
     if _client is None or _client_key != key:
-        _client = genai.Client(api_key=key, http_options=genai_types.HttpOptions(timeout=int(_timeout_s() * 1000)))
+        # Gemini rejects request deadlines under 10 s; our own 4 s cap is the asyncio.wait_for around the call.
+        _client = genai.Client(api_key=key, http_options=genai_types.HttpOptions(timeout=10_000))
         _client_key = key
     return _client
 
