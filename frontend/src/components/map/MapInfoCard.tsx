@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Building2, X } from "lucide-react";
 import type { Crowdedness, PlannedClosure, QuickCheckKind, Station, StationSignals, TrainVehicle } from "@/types/tverse";
 import { CROWDEDNESS, LINE_COLORS, routeLine } from "@/lib/theme";
-import { FOCUS, LABEL, MBTA_RED, PANEL } from "@/lib/ui";
+import { BUTTON, FOCUS, LABEL, MBTA_RED, PANEL } from "@/lib/ui";
 import { QuickCheckBar, StaleEtaBadge } from "@/components/quickcheck";
 import { BranchGapBadge, ClosureCard, NextUsableBadge } from "@/components/transit";
 import { pocketCityUrl } from "./pocketCities";
@@ -112,7 +112,7 @@ export function StationInfoCard({ station, onClose, onAlertClick, signals, onQui
       )}
       {onStreetView && pocketCityUrl(station.id) && (
         <button type="button" onClick={() => onStreetView(station)}
-          className="mt-2.5 flex w-full items-center justify-center gap-1.5 rounded-xl border border-white/12 bg-white/[0.06] px-3 py-1.5 text-xs font-semibold text-zinc-100 hover:bg-white/[0.12]">
+          className={`${BUTTON} ${FOCUS} mt-2.5 w-full px-3 py-2 text-xs font-semibold`}>
           <Building2 size={13} />
           Street view · see the block around the station
         </button>
