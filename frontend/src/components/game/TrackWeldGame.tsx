@@ -4,9 +4,9 @@ import { useEffect, useEffectEvent, useRef, useState, type KeyboardEvent, type P
 import { TimerBar, useCountdown } from "./useCountdown";
 
 // A thermite weld, the way track crews close a broken rail: preheat the rail ends inside the sand
-// mold, tap the crucible when the thermite has burned through so molten steel fills the gap, then
-// grind the weld collar flush with the railhead.
-type Phase = "heat" | "pour" | "pouring" | "grind" | "done";
+// mold, tap the crucible when the thermite has burned through so molten steel fills the gap, grind
+// the weld collar flush with the railhead, then hold trains until the weld has cooled below 700 °F.
+type Phase = "heat" | "pour" | "pouring" | "grind" | "cool" | "done";
 
 const W = 360;
 const H = 250;
@@ -15,13 +15,17 @@ const GAP_R = 188;
 const HEAD_Y = 122;
 const MOLD = { x: 150, y: 108, w: 60, h: 66 };
 const GAUGE = { x: 330, y: 44, h: 150 };
-/** Preheat target band (fraction of the gauge): roughly 1,000 °C at the rail ends. */
+/** Preheat target band (fraction of the gauge): roughly 1,700 °F at the rail ends. */
 const HEAT_BAND: [number, number] = [0.68, 0.86];
 const HEAT_RATE = 0.42;
 const COOL_RATE = 0.16;
 /** The tap window on the crucible meter. */
 const TAP_BAND: [number, number] = [0.6, 0.82];
 const GRIND_WORK = 900;
+/** The weld after grinding, and the temperature below which trains may cross it (°F). */
+const WELD_HOT_F = 900;
+const TRAIN_SAFE_F = 700;
+const COOL_F_PER_S = 95;
 const PENALTY_MS = 1200;
 let seq = 0;
 
@@ -29,6 +33,7 @@ const STEPS: Array<{ id: Phase; label: string }> = [
   { id: "heat", label: "PREHEAT" },
   { id: "pour", label: "POUR" },
   { id: "grind", label: "GRIND" },
+  { id: "cool", label: "COOL" },
 ];
 
 /** Glow of hot steel: dull red through orange to straw yellow. */
@@ -42,7 +47,7 @@ function steelGlow(t: number) {
 }
 
 export function TrackWeldGame({
-  durationMs = 24000,
+  durationMs = 28000,
   onWin,
   onLose,
 }: {
@@ -58,6 +63,7 @@ export function TrackWeldGame({
   const [grinderX, setGrinderX] = useState<number | null>(null);
   /** Which way the grinder is moving (sparks fly the other way); 0 when it's lifted. */
   const [grindDir, setGrindDir] = useState<-1 | 0 | 1>(0);
+  const [weldF, setWeldF] = useState(WELD_HOT_F);
   const tempRef = useRef(0.15);
   const collarRef = useRef(1);
   const [flash, setFlash] = useState<{ text: string; key: number } | null>(null);
@@ -122,6 +128,19 @@ export function TrackWeldGame({
     return () => cancelAnimationFrame(frame);
   }, [phase, lost]);
 
+  // Cool: the weld loses heat on its own; trains wait until it's below the safe temperature.
+  useEffect(() => {
+    if (phase !== "cool" || lost) return;
+    let frame = 0;
+    const start = performance.now();
+    const loop = (now: number) => {
+      setWeldF(Math.max(320, WELD_HOT_F - ((now - start) / 1000) * COOL_F_PER_S));
+      frame = requestAnimationFrame(loop);
+    };
+    frame = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(frame);
+  }, [phase, lost]);
+
   useEffect(() => {
     if (phase !== "pouring") return;
     const t = setTimeout(() => setPhase("grind"), 1300);
@@ -146,8 +165,14 @@ export function TrackWeldGame({
     setCollar(collarRef.current);
     if (collarRef.current === 0) {
       setGrindDir(0);
-      setPhase("done");
+      setPhase("cool");
     }
+  };
+
+  const openTrack = () => {
+    if (phase !== "cool") return;
+    if (weldF > TRAIN_SAFE_F) warn(`TOO HOT −1s · wait for ${TRAIN_SAFE_F} °F`);
+    else setPhase("done");
   };
 
   const toLocal = (e: PointerEvent<SVGSVGElement>) => {
@@ -160,6 +185,7 @@ export function TrackWeldGame({
     e.currentTarget.setPointerCapture?.(e.pointerId);
     if (phase === "heat") setHeating(true);
     else if (phase === "pour") tap();
+    else if (phase === "cool") openTrack();
     else if (phase === "grind") {
       const p = toLocal(e);
       grind.current = { id: e.pointerId, x: p.x };
@@ -190,6 +216,9 @@ export function TrackWeldGame({
     } else if (phase === "pour" && (e.key === " " || e.key === "Enter")) {
       e.preventDefault();
       tap();
+    } else if (phase === "cool" && (e.key === " " || e.key === "Enter")) {
+      e.preventDefault();
+      openTrack();
     } else if (phase === "grind" && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
       e.preventDefault();
       grindBy(70);
@@ -201,9 +230,10 @@ export function TrackWeldGame({
     if (e.key === " " || e.key === "Enter") releaseTorch();
   };
 
-  const stepIndex = phase === "heat" ? 0 : phase === "pour" || phase === "pouring" ? 1 : 2;
-  const filled = phase === "pouring" || phase === "grind" || phase === "done";
-  const moldOn = phase !== "grind" && phase !== "done";
+  const stepIndex = phase === "heat" ? 0 : phase === "pour" || phase === "pouring" ? 1 : phase === "grind" ? 2 : 3;
+  const filled = phase === "pouring" || phase === "grind" || phase === "cool" || phase === "done";
+  const moldOn = phase === "heat" || phase === "pour" || phase === "pouring";
+  const safe = weldF <= TRAIN_SAFE_F;
   const endGlow = steelGlow(phase === "heat" ? temp : filled ? 0.75 : 0.8);
   const inBand = temp >= HEAT_BAND[0] && temp <= HEAT_BAND[1];
   const gx = grinderX ?? W / 2;
@@ -218,7 +248,11 @@ export function TrackWeldGame({
           ? "Molten steel is filling the gap"
           : phase === "grind"
             ? "Scrub over the weld to grind it flush"
-            : "Weld finished: the rail is whole again";
+            : phase === "cool"
+              ? safe
+                ? `Below ${TRAIN_SAFE_F} °F: tap to open the track`
+                : `Hold the trains until the weld cools below ${TRAIN_SAFE_F} °F`
+              : "Weld finished: the rail is whole again";
 
   return (
     <div className="space-y-3">
@@ -297,6 +331,9 @@ export function TrackWeldGame({
         {filled && (
           <g>
             <rect x={GAP_L - 4} y={HEAD_Y} width={GAP_R - GAP_L + 8} height={46} fill={phase === "pouring" ? "url(#fixt-melt)" : "#8c93a4"} filter={phase === "pouring" ? "url(#fixt-weld-glow)" : undefined} />
+            {phase === "cool" && (
+              <rect x={GAP_L - 4} y={HEAD_Y} width={GAP_R - GAP_L + 8} height={46} fill="#ff5a1a" opacity={Math.max(0, (weldF - 500) / 700)} filter="url(#fixt-weld-glow)" />
+            )}
             {phase !== "pouring" && (
               <path
                 d={`M ${MOLD.x + 6} ${HEAD_Y} Q ${(GAP_L + GAP_R) / 2} ${HEAD_Y - 14 * collar} ${MOLD.x + MOLD.w - 6} ${HEAD_Y} Z`}
@@ -392,10 +429,10 @@ export function TrackWeldGame({
             <rect x={GAUGE.x} y={GAUGE.y + GAUGE.h * (1 - HEAT_BAND[1])} width={14} height={GAUGE.h * (HEAT_BAND[1] - HEAT_BAND[0])} fill="#38ff9c" opacity={0.35} />
             <rect x={GAUGE.x + 3} y={GAUGE.y + GAUGE.h * (1 - Math.min(1, temp))} width={8} height={GAUGE.h * Math.min(1, temp)} rx={3} fill={steelGlow(temp)} />
             <text x={GAUGE.x + 7} y={GAUGE.y - 8} textAnchor="middle" className="fill-slate-400 font-mono text-[8px]">
-              °C
+              °F
             </text>
             <text x={GAUGE.x - 4} y={GAUGE.y + GAUGE.h * (1 - (HEAT_BAND[0] + HEAT_BAND[1]) / 2) + 3} textAnchor="end" className="fill-emerald-300 font-mono text-[8px]">
-              ~1000
+              ~1,700
             </text>
           </g>
         )}
@@ -410,6 +447,21 @@ export function TrackWeldGame({
           </g>
         )}
 
+        {phase === "cool" && (
+          <g>
+            <rect x={250} y={30} width={96} height={40} rx={8} fill="#0b0d12" stroke={safe ? "#38ff9c" : "#ff9a2b"} strokeWidth={1.5} />
+            <text x={298} y={47} textAnchor="middle" className="fill-slate-400 font-mono text-[8px] tracking-widest">
+              WELD TEMP
+            </text>
+            <text x={298} y={63} textAnchor="middle" className={`font-mono text-[13px] font-bold tabular-nums ${safe ? "fill-emerald-300" : "fill-amber-300"}`}>
+              {Math.round(weldF)} °F
+            </text>
+            <rect x={14} y={30} width={96} height={40} rx={8} fill={safe ? "#0f3d2a" : "#2a1408"} stroke={safe ? "#38ff9c" : "#4a3020"} />
+            <text x={62} y={54} textAnchor="middle" className={`font-mono text-[10px] font-bold ${safe ? "fill-emerald-200" : "fill-slate-500"}`}>
+              {safe ? "OPEN TRACK" : "TRAINS HELD"}
+            </text>
+          </g>
+        )}
         <text x={W / 2} y={H - 12} textAnchor="middle" className={`font-mono text-[10px] tracking-wide ${won ? "fill-emerald-300" : inBand && phase === "heat" ? "fill-emerald-300" : "fill-amber-100"}`}>
           {prompt.toUpperCase()}
         </text>
@@ -420,7 +472,7 @@ export function TrackWeldGame({
         )}
       </svg>
       <p className="text-center text-xs text-slate-400" aria-live="polite">
-        {prompt}. Space or Enter works for the torch and the tap; arrow keys grind.
+        {prompt}. Space or Enter works for the torch, the tap and opening the track; arrow keys grind.
       </p>
     </div>
   );
