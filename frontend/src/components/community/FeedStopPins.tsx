@@ -4,7 +4,7 @@ import { useMemo } from "react";
 import type { CommunityPost, Station, StationId } from "@/types/tverse";
 import { MapAnchor } from "@/components/map";
 import { MOCK_STATIONS } from "@/lib/mockData";
-import { lineGlow } from "./feedMeta";
+import { lineColor } from "./feedMeta";
 import { FEED_STOPS } from "./feedStops";
 import { FeedStyles } from "./FeedStyles";
 
@@ -37,7 +37,6 @@ export function FeedStopPins({ posts, onOpenStop, stations = MOCK_STATIONS, show
     <>
       <FeedStyles />
       {stops.map((s) => {
-        const glow = lineGlow(s.lines[0]);
         const hot = s.id === highlightId;
         const n = counts.get(s.id) ?? 0;
         return (
@@ -45,21 +44,22 @@ export function FeedStopPins({ posts, onOpenStop, stations = MOCK_STATIONS, show
             <button
               type="button"
               onClick={() => onOpenStop(s.id)}
-              className="pointer-events-auto relative flex cursor-pointer items-center gap-1 whitespace-nowrap rounded-full border bg-slate-950/80 px-2 py-1 text-[11px] font-bold text-white backdrop-blur-md transition hover:scale-105"
-              style={{ borderColor: `${glow}99`, boxShadow: `0 0 ${hot ? 22 : 10}px ${glow}${hot ? "cc" : "55"}` }}
+              className={`pointer-events-auto relative flex cursor-pointer items-center gap-1 whitespace-nowrap rounded-full border bg-zinc-950/88 px-2 py-1 text-[11px] font-semibold text-white shadow-[0_6px_18px_-8px_rgba(0,0,0,0.8)] backdrop-blur-xl transition hover:scale-105 focus-visible:outline-2 focus-visible:outline-white ${
+                hot ? "border-white" : "border-white/12"
+              }`}
               aria-label={`${n} T-Feed posts at ${s.name}`}
               title={`${s.name} · ${n} T-Feed ${n === 1 ? "post" : "posts"}`}
             >
               {hot && (
                 <span
                   aria-hidden
-                  className="absolute inset-0 rounded-full border-2"
-                  style={{ borderColor: glow, animation: "tf-ping 1.4s cubic-bezier(0,0,.2,1) infinite" }}
+                  className="absolute inset-0 rounded-full border-2 border-white/70"
+                  style={{ animation: "tf-ping 1.4s cubic-bezier(0,0,.2,1) infinite" }}
                 />
               )}
               <span className="flex gap-0.5">
                 {s.lines.map((l) => (
-                  <span key={l} className="h-2 w-2 rounded-full" style={{ background: lineGlow(l) }} />
+                  <span key={l} className="h-2 w-2 rounded-full" style={{ background: lineColor(l) }} />
                 ))}
               </span>
               💬 {n}

@@ -6,6 +6,7 @@ import { Switch } from "@/components/hud/Switch";
 import { MOCK_STATIONS } from "@/lib/mockData";
 import { DEFAULT_RIDER_NAME, publicName, setRiderProfile, useRiderProfile } from "@/lib/riderProfile";
 import { LINE_COLORS } from "@/lib/theme";
+import { BUTTON_PRIMARY, FOCUS } from "@/lib/ui";
 import { CATEGORIES, CATEGORY_META } from "./storyData";
 import { compressImage, renderTextCard } from "./imageUtils";
 import { StoryStyles } from "./StoryStyles";
@@ -150,8 +151,7 @@ function PostStorySheet({
               type="button"
               onClick={() => cameraRef.current?.click()}
               disabled={busy}
-              className="flex h-28 flex-col items-center justify-center gap-1 rounded-2xl text-sm font-semibold text-black shadow-lg transition active:scale-[.97]"
-              style={{ background: CATEGORY_META[category].gradient }}
+              className={`${BUTTON_PRIMARY} h-28 flex-col gap-1 text-sm active:scale-[.97] ${FOCUS}`}
             >
               <span className="text-3xl">{busy ? "⏳" : "📸"}</span>
               {busy ? "Compressing…" : "Snap photo"}
@@ -160,7 +160,7 @@ function PostStorySheet({
               type="button"
               onClick={() => galleryRef.current?.click()}
               disabled={busy}
-              className="flex h-28 flex-col items-center justify-center gap-1 rounded-2xl bg-white/[.07] text-sm font-semibold ring-1 ring-white/15 transition hover:bg-white/[.12] active:scale-[.97]"
+              className={`flex h-28 flex-col items-center justify-center gap-1 rounded-lg border border-white/12 bg-white/[.05] text-sm font-semibold transition hover:bg-white/[.1] active:scale-[.97] ${FOCUS}`}
             >
               <span className="text-3xl">🖼️</span>
               Upload
@@ -204,12 +204,10 @@ function PostStorySheet({
                 key={c}
                 type="button"
                 onClick={() => setCategory(c)}
-                className="flex flex-col items-center gap-0.5 rounded-xl py-2 text-[11px] font-semibold ring-1 ring-white/15 transition"
-                style={
-                  active
-                    ? { background: `${m.color}26`, color: m.color, boxShadow: `inset 0 0 0 1px ${m.color}` }
-                    : { background: "rgba(255,255,255,.04)", color: "rgba(255,255,255,.7)" }
-                }
+                aria-pressed={active}
+                className={`flex flex-col items-center gap-0.5 rounded-lg border py-2 text-[11px] font-semibold transition ${FOCUS} ${
+                  active ? "border-white bg-white text-zinc-950" : "border-white/12 bg-white/[.04] text-zinc-300 hover:bg-white/[.08]"
+                }`}
               >
                 <span className="text-lg">{m.emoji}</span>
                 {m.label}
@@ -286,14 +284,10 @@ function PostStorySheet({
           </div>
         </div>
 
-        <button
-          type="submit"
-          disabled={!canPost}
-          className="w-full rounded-2xl py-3.5 text-base font-bold text-black shadow-xl transition active:scale-[.98] disabled:opacity-40"
-          style={{ background: CATEGORY_META[category].gradient }}
-        >
+        <button type="submit" disabled={!canPost} className={`${BUTTON_PRIMARY} w-full py-3.5 text-base active:scale-[.98] ${FOCUS}`}>
           Post to {station?.name ?? "station"}
         </button>
+        <p className="mt-2 text-center text-[11px] text-zinc-500">+25 XP for posting a Story</p>
       </form>
     </div>
   );

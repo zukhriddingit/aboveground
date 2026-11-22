@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import type { CommunityPost, NewCommunityReply, ReactionKey, StationId, TransitLine } from "@/types/tverse";
-import { REACTIONS, VIBES, authorLabel, formatCount, lineColor, lineGlow, relativeTime } from "./feedMeta";
+import { REACTIONS, VIBES, authorLabel, formatCount, lineColor, relativeTime } from "./feedMeta";
 import { ReplyThread } from "./ReplyThread";
 import { Avatar, BadgeTag } from "./RiderBits";
 
@@ -38,7 +38,6 @@ export function PostCard({
   const [burst, setBurst] = useState(0);
   const lastTap = useRef(0);
   const color = lineColor(post.line);
-  const glow = lineGlow(post.line);
   const vibe = VIBES[post.vibe];
   const mine = post.myReactions ?? [];
   const showImage = !!post.imageUrl && !broken;
@@ -64,7 +63,7 @@ export function PostCard({
       type="button"
       onClick={() => onJumpToStation?.(post.stationId)}
       className="inline-flex max-w-full items-center gap-1 truncate rounded-full px-2 py-0.5 text-[11px] font-semibold text-white/85 transition hover:text-white"
-      style={{ background: `${glow}1a`, boxShadow: `inset 0 0 0 1px ${glow}45` }}
+      style={{ background: "rgba(255,255,255,.05)", boxShadow: "inset 0 0 0 1px rgba(255,255,255,.12)" }}
       title="Show on the 3D map"
     >
       <span>📍</span>
@@ -114,15 +113,13 @@ export function PostCard({
           />
         ) : (
           <div
-            className="relative flex aspect-[5/4] w-full flex-col justify-center overflow-hidden px-6 py-8"
-            style={{
-              background: `radial-gradient(120% 90% at 0% 0%, ${color}f2 0%, ${color}99 32%, transparent 68%), radial-gradient(90% 90% at 100% 100%, ${glow}55 0%, transparent 60%), linear-gradient(160deg, #0d1330, #070b1a)`,
-            }}
+            className="relative flex aspect-[5/4] w-full flex-col justify-center overflow-hidden border-l-[6px] bg-zinc-900 px-6 py-8"
+            style={{ borderLeftColor: color }}
           >
             <span aria-hidden className="pointer-events-none absolute -right-3 -top-5 rotate-12 text-[132px] leading-none opacity-[.13] saturate-50">
               {vibe.emoji}
             </span>
-            <p className={`relative font-bold leading-snug text-white drop-shadow-[0_2px_10px_rgba(0,0,0,.45)] ${post.caption.length > 140 ? "text-lg" : "text-[22px]"}`}>
+            <p className={`relative font-bold leading-snug text-white ${post.caption.length > 140 ? "text-lg" : "text-[22px]"}`}>
               {post.caption}
             </p>
             <p className="relative mt-3 text-xs font-semibold text-white/70">
@@ -140,7 +137,7 @@ export function PostCard({
           <span
             key={burst}
             aria-hidden
-            className="pointer-events-none absolute left-1/2 top-1/2 text-[96px] leading-none drop-shadow-[0_0_30px_rgba(255,60,90,.8)]"
+            className="pointer-events-none absolute left-1/2 top-1/2 text-[96px] leading-none"
             style={{ animation: "tf-heart-burst .9s ease-out forwards" }}
           >
             ❤️
@@ -163,7 +160,7 @@ export function PostCard({
               className="flex items-center gap-1 rounded-full px-2.5 py-1.5 text-xs font-semibold tabular-nums transition active:scale-90"
               style={
                 on
-                  ? { background: `${glow}26`, color: "#fff", boxShadow: `inset 0 0 0 1px ${glow}99` }
+                  ? { background: "rgba(255,255,255,.14)", color: "#fff", boxShadow: "inset 0 0 0 1px rgba(255,255,255,.7)" }
                   : { background: "rgba(255,255,255,.05)", color: "rgba(255,255,255,.7)", boxShadow: "inset 0 0 0 1px rgba(255,255,255,.08)" }
               }
             >
@@ -179,7 +176,7 @@ export function PostCard({
           onClick={() => setThreadOpen((o) => !o)}
           aria-expanded={threadOpen}
           className="ml-auto flex items-center gap-1 rounded-full px-2.5 py-1.5 text-xs font-semibold text-white/75 transition hover:bg-white/10"
-          style={threadOpen ? { color: glow } : undefined}
+          style={threadOpen ? { color: "#fff", background: "rgba(255,255,255,.1)" } : undefined}
         >
           💬 {post.replies.length}
         </button>

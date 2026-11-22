@@ -22,9 +22,9 @@ const BUBBLE_W = 72;
 const BUBBLE_H = 86;
 
 /**
- * Neon story rings floating over every station that has stories.
+ * Story rings floating over every station that has stories (white ring = new, grey = seen).
  * Render it as a child of <TVerseMap>. Bubbles that would overlap on screen
- * (Boylston / Park Street) stack upward on a glowing stem.
+ * (Boylston / Park Street) stack upward on a thin stem.
  */
 export function StationStoryBubbles({ stations, storiesByStation, onOpenStation, altitude = 90 }: StationStoryBubblesProps) {
   const overlay = useContext(MapOverlayContext);
@@ -71,7 +71,6 @@ export function StationStoryBubbles({ stations, storiesByStation, onOpenStation,
       <StoryStyles />
       {active.map((s, i) => {
         const stories = storiesByStation[s.id]!;
-        const color = CATEGORY_META[dominantCategory(stories)].color;
         return (
           <MapAnchor key={s.id} lng={s.lng} lat={s.lat} altitude={altitude}>
             <div
@@ -84,8 +83,8 @@ export function StationStoryBubbles({ stations, storiesByStation, onOpenStation,
                 ref={(el) => {
                   stems.current[s.id] = el;
                 }}
-                className="pointer-events-none absolute left-1/2 top-full w-px -translate-x-1/2"
-                style={{ height: 14, background: `linear-gradient(to bottom, ${color}, transparent)` }}
+                className="pointer-events-none absolute left-1/2 top-full w-px -translate-x-1/2 bg-white/45"
+                style={{ height: 14 }}
               />
               <div style={{ animation: `tv-float 3.2s ${i * 0.37}s ease-in-out infinite` }}>
                 <StoryBubble
@@ -156,7 +155,6 @@ function StoryBubble({
 }) {
   const latest = stories[0];
   const meta = CATEGORY_META[dominantCategory(stories)];
-  const ring = useMemo(() => ringGradient(stories), [stories]);
   const [failedSrc, setFailedSrc] = useState<string | null>(null);
   const size = compact ? 56 : 52;
   const showImg = !!latest.imageUrl && failedSrc !== latest.imageUrl;
@@ -169,15 +167,8 @@ function StoryBubble({
       className="group flex cursor-pointer flex-col items-center gap-1 outline-none"
     >
       <div className="relative" style={{ width: size + 8, height: size + 8 }}>
-        <div
-          className="absolute inset-0 rounded-full"
-          style={{
-            background: fresh ? ring : "rgba(255,255,255,.25)",
-            boxShadow: fresh ? `0 0 18px ${meta.color}aa, 0 0 36px ${meta.color}55` : "none",
-            animation: fresh ? "tv-ring-spin 6s linear infinite" : undefined,
-          }}
-        />
-        <div className="absolute inset-[3px] overflow-hidden rounded-full bg-slate-900 ring-2 ring-slate-950 transition group-hover:scale-105 group-active:scale-95">
+        <div className={`absolute inset-0 rounded-full ${fresh ? "bg-white" : "bg-white/30"} shadow-[0_6px_18px_-8px_rgba(0,0,0,0.8)]`} />
+        <div className="absolute inset-[3px] overflow-hidden rounded-full bg-zinc-900 ring-2 ring-zinc-950 transition group-hover:scale-105 group-active:scale-95 group-focus-visible:ring-white">
           {showImg ? (
             // eslint-disable-next-line @next/next/no-img-element -- data URLs + remote seeds
             <img
@@ -188,24 +179,23 @@ function StoryBubble({
               onError={() => setFailedSrc(latest.imageUrl)}
             />
           ) : (
-            <div className="flex h-full w-full items-center justify-center text-2xl" style={{ background: meta.gradient }}>
+            <div className="flex h-full w-full items-center justify-center bg-zinc-800 text-2xl">
               {meta.emoji}
             </div>
           )}
         </div>
         <span
-          className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[10px] font-bold text-black ring-2 ring-slate-950"
-          style={{ background: meta.color }}
+          className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-white px-1 text-[10px] font-bold text-zinc-950 ring-2 ring-zinc-950 tabular-nums"
         >
           {stories.length}
         </span>
         <span className="absolute -bottom-0.5 -left-0.5 text-base drop-shadow">{meta.emoji}</span>
       </div>
       <span
-        className="max-w-[96px] truncate rounded-full border bg-slate-950/75 px-2 py-0.5 text-[10px] font-semibold text-white backdrop-blur-md"
-        style={{ borderColor: `${LINE_COLORS[station.line]}cc` }}
+        className="flex max-w-[96px] items-center gap-1 rounded-md border border-white/12 bg-zinc-950/88 px-1.5 py-0.5 text-[10px] font-semibold text-white backdrop-blur-xl"
       >
-        {station.name}
+        <span className="size-1.5 shrink-0 rounded-full" style={{ background: LINE_COLORS[station.line] }} />
+        <span className="truncate">{station.name}</span>
       </span>
     </button>
   );
@@ -239,9 +229,3 @@ function dominantCategory(stories: StationStory[]): StoryCategory {
   return (Object.entries(c).sort((a, b) => b[1] - a[1])[0]?.[0] as StoryCategory) ?? "VIBES";
 }
 
-function ringGradient(stories: StationStory[]) {
-  const colors = (Object.keys(counts(stories)) as StoryCategory[]).map((c) => CATEGORY_META[c].color);
-  if (colors.length === 1) colors.push("#ffffff", colors[0]);
-  else colors.push(colors[0]);
-  return `conic-gradient(${colors.join(",")})`;
-}
