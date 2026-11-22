@@ -18,9 +18,9 @@ branch gaps live/mock, the closure card, Gemini text with its source, a CharlieP
 | Export | What it does |
 | --- | --- |
 | `useAlertTranslation(alert)` | For Member 4's delay card. Returns `{ title, explanation, alternateMove, source, pending }`: the alert's own `plainTitle`/`plainExplanation` immediately, swapped for Gemini's 2 sentences (`POST /api/ai/translate-alert`) only if it answers within 4 s with an AI `source` (`"gemini"`, or `"claude"` while no Gemini key is set). |
-| `useStationNarration(station)` | Tourist Mode mini-story (`POST /api/ai/narrate`), landmark fact otherwise. Already wired into `TouristNarratorCard` (speech waits ≤ 1.5 s for the AI text; mute/replay unchanged; a "✨ Gemini" tag shows when it's AI). |
+| `useStationNarration(station)` | Tourist Mode mini-story (`POST /api/ai/narrate`), landmark fact otherwise. Already wired into `TouristNarratorCard` (speech waits ≤ 1.5 s for the AI text; mute/replay unchanged; an "AI · Gemini" tag shows when it's AI). |
 | `useLineVibe(line)` | P2 one-liner from the last T-Feed posts + Quick-Check taps (`GET /api/ai/line-vibe`). |
-| `AiSourceTag` | "✨ Gemini" / "Template" pill. `useAiText` is the generic hook. |
+| `AiSourceTag` | "AI · Gemini" / "Template" pill. `useAiText` is the generic hook. |
 
 ## `@/components/transit`: branch gaps, next usable train, closures
 

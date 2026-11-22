@@ -112,7 +112,7 @@ export function RiderProfilePopover({
             })}
           </ol>
           <p className="mt-2 text-[11px] text-zinc-500">
-            +{XP_REWARDS.quickCheck} Quick-Check · +{XP_REWARDS.post} T-Feed post · +{XP_REWARDS.reply} reply · +{XP_REWARDS.fix} Fix the T
+            XP: +{XP_REWARDS.quickCheck} Quick-Check · +{XP_REWARDS.post} T-Feed post or Story · +{XP_REWARDS.reply} reply · +{XP_REWARDS.fix} Fix the T
           </p>
         </section>
 
