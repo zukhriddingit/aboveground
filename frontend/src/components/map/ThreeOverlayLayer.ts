@@ -9,9 +9,9 @@ import type { AvatarHat, Crowdedness, Station, StationId, TLinesGeoJson, TrainVe
 import { CROWDEDNESS, LINE_GLOW, routeLine } from "@/lib/theme";
 import { AvatarRig, AVATAR_HEIGHT } from "./avatar";
 import { angleDelta, bearingToYaw, MODEL_MATRIX, toLngLat, toLocal } from "./geo";
-import { allowStationModel, stationModelAllowed, loadStationModel, loadStationSite, StationModel, STATION_MODEL, stationYaw } from "./stationModels";
+import { loadStationModel, loadStationSite, StationModel, STATION_MODEL, stationYaw } from "./stationModels";
 import { landmarkPosition } from "./landmarks";
-import { DEFAULT_MAP_LAYERS, type MapLayerVisibility, type MapViewMode, type ScreenPoint } from "./types";
+import type { ScreenPoint } from "./types";
 
 const TAU = Math.PI * 2;
 const UP = new T.Vector3(0, 1, 0);
@@ -114,7 +114,6 @@ class Sparks {
   private readonly tint = new Float32Array(SPARK_COUNT * 3);
   private readonly size = new Float32Array(SPARK_COUNT);
   private readonly alpha = new Float32Array(SPARK_COUNT);
-  private readonly source: ("avatar" | "alerts" | "tourist")[] = [];
   private readonly life = new Float32Array(SPARK_COUNT);
   private readonly maxLife = new Float32Array(SPARK_COUNT);
   private readonly baseSize = new Float32Array(SPARK_COUNT);
@@ -163,7 +162,7 @@ class Sparks {
     this.points.renderOrder = 10;
   }
 
-  emit(at: T.Vector3, velocity: T.Vector3, color: T.ColorRepresentation, sizePx: number, life: number, gravity = 0, drag = 0, source: "avatar" | "alerts" | "tourist" = "avatar") {
+  emit(at: T.Vector3, velocity: T.Vector3, color: T.ColorRepresentation, sizePx: number, life: number, gravity = 0, drag = 0) {
     const i = this.cursor;
     this.cursor = (this.cursor + 1) % SPARK_COUNT;
     this.pos.set([at.x, at.y, at.z], i * 3);
@@ -171,15 +170,10 @@ class Sparks {
     this.color.set(color);
     this.tint.set([this.color.r, this.color.g, this.color.b], i * 3);
     this.baseSize[i] = sizePx;
-    this.source[i] = source;
     this.life[i] = life;
     this.maxLife[i] = life;
     this.gravity[i] = gravity;
     this.drag[i] = drag;
-  }
-
-  clear(source: "alerts" | "tourist") {
-    this.source.forEach((kind, i) => { if (kind === source) this.life[i] = 0; });
   }
 
   frame(dt: number, pixelRatio: number) {
@@ -383,7 +377,6 @@ interface StationNode {
   ring: T.Mesh<T.RingGeometry, T.MeshBasicMaterial>;
   disc: T.Mesh<T.CircleGeometry, T.MeshBasicMaterial>;
   gem: T.Mesh<T.OctahedronGeometry, T.MeshBasicMaterial>;
-  modelRequested?: boolean;
   model?: StationModel;
   shuttle?: ShuttleCurbPin;
   base: T.Color;
@@ -431,7 +424,6 @@ export interface PickHit {
 }
 
 interface Wave {
-  alert?: boolean;
   mesh: T.Mesh<T.RingGeometry, T.MeshBasicMaterial>;
   start: number;
   life: number;
@@ -454,9 +446,6 @@ export class ThreeOverlayLayer implements CustomLayerInterface {
   /** Called after every rendered frame (MapAnchor uses it to follow the camera). */
   readonly frameListeners = new Set<() => void>();
 
-  private disposed = false;
-
-  get isDisposed() { return this.disposed; }
   private map?: MapLibreMap;
   private renderer?: T.WebGLRenderer;
   private readonly scene = new T.Scene();
@@ -486,8 +475,6 @@ export class ThreeOverlayLayer implements CustomLayerInterface {
   private vehicleInterval = 3;
   private zoom = 14;
   private touristMode = false;
-  private mode: MapViewMode = "3d";
-  private visible = DEFAULT_MAP_LAYERS;
 
   // Avatar state (local meters).
   private readonly avatarPos = new T.Vector3();
@@ -520,26 +507,21 @@ export class ThreeOverlayLayer implements CustomLayerInterface {
 
   onAdd(map: MapLibreMap, gl: WebGLRenderingContext | WebGL2RenderingContext) {
     this.map = map;
-    // Whole-style replacement on the same map preserves the GL context and live scene.
-    if (this.renderer) {
-      this.scheduleBuildingMask();
-      return;
-    }
     this.renderer = new T.WebGLRenderer({ canvas: map.getCanvas(), context: gl, antialias: true });
     this.renderer.autoClear = false;
     this.renderer.outputColorSpace = T.SRGBColorSpace;
-    const key = new T.DirectionalLight(0xffddbd, 1.52);
-    key.position.set(-5, 4, 3);
-    const rim = new T.DirectionalLight(0xb0ceff, 1.45);
+    const key = new T.DirectionalLight(0xffd7af, 1.7);
+    key.position.set(-3, 5, 2);
+    const rim = new T.DirectionalLight(0xa4bcff, 1.25);
     rim.position.set(3, 2, -4);
-    this.scene.add(key, rim, new T.HemisphereLight(0xdce9ff, 0x596578, .83));
+    this.scene.add(key, rim, new T.HemisphereLight(0xddeaff, 0x667393, 1.0));
     if (this.renderer.extensions.has("EXT_color_buffer_float")) {
       const room = new RoomEnvironment();
       const pmrem = new T.PMREMGenerator(this.renderer);
       try {
         this.environment = pmrem.fromScene(room, .04, .1, 100, { size: 64 });
         this.scene.environment = this.environment.texture;
-        this.scene.environmentIntensity = .43;
+        this.scene.environmentIntensity = .36;
       } catch {
         // Direct dusk lighting also works on devices without float render targets.
       } finally {
@@ -551,8 +533,6 @@ export class ThreeOverlayLayer implements CustomLayerInterface {
   }
 
   onRemove() {
-    if (this.disposed) return;
-    this.disposed = true;
     const map = this.map;
     this.map = undefined;
     if (this.maskFrame) cancelAnimationFrame(this.maskFrame);
@@ -577,7 +557,7 @@ export class ThreeOverlayLayer implements CustomLayerInterface {
   }
 
   render(_gl: WebGLRenderingContext | WebGL2RenderingContext, args: CustomRenderMethodInput) {
-    if (!this.renderer || !this.map || this.mode === "2d") return;
+    if (!this.renderer || !this.map) return;
     const matrix = args.defaultProjectionData.mainMatrix as unknown as ArrayLike<number>;
     if (!matrix || matrix.length !== 16) return;
     this.localToClip.fromArray(matrix).multiply(MODEL_MATRIX);
@@ -618,22 +598,6 @@ export class ThreeOverlayLayer implements CustomLayerInterface {
 
   // ------------------------------------------------------------ stations + alerts
 
-  setPresentation(mode: MapViewMode, visible: MapLayerVisibility) {
-    this.mode = mode;
-    if (this.visible.alerts && !visible.alerts) {
-      this.sparks.clear("alerts");
-      for (const wave of this.waves) if (wave.alert) wave.start = -Infinity;
-      for (const node of this.stations.values()) node.alertLevel = node.flash = 0;
-    }
-    this.visible = visible;
-    if (mode === "3d" && visible.alerts) {
-      for (const node of this.stations.values()) {
-        if (node.station.hasActiveAlert && !node.alert.signalRequested) this.attachSignal(node);
-      }
-    }
-    this.map?.triggerRepaint();
-  }
-
   setLines(lines: TLinesGeoJson) {
     if (this.lines === lines) return;
     this.lines = lines;
@@ -652,7 +616,7 @@ export class ThreeOverlayLayer implements CustomLayerInterface {
       if (!node) {
         node = this.createStation(station);
         this.stations.set(station.id, node);
-        if (stationModelAllowed(station.id) && this.mode === "3d") this.requestStationModel(station.id);
+        this.attachStationModel(node);
       }
       const wasAlert = node.station.hasActiveAlert;
       node.station = station;
@@ -664,11 +628,11 @@ export class ThreeOverlayLayer implements CustomLayerInterface {
         if (this.lines && !node.model?.mainEntrance) node.group.rotation.y = stationYaw(station, this.lines);
         if (node.model?.mainEntrance) this.scheduleBuildingMask();
       }
-      if (this.mode === "3d" && this.visible.alerts && station.hasActiveAlert && !node.alert.signalRequested) this.attachSignal(node);
-      if (this.mode === "3d" && this.visible.alerts && station.hasActiveAlert && !wasAlert) {
+      if (station.hasActiveAlert && !node.alert.signalRequested) this.attachSignal(node);
+      if (station.hasActiveAlert && !wasAlert) {
         node.flash = 1;
-        this.spawnWave(node.pos, RED, 260, 1.4, 0, true);
-        this.spawnWave(node.pos, RED, 170, 1.0, 0.25, true);
+        this.spawnWave(node.pos, RED, 260, 1.4);
+        this.spawnWave(node.pos, RED, 170, 1.0, 0.25);
       }
       this.syncShuttle(node);
       this.syncLandmark(station);
@@ -677,14 +641,10 @@ export class ThreeOverlayLayer implements CustomLayerInterface {
     for (const id of [...this.landmarks.keys()]) if (!seen.has(id)) this.removeLandmark(id);
   }
 
-  requestStationModel(id: StationId) {
-    const node = this.stations.get(id);
-    if (!node || node.modelRequested) return;
-    node.modelRequested = true;
-    allowStationModel(id);
+  private attachStationModel(node: StationNode) {
     void loadStationSite(node.station.id).then(template => {
       if (!template || this.stations.get(node.station.id) !== node) return;
-      node.model = new StationModel(template, this.renderer?.capabilities.getMaxAnisotropy() || 1);
+      node.model = new StationModel(template);
       node.group.add(node.model.root);
       if (node.model.mainEntrance) {
         if (node.model.anchor) toLocal(...node.model.anchor, 0, node.group.position);
@@ -775,8 +735,7 @@ export class ThreeOverlayLayer implements CustomLayerInterface {
   /** Geographic position of the plate's top edge, including its camera-facing tilt. */
   shuttleAnchor(id: StationId): [number, number, number] | null {
     const pin = this.stations.get(id)?.shuttle;
-    if (!pin || !this.visible.shuttles) return null;
-    if (this.mode === "2d") return [...toLngLat(pin.position.x, pin.position.z), 0];
+    if (!pin) return null;
     const { sign } = pin;
     const top = sign.localToWorld(this.v3.set(0, sign.geometry.parameters.height / 2 + .5, 0));
     return [...toLngLat(top.x, top.z), top.y];
@@ -794,7 +753,7 @@ export class ThreeOverlayLayer implements CustomLayerInterface {
     alert.signalRequested = true;
     void loadStationModel("alert_signal").then(template => {
       if (!template || this.stations.get(node.station.id) !== node) return;
-      alert.signal = new StationModel(template, this.renderer?.capabilities.getMaxAnisotropy() || 1);
+      alert.signal = new StationModel(template);
       alert.signalBorn = this.time;
       alert.group.add(alert.signal.root);
     });
@@ -873,11 +832,8 @@ export class ThreeOverlayLayer implements CustomLayerInterface {
     const t = this.time;
     const zs = this.zs;
     for (const node of this.stations.values()) {
-      if (node.shuttle) {
-        node.shuttle.visible = this.visible.shuttles;
-        if (node.shuttle.visible) this.updateShuttle(node, node.shuttle);
-      }
-      const target = this.visible.alerts && node.station.hasActiveAlert ? 1 : 0;
+      if (node.shuttle) this.updateShuttle(node, node.shuttle);
+      const target = node.station.hasActiveAlert ? 1 : 0;
       node.alertLevel += (target - node.alertLevel) * (1 - Math.exp(-dt * (target ? 3.2 : 5)));
       node.flash *= Math.exp(-dt * 2.5);
       node.group.scale.setScalar(zs);
@@ -961,7 +917,7 @@ export class ThreeOverlayLayer implements CustomLayerInterface {
           signal.sparkSocket.getWorldPosition(this.v3);
           for (let i = 0; i < 4; i++) {
             this.v3b.set(Math.random() * 18 - 9, 7 + Math.random() * 14, Math.random() * 18 - 9).multiplyScalar(zs);
-            this.sparks.emit(this.v3, this.v3b, i % 2 ? "#ffc251" : "#fff1c2", 3.2, .53, 42 * zs, 0, "alerts");
+            this.sparks.emit(this.v3, this.v3b, i % 2 ? "#ffc251" : "#fff1c2", 3.2, .53, 42 * zs);
           }
         }
       }
@@ -1005,13 +961,6 @@ export class ThreeOverlayLayer implements CustomLayerInterface {
   setTouristMode(on: boolean) {
     if (on === this.touristMode) return;
     this.touristMode = on;
-    if (!on) {
-      this.sparks.clear("tourist");
-      for (const node of this.landmarks.values()) {
-        node.level = 0;
-        node.group.visible = false;
-      }
-    }
     let i = 0;
     for (const node of this.landmarks.values()) node.delay = on ? (i++) * 0.12 : 0;
   }
@@ -1083,7 +1032,7 @@ export class ThreeOverlayLayer implements CustomLayerInterface {
         const r = (10 + Math.random() * 34) * zs;
         this.v3.set(node.pos.x + Math.cos(a) * r, 4, node.pos.z + Math.sin(a) * r);
         this.v3b.set(0, (40 + Math.random() * 60) * zs, 0);
-        this.sparks.emit(this.v3, this.v3b, Math.random() < 0.7 ? GOLD : "#fff6d5", 5 + Math.random() * 5, 2.6, 0, 0.3, "tourist");
+        this.sparks.emit(this.v3, this.v3b, Math.random() < 0.7 ? GOLD : "#fff6d5", 5 + Math.random() * 5, 2.6, 0, 0.3);
       }
     }
   }
@@ -1091,9 +1040,7 @@ export class ThreeOverlayLayer implements CustomLayerInterface {
   /** Where a landmark's label goes: just above its spinning gem. null while hidden. */
   landmarkAnchor(id: StationId): [number, number, number] | null {
     const node = this.landmarks.get(id);
-    if (!node || !this.touristMode) return null;
-    if (this.mode === "2d") return [...toLngLat(node.pos.x, node.pos.z), 0];
-    if (node.level < 0.35 || node.delay > 0) return null;
+    if (!node || node.level < 0.35 || node.delay > 0) return null;
     const [lng, lat] = toLngLat(node.pos.x, node.pos.z);
     return [lng, lat, (LANDMARK_H + 78) * this.zs * easeOutCubic(clamp01(node.level))];
   }
@@ -1136,7 +1083,6 @@ export class ThreeOverlayLayer implements CustomLayerInterface {
       node.vehicle = vehicle;
       node.dying = null;
       const jump = node.cur.distanceTo(target);
-      if (this.mode === "2d") node.cur.copy(target);
       node.from.copy(jump > 1500 ? target : node.cur);
       node.to.copy(target);
       node.start = now;
@@ -1144,12 +1090,7 @@ export class ThreeOverlayLayer implements CustomLayerInterface {
       node.speed = jump / node.duration;
     }
     for (const node of this.trains.values()) {
-      if (seen.has(node.vehicle.id)) continue;
-      if (this.mode === "2d") {
-        // The flat map renders on demand, so a removal cannot depend on a later animation frame.
-        this.disposeTrain(node);
-        this.trains.delete(node.vehicle.id);
-      } else if (node.dying === null) node.dying = now;
+      if (!seen.has(node.vehicle.id) && node.dying === null) node.dying = now;
     }
   }
 
@@ -1209,7 +1150,6 @@ export class ThreeOverlayLayer implements CustomLayerInterface {
     const t = this.time;
     const zs = this.zs;
     for (const node of [...this.trains.values()]) {
-      node.group.visible = this.visible.trains;
       const u = clamp01((t - node.start) / node.duration);
       node.cur.lerpVectors(node.from, node.to, u);
       node.group.position.set(node.cur.x, TRAIN_Y * zs + Math.sin(t * 2.4 + node.phase) * 1.2 * zs, node.cur.z);
@@ -1343,12 +1283,11 @@ export class ThreeOverlayLayer implements CustomLayerInterface {
 
   // ------------------------------------------------------------ waves
 
-  private spawnWave(at: T.Vector3, color: T.ColorRepresentation, radius: number, life: number, delay = 0, alert = false) {
+  private spawnWave(at: T.Vector3, color: T.ColorRepresentation, radius: number, life: number, delay = 0) {
     const wave = this.waves[this.waveCursor];
     this.waveCursor = (this.waveCursor + 1) % this.waves.length;
     wave.mesh.position.set(at.x, 3, at.z);
     wave.mesh.material.color.set(color);
-    wave.alert = alert;
     wave.start = this.time + delay;
     wave.life = life;
     wave.radius = radius;
@@ -1380,17 +1319,11 @@ export class ThreeOverlayLayer implements CustomLayerInterface {
   }
 
   project(lng: number, lat: number, altitude = 0): ScreenPoint | null {
-    if (this.mode === "2d" && this.map) {
-      const p = this.map.project([lng, lat]);
-      const el = this.map.getContainer();
-      return { x: p.x, y: p.y, visible: p.x > -80 && p.x < el.clientWidth + 80 && p.y > -80 && p.y < el.clientHeight + 80 };
-    }
     return this.projectLocal(toLocal(lng, lat, altitude, new T.Vector3()));
   }
 
   /** What is under a screen point (CSS px), nearest first by priority. */
   pick(x: number, y: number): PickHit | null {
-    if (this.mode === "2d") return null;
     const zs = this.zs;
     const candidates: { kind: PickKind; id: string; d: number }[] = [];
     const test = (kind: PickKind, id: string, p: T.Vector3, radius: number) => {
@@ -1407,11 +1340,11 @@ export class ThreeOverlayLayer implements CustomLayerInterface {
       return this.localRay.intersectsBox(bounds);
     };
     for (const node of this.stations.values()) {
-      if (this.visible.alerts && node.station.hasActiveAlert && node.alert.group.visible) {
+      if (node.station.hasActiveAlert && node.alert.group.visible) {
         test("alert", node.station.id, node.alert.sign.getWorldPosition(this.v3), 27);
         if (node.alert.signal && hitBox(node.alert.signal.root, node.alert.signal.bounds)) candidates.push({ kind: "alert", id: node.station.id, d: 0 });
       }
-      if (this.visible.shuttles && node.shuttle) {
+      if (node.shuttle) {
         const hit = this.raycaster.intersectObjects(node.shuttle.targets, false)[0];
         if (hit) candidates.push({ kind: "station", id: node.station.id, d: -1 / (1 + hit.distance) });
         else test("station", node.station.id, node.shuttle.sign.getWorldPosition(this.v3), 16);
@@ -1427,12 +1360,12 @@ export class ThreeOverlayLayer implements CustomLayerInterface {
       }
     }
     for (const node of this.landmarks.values()) {
-      if (!this.touristMode || node.level < 0.5) continue;
+      if (node.level < 0.5) continue;
       test("landmark", node.station.id, this.v3.set(node.pos.x, (LANDMARK_H + 34) * zs, node.pos.z), 44);
       test("landmark", node.station.id, this.v3.set(node.pos.x, 0, node.pos.z), 30);
     }
     for (const node of this.trains.values()) {
-      if (!this.visible.trains || node.dying !== null) continue;
+      if (node.dying !== null) continue;
       test("train", node.vehicle.id, this.v3.set(node.cur.x, TRAIN_Y * zs, node.cur.z), 24);
     }
     const head = this.projectLocal(this.v3.set(this.avatarPos.x, this.avatarSize, this.avatarPos.z));
