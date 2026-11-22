@@ -16,7 +16,7 @@ import type { MapViewMode } from "@/components/map";
 import type { Station, StationId } from "@/types/tverse";
 import { Puffs, Sparks } from "./fx";
 import type { IncidentSim } from "./incidentSim";
-import { SURFACE_STATIONS, faultSite, type FaultKind } from "./faults";
+import { faultSite, isSurfaceStation, type FaultKind } from "./faults";
 import { FIX_MODEL_MATRIX, TRACKS, clamp, compassBearing, pointAt, sliceTrack, toLngLat, toLocal, zoomScale, type Track, type XZ } from "./trackGeo";
 import { SurfaceStation } from "./SurfaceStation";
 import { TunnelCutaway, cutRange, type CutawayTrain } from "./TunnelCutaway";
@@ -119,9 +119,7 @@ class FixLayer implements CustomLayerInterface {
   readonly cutaways = new Map<StationId, TunnelCutaway>();
   /** Work zones at street-level stops, while something's broken there. */
   readonly surfaces = new Map<StationId, SurfaceStation>();
-  /** Stations where the street can't open (surface stops, or buildings over the whole tunnel). */
-  private readonly noCut = new Set<StationId>();
-  private readonly fitted = new WeakSet<TunnelCutaway>();
+  private readonly fitted = new Set<TunnelCutaway>();
   private lastFrame = 0;
   private zs = 1;
   /** Held or just-released trains on the map last frame (their rings pulse). */
@@ -244,7 +242,7 @@ class FixLayer implements CustomLayerInterface {
   }
 
   ensureCutaway(id: StationId, openAt: number, fault: FaultKind): { cut: TunnelCutaway; created: boolean } | null {
-    if (SURFACE_STATIONS.has(id) || this.noCut.has(id)) return null;
+    if (isSurfaceStation(id)) return null;
     const existing = this.cutaways.get(id);
     if (existing && !existing.isClosed(openAt) && existing.opening) return { cut: existing, created: false };
     const station = this.stationInfo(id);
@@ -272,7 +270,7 @@ class FixLayer implements CustomLayerInterface {
       if (incident.status === "active" && !this.cutaways.has(incident.stationId)) {
         this.ensureCutaway(incident.stationId, now + OPEN_DELAY_MS, incident.fault);
       }
-      if (incident.status === "active" && SURFACE_STATIONS.has(incident.stationId)) this.ensureSurface(incident.stationId, incident.fault)?.setIncident(now);
+      if (incident.status === "active" && isSurfaceStation(incident.stationId)) this.ensureSurface(incident.stationId, incident.fault)?.setIncident(now);
     }
     const trains = this.frameTrains, hidden = this.hidden;
     trains.length = 0;
@@ -290,12 +288,9 @@ class FixLayer implements CustomLayerInterface {
     for (const [id, cut] of this.cutaways) {
       if (!this.fitted.has(cut) && cut.startsAt !== null && now > cut.startsAt - 200) {
         this.fitted.add(cut);
-        if (!cut.fitToStreet(this.buildingsNear(id))) {
-          this.noCut.add(id);
-          cut.dispose();
-          this.cutaways.delete(id);
-          continue;
-        }
+        // Built over end to end (Huntington Ave at Symphony): the street stays shut, but the tunnel is
+        // still staged for the walk-in view.
+        if (!cut.fitToStreet(this.buildingsNear(id))) cut.bury();
       }
       const busy = this.busyStations.has(id);
       if (!busy) cut.close(now);
@@ -434,7 +429,7 @@ class FixLayer implements CustomLayerInterface {
       run.callbacks.onDone();
       return;
     }
-    const surface = SURFACE_STATIONS.has(run.stationId) ? this.ensureSurface(run.stationId, run.fault) : null;
+    const surface = isSurfaceStation(run.stationId) ? this.ensureSurface(run.stationId, run.fault) : null;
     if (surface) {
       this.surfaceRepair(run, surface, xz, now);
       return;
@@ -672,7 +667,7 @@ export class FixTheTScene {
     if (!corridor || !station) return null;
     const kind = fault ?? this.layer.cutaways.get(stationId)?.fault ?? this.sim.incidentAt(stationId)?.fault ?? "signal";
     const f = this.layer.faultOffset(stationId, kind, corridor);
-    if (SURFACE_STATIONS.has(stationId)) {
+    if (isSurfaceStation(stationId)) {
       // Low and down the median from the station side, looking at the work zone.
       const p = pointAt(corridor.track, corridor.dS + f * 0.85);
       return { center: toLngLat(p.x, p.z), bearing: (compassBearing(p.angle) + (f >= 0 ? 10 : 190)) % 360, zoom: 18.1, pitch: 66 };

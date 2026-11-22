@@ -1,15 +1,16 @@
 "use client";
 
 import { useEffect, useEffectEvent, useId, useRef, useState } from "react";
-import { Bot, CircleCheck, Clock3, ExternalLink, Eye, RotateCcw, ShieldAlert, Users, Wrench, X } from "lucide-react";
+import { Bot, CircleCheck, Clock3, ExternalLink, Eye, ShieldAlert, Users, Wrench, X } from "lucide-react";
 import type { RepairKind, Station, TranslatedAlert } from "@/types/tverse";
 import { AiSourceTag, useAlertTranslation } from "@/components/ai";
-import { BUTTON, BUTTON_PRIMARY, FOCUS, LABEL, PANEL } from "@/lib/ui";
+import { BUTTON_PRIMARY, FOCUS, LABEL, PANEL } from "@/lib/ui";
 import { canPlay, gameFor, type GameKind } from "./alertTranslator";
 import { BreakerSequenceGame } from "./BreakerSequenceGame";
 import { GameStyles } from "./GameStyles";
 import { formatElapsed } from "./format";
 import { IceThawGame } from "./IceThawGame";
+import type { MiniGameProps } from "./miniGame";
 import { REAL_REPAIRS } from "./realRepairs";
 import type { IncidentStats } from "./incidentSim";
 import { RescueCoupleGame } from "./RescueCoupleGame";
@@ -17,58 +18,14 @@ import { SwitchThrowGame } from "./SwitchThrowGame";
 import { TrackWeldGame } from "./TrackWeldGame";
 import { WireMatchGame } from "./WireMatchGame";
 
-type GameProps = { onWin: (remainingMs: number) => void; onLose: () => void };
-
-/** The 15-second schematic repair step for each kind of fault, Behind-the-Scenes Disruption Visualizer style. */
-const GAMES: Record<GameKind, { title: string; hint: string; cta: string; done: string; fail: string; Game: (p: GameProps) => React.ReactNode }> = {
-  WIRE_MATCH: {
-    title: "Reconnect the 4 signal wires",
-    hint: "Land each tagged wire on its relay's terminal post, the way a signal maintainer re-terminates a failed track circuit.",
-    cta: "Step through the signal repair",
-    done: "Signal relay reset",
-    fail: "The relay isn't latched yet.",
-    Game: WireMatchGame,
-  },
-  TRACK_WELD: {
-    title: "Thermite-weld the broken rail",
-    hint: "Preheat the rail ends, pour the molten steel, grind the weld flush, then let it cool before trains cross.",
-    cta: "Step through the rail weld",
-    done: "Rail welded",
-    fail: "The weld didn't set in time.",
-    Game: TrackWeldGame,
-  },
-  SWITCH_THROW: {
-    title: "Line up the switches",
-    hint: "Throw the switches so the trolley reaches its destination, twice: the route a dispatcher sets around a failed switch.",
-    cta: "Step through the switch repair",
-    done: "Route lined up",
-    fail: "The route isn't lined up yet.",
-    Game: SwitchThrowGame,
-  },
-  BREAKER_SEQUENCE: {
-    title: "Restore the power feed",
-    hint: "Watch the restoration order, then close the feeder breakers in the same order, one section at a time.",
-    cta: "Step through the power restore",
-    done: "Power restored",
-    fail: "The feeder isn't energized yet.",
-    Game: BreakerSequenceGame,
-  },
-  RESCUE_COUPLE: {
-    title: "Tow the stalled train clear",
-    hint: "Couple up, connect the air line and charge the brakes, the way a rescue train clears a disabled one.",
-    cta: "Step through the train rescue",
-    done: "Train towed clear",
-    fail: "The coupling isn't made yet.",
-    Game: RescueCoupleGame,
-  },
-  ICE_THAW: {
-    title: "Thaw the frozen switch",
-    hint: "Torch the ice out of the switch points until they can close and lock.",
-    cta: "Step through the switch thaw",
-    done: "Switch thawed",
-    fail: "The points are still iced in.",
-    Game: IceThawGame,
-  },
+/** Each repair is a full-screen 3D mini-game; you finish at your own pace (no timer, no losing). */
+const GAMES: Record<GameKind, { cta: string; done: string; Game: (p: MiniGameProps) => React.ReactNode }> = {
+  WIRE_MATCH: { cta: "Step through the signal repair", done: "Signal relay reset", Game: WireMatchGame },
+  TRACK_WELD: { cta: "Step through the rail weld", done: "Rail welded", Game: TrackWeldGame },
+  SWITCH_THROW: { cta: "Step through the switch repair", done: "Route lined up", Game: SwitchThrowGame },
+  BREAKER_SEQUENCE: { cta: "Step through the power restore", done: "Power restored", Game: BreakerSequenceGame },
+  RESCUE_COUPLE: { cta: "Step through the train rescue", done: "Train towed clear", Game: RescueCoupleGame },
+  ICE_THAW: { cta: "Step through the switch thaw", done: "Switch thawed", Game: IceThawGame },
 };
 
 /** What crews physically do for each repair kind the backend tags on an alert (TranslatedAlert.repairKind). */
@@ -94,7 +51,7 @@ const REPAIR_KINDS: Record<RepairKind, { label: string; work: string }> = {
 /** How long the "how long it really takes" card stays up before the repair plays. */
 const WON_HOLD_MS = 9000;
 
-type Step = "brief" | "game" | "won" | "lost";
+type Step = "brief" | "game" | "won";
 
 /** A hairline section on the panel, like a block on a station information board. */
 const SECTION = "rounded-lg border border-white/12 bg-white/[0.03] p-3";
@@ -114,7 +71,7 @@ export interface FixTheTModalProps {
   onWin: (alert: TranslatedAlert) => void;
 }
 
-/** Behind-the-Scenes Disruption Visualizer: the plain-English delay card, then a 15-second schematic repair step. */
+/** The AI plain-English delay card, then the full-screen 3D repair mini-game. */
 export function FixTheTModal(props: FixTheTModalProps) {
   if (!props.alert) return null;
   return <FixTheTDialog key={props.alert.id} {...props} alert={props.alert} />;
@@ -122,7 +79,6 @@ export function FixTheTModal(props: FixTheTModalProps) {
 
 function FixTheTDialog({ alert, station, stats, simulated, unlockName, explore, onClose, onWin }: FixTheTModalProps & { alert: TranslatedAlert }) {
   const [step, setStep] = useState<Step>("brief");
-  const [attempt, setAttempt] = useState(0);
   const [submitted, setSubmitted] = useState(false);
   const titleId = useId();
   const playable = canPlay(alert);
@@ -155,11 +111,18 @@ function FixTheTDialog({ alert, station, stats, simulated, unlockName, explore, 
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && step !== "won") onClose();
+      if (e.key !== "Escape" || step === "won") return;
+      // Esc leaves the game for the delay card; from the card it closes everything.
+      if (step === "game") setStep("brief");
+      else onClose();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [step, onClose]);
+
+  if (step === "game") {
+    return <game.Game onWin={() => setStep("won")} onExit={() => setStep("brief")} place={station?.name} />;
+  }
 
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center p-3" role="presentation">
@@ -231,7 +194,6 @@ function FixTheTDialog({ alert, station, stats, simulated, unlockName, explore, 
               <p className={`${LABEL} mb-1.5 flex items-center gap-1.5`}>
                 <Bot className="size-3.5" />
                 {explore ? `What a ${explore.label} usually involves` : "What actually broke"}
-                {!explore && <AiSourceTag source={ai.source} pending={ai.pending} className="ml-auto" />}
               </p>
               <p className="text-[15px] leading-relaxed text-zinc-100">{explore ? alert.plainExplanation : ai.explanation}</p>
               {!explore && ai.alternateMove && (
@@ -296,19 +258,6 @@ function FixTheTDialog({ alert, station, stats, simulated, unlockName, explore, 
                 This one is for first responders, so there&apos;s no repair step to walk through. Give them room and check back soon.
               </p>
             )}
-          </div>
-        )}
-
-        {step === "game" && (
-          <div className="space-y-3">
-            <div className="pr-8">
-              <p className={LABEL}>15-second repair step</p>
-              <h2 id={titleId} className="mt-0.5 text-lg font-semibold text-white">
-                {game.title}
-              </h2>
-              <p className="text-sm text-zinc-400">{game.hint}</p>
-            </div>
-            <game.Game key={attempt} onWin={() => setStep("won")} onLose={() => setStep("lost")} />
           </div>
         )}
 
@@ -381,33 +330,6 @@ function FixTheTDialog({ alert, station, stats, simulated, unlockName, explore, 
           </div>
         )}
 
-        {step === "lost" && (
-          <div className="space-y-4 py-2 text-center">
-            <h2 id={titleId} className="text-xl font-semibold text-white">
-              {game.fail}
-            </h2>
-            <p className="text-zinc-300">
-              {simulated && !explore ? "Trains are still holding. Walk through the repair step again?" : "Out of time. Walk through the repair step again?"}
-            </p>
-            <div className="flex justify-center gap-2">
-              <button type="button" onClick={onClose} className={`${BUTTON} h-10 px-4 text-sm ${FOCUS}`}>
-                Close
-              </button>
-              <button
-                type="button"
-                autoFocus
-                onClick={() => {
-                  setAttempt((a) => a + 1);
-                  setStep("game");
-                }}
-                className={`${BUTTON_PRIMARY} h-10 px-4 text-sm ${FOCUS}`}
-              >
-                <RotateCcw className="size-4" />
-                Try again
-              </button>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );

@@ -16,7 +16,7 @@ export function LineBullet({ route, size = 22, className = "" }: { route: string
   return (
     <span
       aria-label={route.startsWith("Green-") ? `Green Line ${text} branch` : `${routeLine(route)} Line`}
-      className={`inline-flex shrink-0 items-center justify-center rounded-full font-bold text-white ${className}`}
+      className={`inline-flex shrink-0 items-center justify-center rounded-full font-bold text-[#fff] ${className}`}
       style={{
         width: size,
         height: size,

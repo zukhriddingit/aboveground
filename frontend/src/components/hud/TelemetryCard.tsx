@@ -1,7 +1,7 @@
 "use client";
 
 import { Gauge } from "lucide-react";
-import { LABEL, PANEL } from "@/lib/ui";
+import { DANGER_TEXT, LABEL, PANEL } from "@/lib/ui";
 
 export interface TelemetryStat {
   label: string;
@@ -29,7 +29,7 @@ export function TelemetryCard({ stats, updatedAt }: { stats: TelemetryStat[]; up
         {stats.map((s) => (
           <div key={s.label} className="min-w-0">
             <dt className="truncate text-[10px] text-zinc-500">{s.label}</dt>
-            <dd className={`font-mono text-[15px] leading-tight font-semibold tabular-nums ${s.alert ? "text-[#ff6b5e]" : "text-white"}`}>{s.value}</dd>
+            <dd className={`font-mono text-[15px] leading-tight font-semibold tabular-nums ${s.alert ? DANGER_TEXT : "text-white"}`}>{s.value}</dd>
           </div>
         ))}
       </dl>
