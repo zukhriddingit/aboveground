@@ -1,315 +1,298 @@
-// Procedural low-poly player avatar and its three unlockable hats. No model files.
-// Built in "avatar units": feet on y = 0, top of the head at y ~ 2.2, facing -z.
-// The overlay layer scales the whole rig to a readable size for the current zoom.
 import * as T from "three";
 import type { AvatarHat } from "@/types/tverse";
+import { DEFAULT_LOOK, type AvatarLook } from "../avatar/look";
+import { joint, part, tint } from "./riderGeometry";
+import { deckHeight, type WalkSurface, type RiderPose } from "./rideRoute";
 
-export const AVATAR_HEIGHT = 2.2;
+export const AVATAR_HEIGHT = 1.94;
+const LEG = .445, ANKLE = .085, HIP = .94, ARM = .265;
+const WHITE = "#ffffff", INK = "#302c32";
+const ease = (u: number) => u * u * (3 - 2 * u);
+const clamp = (v: number) => Math.max(0, Math.min(1, v));
+type Material = T.MeshLambertMaterial;
 
-function lambert(color: T.ColorRepresentation) {
-  return new T.MeshLambertMaterial({ color, flatShading: true });
+function leg(pelvis: T.Group, side: number, pants: Material, shoes: Material, detail: Material) {
+  const hip = joint(pelvis, side * .112, 0);
+  hip.rotation.order = "ZXY";
+  const knee = joint(hip, 0, -LEG);
+  const foot = joint(knee, 0, -LEG);
+  hip.add(part("jean-thigh", pants, b => {
+    b.profile(WHITE, [[-.46, .089], [-.36, .097], [-.16, .116], [-.03, .128], [.05, .099]], .91);
+    b.oval("#d7dbe3", 0, -.44, 0, .09, .079, .082);
+  }));
+  knee.add(part("jean-calf", pants, b => {
+    b.profile(WHITE, [[-.404, .072], [-.3, .077], [-.14, .095], [-.03, .09], [.02, .082]], .95);
+    b.profile("#bdc6d1", [[-.424, .078], [-.385, .081]], .95);
+  }));
+  foot.add(part("sneaker", shoes, b => {
+    b.oval(WHITE, 0, -.016, -.057, .085, .062, .147);
+    b.oval("#e7dfd2", 0, .018, -.013, .072, .073, .086, -.18);
+    b.oval("#cfd1d4", 0, .043, .026, .074, .068, .073);
+  }), part("sneaker-trim", detail, b => {
+    b.oval("#eae7dd", 0, -.059, -.057, .089, .025, .154);
+    b.oval("#aaa398", 0, -.077, -.057, .085, .009, .146);
+    for (const z of [-.057, -.084, -.109]) b.box("#f5efe4", 0, .069 + (z + .057) * .61, z, .078, .011, .012);
+  }));
+  return { hip, knee, foot };
 }
-function glow(color: T.ColorRepresentation, opacity = 1) {
-  return new T.MeshBasicMaterial({
-    color, opacity, transparent: true, depthWrite: false, blending: T.AdditiveBlending,
-    side: T.DoubleSide, toneMapped: false,
+
+function arm(spine: T.Group, side: number, jacket: Material, skin: Material) {
+  const shoulder = joint(spine, side * .228, .505);
+  const elbow = joint(shoulder, 0, -ARM);
+  const wrist = joint(elbow, 0, -ARM);
+  shoulder.add(part("upper-sleeve", jacket, b => b.oval(WHITE, 0, -.108, 0, .09, .175, .098)));
+  elbow.add(part("lower-sleeve", jacket, b => {
+    b.oval("#eef0f0", 0, -.103, 0, .075, .153, .077);
+    b.profile("#a8b3b6", [[-.238, .06], [-.19, .069]], 1);
+  }));
+  wrist.add(part("hand" + side, skin, b => {
+    b.oval(WHITE, 0, .009, 0, .046, .060, .050);
+    for (let i = 0; i < 4; i++) b.oval("#f3e7dd", 0, -.039, (i - 1.5) * .020, .039, .037 - Math.abs(i - 1) * .003, .014);
+    b.oval("#ecddd3", -side * .036, .01, -.026, .021, .047, .023, -.2);
+  }));
+  return { shoulder, elbow, wrist };
+}
+
+function hatModel(hat: Exclude<AvatarHat, "none">, mat: Material) {
+  return part(hat, mat, b => {
+    if (hat === "sox_cap") {
+      b.profile("#162943", [[0, .167], [.04, .174], [.10, .15], [.139, .091], [.151, .002]], 1.06);
+      b.oval("#b63843", 0, .004, -.15, .146, .014, .12, .08);
+      b.oval("#b63843", 0, .15, 0, .02, .012, .02);
+      b.tube("#e4dbcc", .008, [[-.018, .04, -.165], [-.018, .088, -.156], [.016, .079, -.16], [.005, .066, -.164], [.022, .055, -.165], [-.018, .04, -.165]]);
+    } else if (hat === "dunkin_hat") {
+      b.profile("#d49862", [[0, .113], [.22, .147], [.23, .148]], 1);
+      b.profile("#ed792b", [[.035, .12], [.089, .128]], 1);
+      b.profile("#c93e79", [[.089, .128], [.119, .133]], 1);
+      b.oval("#ece4da", 0, .228, 0, .157, .038, .157);
+      b.tube("#ed792b", .016, [[.023, .24, 0], [.045, .34, 0], [.064, .405, 0]]);
+    } else {
+      b.box("#31845a", 0, .098, 0, .253, .16, .38);
+      b.box("#ecebe3", 0, .05, 0, .26, .035, .39);
+      b.box("#cbd2cb", 0, .184, 0, .257, .026, .39);
+      for (const sign of [-1, 1]) {
+        for (const z of [-.12, 0, .12]) b.box("#233747", sign * .128, .129, z, .008, .052, .085);
+        for (const z of [-.11, .11]) b.oval(INK, sign * .107, .018, z, .034, .037, .04);
+      }
+      b.box("#283947", 0, .119, -.194, .208, .071, .01);
+      b.tube("#657079", .009, [[0, .199, -.1], [0, .26, 0], [0, .204, .095]]);
+      b.box("#edcc8d", 0, .051, -.202, .12, .016, .013);
+    }
   });
 }
-function lit(color: T.ColorRepresentation) {
-  return new T.MeshBasicMaterial({ color, toneMapped: false });
-}
-function mesh(geometry: T.BufferGeometry, material: T.Material, x = 0, y = 0, z = 0) {
-  const m = new T.Mesh(geometry, material);
-  m.position.set(x, y, z);
-  return m;
-}
-
-const SKIN = "#f2c29b";
-
-// ---------------------------------------------------------------- hats
-
-function dunkinHat() {
-  const g = new T.Group();
-  const coffee = lambert("#c68a55");
-  const pink = lambert("#e2187f");
-  const orange = lambert("#ff6a13");
-  const white = lambert("#f8fafc");
-  g.add(mesh(new T.CylinderGeometry(0.26, 0.19, 0.52, 14), coffee, 0, 0.26, 0));
-  g.add(mesh(new T.CylinderGeometry(0.255, 0.225, 0.12, 14), pink, 0, 0.2, 0));
-  g.add(mesh(new T.CylinderGeometry(0.262, 0.252, 0.07, 14), orange, 0, 0.36, 0));
-  // Little ice cubes showing through the top.
-  const ice = lambert("#e0f2fe");
-  g.add(mesh(new T.BoxGeometry(0.1, 0.1, 0.1), ice, 0.08, 0.5, 0.04));
-  g.add(mesh(new T.BoxGeometry(0.09, 0.09, 0.09), ice, -0.07, 0.5, -0.06));
-  const lid = mesh(new T.SphereGeometry(0.27, 14, 5, 0, Math.PI * 2, 0, Math.PI / 2), white, 0, 0.52, 0);
-  lid.scale.y = 0.45;
-  g.add(lid);
-  const rim = mesh(new T.TorusGeometry(0.265, 0.028, 6, 22), white, 0, 0.53, 0);
-  rim.rotation.x = Math.PI / 2;
-  g.add(rim);
-  const straw = mesh(new T.CylinderGeometry(0.032, 0.032, 0.6, 6), orange, 0.06, 0.84, 0);
-  straw.rotation.z = -0.28;
-  g.add(straw);
-  const stripe = mesh(new T.CylinderGeometry(0.034, 0.034, 0.12, 6), pink, 0.11, 1.03, 0);
-  stripe.rotation.z = -0.28;
-  g.add(stripe);
-  return g;
-}
-
-function trolleyHelmet() {
-  const g = new T.Group();
-  const green = lambert("#00a04a");
-  const white = lambert("#f1f5f9");
-  const roof = lambert("#cbd5e1");
-  const dark = lambert("#111827");
-  const windows = lit("#ffe39a");
-  // Boxcar body, long axis along the facing direction so it "drives" forward.
-  g.add(mesh(new T.BoxGeometry(0.4, 0.3, 0.72), green, 0, 0.2, 0));
-  g.add(mesh(new T.BoxGeometry(0.405, 0.05, 0.725), white, 0, 0.13, 0));
-  g.add(mesh(new T.BoxGeometry(0.34, 0.05, 0.64), roof, 0, 0.375, 0));
-  for (const side of [-1, 1]) {
-    for (const z of [-0.22, 0, 0.22]) g.add(mesh(new T.BoxGeometry(0.012, 0.1, 0.14), windows, side * 0.203, 0.25, z));
-    for (const z of [-0.22, 0.22]) {
-      const wheel = mesh(new T.CylinderGeometry(0.065, 0.065, 0.05, 10), dark, side * 0.19, 0.05, z);
-      wheel.rotation.z = Math.PI / 2;
-      g.add(wheel);
-    }
-  }
-  g.add(mesh(new T.BoxGeometry(0.3, 0.12, 0.012), windows, 0, 0.26, -0.362));
-  g.add(mesh(new T.SphereGeometry(0.045, 8, 6), lit("#fffbe6"), 0, 0.12, -0.365));
-  // Pantograph: a diamond of thin bars on the roof.
-  for (const tilt of [-0.55, 0.55]) {
-    const bar = mesh(new T.BoxGeometry(0.025, 0.24, 0.025), dark, 0, 0.49, tilt * 0.12);
-    bar.rotation.x = tilt;
-    g.add(bar);
-  }
-  g.add(mesh(new T.BoxGeometry(0.3, 0.025, 0.04), dark, 0, 0.6, 0));
-  return g;
-}
-
-function soxCap() {
-  const g = new T.Group();
-  const navy = lambert("#0c2340");
-  const red = lambert("#bd3039");
-  const crown = mesh(new T.SphereGeometry(0.37, 16, 6, 0, Math.PI * 2, 0, Math.PI / 2), navy, 0, -0.06, 0);
-  crown.scale.y = 0.78;
-  g.add(crown);
-  const brim = mesh(new T.CylinderGeometry(0.3, 0.3, 0.035, 18), red, 0, -0.05, -0.3);
-  brim.scale.z = 0.72;
-  brim.rotation.x = 0.12;
-  g.add(brim);
-  g.add(mesh(new T.SphereGeometry(0.045, 8, 6), red, 0, 0.23, 0));
-  // Logo patch on the front of the crown.
-  const patch = mesh(new T.CircleGeometry(0.085, 14), lit("#ff4652"), 0, 0.1, -0.318);
-  patch.rotation.set(0.45, Math.PI, 0);
-  g.add(patch);
-  return g;
-}
-
-const HATS: Record<Exclude<AvatarHat, "none">, () => T.Group> = {
-  dunkin_hat: dunkinHat,
-  trolley_helmet: trolleyHelmet,
-  sox_cap: soxCap,
-};
-
-// ---------------------------------------------------------------- rig
-
-const easeOutBack = (u: number) => {
-  const c = 2.2;
-  return 1 + (c + 1) * (u - 1) ** 3 + c * (u - 1) ** 2;
-};
 
 export class AvatarRig {
   readonly root = new T.Group();
-  /** Everything that leans and bobs. */
-  private readonly body = new T.Group();
-  private readonly head = new T.Group();
-  readonly hatMount = new T.Group();
-  private readonly armL = new T.Group();
-  private readonly armR = new T.Group();
-  private readonly legL = new T.Group();
-  private readonly legR = new T.Group();
-  private readonly board = new T.Group();
-  private readonly boardGlow: T.MeshBasicMaterial;
-  private readonly underGlow: T.MeshBasicMaterial;
-  private readonly marker: T.Mesh;
-  private readonly ring: T.Mesh<T.RingGeometry, T.MeshBasicMaterial>;
-  private hat: { kind: AvatarHat; group: T.Group | null; born: number } = { kind: "none", group: null, born: -1 };
-  private leaving: { group: T.Group; born: number }[] = [];
-  private riding = 0;
-  private lean = 0;
+  private readonly mat = { skin: tint(), hair: tint(), jacket: tint(), pants: tint(), shoes: tint(), detail: tint() };
+  private readonly pelvis = joint(this.root, 0, HIP);
+  private readonly spine = joint(this.pelvis, 0, 0);
+  private readonly head = joint(this.spine, 0, .617);
+  private readonly eyes = joint(this.head, 0, .183);
+  private readonly hatMount = joint(this.head, 0, .293);
+  private readonly pack = joint(this.spine, 0, 0);
+  private readonly left = leg(this.pelvis, -1, this.mat.pants, this.mat.shoes, this.mat.detail);
+  private readonly right = leg(this.pelvis, 1, this.mat.pants, this.mat.shoes, this.mat.detail);
+  private readonly arms = [arm(this.spine, -1, this.mat.jacket, this.mat.skin), arm(this.spine, 1, this.mat.jacket, this.mat.skin)];
+  private readonly hair = {
+    crop: part("cropped-hair", this.mat.hair, b => {
+      b.oval(WHITE, 0, .267, .016, .162, .087, .153, -.19);
+      b.oval("#eee7df", -.041, .254, -.091, .114, .062, .085, -.15, -.22);
+    }),
+    curls: part("curly-hair", this.mat.hair, b => {
+      b.oval(WHITE, 0, .276, .017, .159, .079, .144);
+      for (let i = 0; i < 18; i++) {
+        const a = i * Math.PI * 2 / 18;
+        const fringe = Math.max(0, -Math.sin(a));
+        b.oval(i % 3 === 0 ? "#ded8d5" : WHITE, .127 * Math.cos(a), .244 + .048 * fringe + .011 * Math.sin(i * 1.7),
+          .111 * Math.sin(a), .044, .045 + .009 * Math.cos(i), .054);
+      }
+      b.oval(WHITE, -.03, .31, 0, .124, .066, .125);
+    }),
+    bun: part("tied-hair", this.mat.hair, b => {
+      b.oval(WHITE, 0, .248, .034, .163, .109, .15, -.37);
+      b.oval("#e7e1dc", 0, .243, .173, .096, .105, .087);
+    }),
+  };
+  hatKind: AvatarHat = "none";
+  private hat?: T.Mesh;
+  private hatBorn = -10;
+  private cheerTime = 0;
+  private waveTime = 0;
+  private waveBlend = 0;
+  private rideBlend = 0;
+  private previousYaw = 0;
+  private turnLean = 0;
+  private readonly handTarget = new T.Vector3();
+  private readonly elbowPole = new T.Vector3();
+  private readonly lower = new T.Vector3();
+  private readonly down = new T.Vector3(0, -1, 0);
+  private readonly inverse = new T.Quaternion();
 
   constructor() {
-    const hoodie = lambert("#7c4dff");
-    const hoodieDark = lambert("#5b34d6");
-    const pants = lambert("#24315e");
-    const shoe = lambert("#f1f5ff");
-    const skin = lambert(SKIN);
-    const hair = lambert("#2a1c14");
-    const ink = lit("#0b1020");
-
-    // Hover board: the avatar rides it on the Demo Ride and idles on it at the station.
-    this.board.add(mesh(new T.CylinderGeometry(0.62, 0.7, 0.1, 22), lambert("#1b2444"), 0, 0.07, 0));
-    this.boardGlow = glow("#46f0ff", 0.95);
-    const rim = mesh(new T.TorusGeometry(0.66, 0.04, 6, 36), this.boardGlow, 0, 0.07, 0);
-    rim.rotation.x = Math.PI / 2;
-    this.board.add(rim);
-    this.underGlow = glow("#46f0ff", 0.4);
-    const under = mesh(new T.CircleGeometry(1.0, 32), this.underGlow, 0, 0.01, 0);
-    under.rotation.x = -Math.PI / 2;
-    this.board.add(under);
-    this.root.add(this.board);
-
-    // Legs pivot at the hips.
-    for (const [leg, side] of [[this.legL, -1], [this.legR, 1]] as const) {
-      leg.position.set(side * 0.14, 0.78, 0);
-      leg.add(mesh(new T.CapsuleGeometry(0.1, 0.42, 3, 8), pants, 0, -0.33, 0));
-      leg.add(mesh(new T.BoxGeometry(0.17, 0.1, 0.28), shoe, 0, -0.6, -0.04));
-      this.body.add(leg);
-    }
-    // Torso (hoodie), pocket band, backpack.
-    this.body.add(mesh(new T.CapsuleGeometry(0.27, 0.28, 3, 10), hoodie, 0, 1.1, 0));
-    this.body.add(mesh(new T.CylinderGeometry(0.29, 0.29, 0.12, 10), hoodieDark, 0, 0.82, 0));
-    this.body.add(mesh(new T.BoxGeometry(0.42, 0.46, 0.18), lambert("#ffb020"), 0, 1.12, 0.27));
-    const hood = mesh(new T.TorusGeometry(0.2, 0.07, 6, 14), hoodieDark, 0, 1.5, 0.02);
-    hood.rotation.x = Math.PI / 2;
-    this.body.add(hood);
-    // Arms pivot at the shoulders.
-    for (const [arm, side] of [[this.armL, -1], [this.armR, 1]] as const) {
-      arm.position.set(side * 0.34, 1.4, 0);
-      arm.add(mesh(new T.CapsuleGeometry(0.085, 0.34, 3, 8), hoodie, 0, -0.24, 0));
-      arm.add(mesh(new T.IcosahedronGeometry(0.095, 0), skin, 0, -0.5, 0));
-      this.body.add(arm);
-    }
-    // Head: big chibi proportions so the face reads from the sky.
-    this.head.position.set(0, 1.86, 0);
-    this.head.add(mesh(new T.IcosahedronGeometry(0.36, 1), skin));
-    const cap = mesh(new T.SphereGeometry(0.375, 12, 6, 0, Math.PI * 2, 0, Math.PI * 0.52), hair, 0, 0.02, 0);
-    cap.rotation.x = 0.32;
-    this.head.add(cap);
-    for (const side of [-1, 1]) {
-      this.head.add(mesh(new T.SphereGeometry(0.058, 8, 6), ink, side * 0.13, 0.02, -0.315));
-      this.head.add(mesh(new T.SphereGeometry(0.02, 6, 4), lit("#ffffff"), side * 0.13 + 0.02, 0.045, -0.365));
-      this.head.add(mesh(new T.CircleGeometry(0.05, 10), glow("#ff7aa8", 0.5), side * 0.2, -0.08, -0.31)
-        .rotateY(Math.PI));
-    }
-    const smile = mesh(new T.TorusGeometry(0.075, 0.018, 4, 10, Math.PI), ink, 0, -0.08, -0.33);
-    smile.rotation.z = Math.PI;
-    this.head.add(smile);
-    this.hatMount.position.set(0, 0.3, 0);
-    this.head.add(this.hatMount);
-    this.body.add(this.head);
-    this.root.add(this.body);
-
-    // "This is you": a spinning chevron overhead and a pulsing ring on the ground.
-    this.marker = mesh(new T.ConeGeometry(0.2, 0.38, 4), glow("#7ff6ff", 0.95), 0, 2.95, 0);
-    this.marker.rotation.x = Math.PI;
-    this.root.add(this.marker);
-    this.ring = mesh(new T.RingGeometry(1.05, 1.22, 48), glow("#46f0ff", 0.6), 0, 0.02, 0) as T.Mesh<T.RingGeometry, T.MeshBasicMaterial>;
-    this.ring.rotation.x = -Math.PI / 2;
-    this.root.add(this.ring);
-
-    this.root.traverse(o => { o.frustumCulled = false; });
+    const { skin, jacket, pants, detail } = this.mat;
+    this.pelvis.add(part("jean-seat", pants, b => b.oval(WHITE, 0, .018, .009, .213, .14, .143)));
+    this.spine.add(part("commuter-jacket", jacket, b => {
+      b.profile(WHITE, [[-.005, .185], [.055, .216], [.22, .211], [.4, .235], [.5, .253], [.557, .192], [.592, .109]], .70);
+      b.profile("#b5c0bf", [[.002, .197], [.044, .217]], .72);
+      b.oval("#abbaba", 0, .543, .078, .175, .094, .125, -.36);
+      for (const s of [-1, 1]) {
+        b.tube("#dae4df", .017, [[s * .087, .59, -.064], [s * .125, .576, -.091], [s * .09, .543, -.143], [s * .034, .509, -.165]]);
+        b.tube("#cdd8d4", .006, [[s * .022, .391, -.164], [s * .128, .402, -.139], [s * .212, .42, -.073]]);
+      }
+      for (const s of [-1, 1]) b.tube("#cbd3d0", .012, [[s * .099, .122, -.132], [s * .17, .203, -.096]]);
+    }), part("jacket-details", detail, b => {
+      b.tube("#c3c8bf", .005, [[0, .036, -.153], [0, .22, -.15], [0, .43, -.168], [0, .548, -.132]]);
+      b.box("#e4ddd0", .006, .435, -.177, .013, .043, .011);
+      b.box("#d1b99a", -.104, .365, -.15, .052, .027, .009, 0, .025);
+      for (const s of [-1, 1]) b.tube("#ded9c8", .006, [[s * .075, .573, -.099], [s * .081, .52, -.154], [s * .089, .46, -.164]]);
+    }));
+    this.pack.add(part("daypack", detail, b => {
+      b.oval("#945840", 0, .312, .172, .178, .238, .103);
+      b.oval("#b77a50", 0, .211, .236, .146, .106, .058);
+      b.box("#d0ae80", 0, .246, .292, .059, .035, .007);
+      for (const s of [-1, 1]) {
+        b.tube("#4e4037", .025, [[s * .147, .174, .194], [s * .176, .50, .135], [s * .15, .567, .015], [s * .158, .51, -.124], [s * .165, .34, -.12], [s * .19, .17, -.066], [s * .16, .13, .143]]);
+      }
+    }));
+    this.head.add(part("face", skin, b => {
+      b.oval("#ebdcd5", 0, .017, .004, .084, .095, .083);
+      b.oval(WHITE, 0, .176, 0, .157, .175, .141);
+      b.oval(WHITE, 0, .145, -.132, .029, .041, .038);
+      for (const s of [-1, 1]) b.oval("#efdfd5", s * .151, .15, 0, .03, .046, .024);
+    }), part("expression", detail, b => {
+      for (const s of [-1, 1]) {
+        b.tube("#413330", .008, [[s * .029, .22, -.132], [s * .061, .229, -.124], [s * .092, .224, -.108]]);
+      }
+      b.tube("#905c51", .005, [[-.039, .111, -.128], [-.012, .101, -.132], [.014, .101, -.133], [.04, .112, -.127]]);
+    }), ...Object.values(this.hair));
+    this.eyes.add(part("eyes", detail, b => {
+      for (const s of [-1, 1]) {
+        b.oval("#faf4e6", s * .062, 0, -.127, .031, .017, .012);
+        b.oval("#3d3030", s * .062, 0, -.139, .014, .015, .006);
+        b.oval("#fffcf0", s * .062 - .004, .007, -.144, .004, .004, .002);
+      }
+    }));
+    this.setLook(DEFAULT_LOOK);
   }
 
-  /** Swap hats. With `animate`, the old one shrinks away and the new one pops on. */
+  setLook(look: AvatarLook) {
+    for (const k of ["skin", "hair", "jacket", "pants", "shoes"] as const) this.mat[k].color.set(look[k]);
+    for (const k of ["crop", "curls", "bun"] as const) this.hair[k].visible = k === look.hairStyle;
+    this.pack.visible = look.backpack;
+  }
   setHat(kind: AvatarHat, now: number, animate: boolean) {
-    if (kind === this.hat.kind) return;
-    if (this.hat.group) {
-      if (animate) this.leaving.push({ group: this.hat.group, born: now });
-      else this.disposeGroup(this.hat.group);
+    if (kind === this.hatKind) return;
+    this.hat?.removeFromParent();
+    this.hatKind = kind;
+    this.hat = kind === "none" ? undefined : hatModel(kind, this.mat.detail);
+    if (this.hat) this.hatMount.add(this.hat);
+    // Tuck the crown of each hairstyle under the hat, leaving the fringe visible.
+    for (const hair of Object.values(this.hair)) {
+      hair.scale.y = this.hat ? .82 : 1;
+      hair.position.y = this.hat ? .026 : 0;
     }
-    const group = kind === "none" ? null : HATS[kind]();
-    if (group) {
-      group.traverse(o => { o.frustumCulled = false; });
-      group.scale.setScalar(animate ? 0.001 : 1);
-      this.hatMount.add(group);
-    }
-    this.hat = { kind, group, born: animate ? now : -1 };
+    this.hatBorn = animate ? now : -10;
+  }
+  hatWorldPosition(out: T.Vector3) { return this.hatMount.getWorldPosition(out); }
+  cheer() { this.cheerTime = 1.65; }
+  wave() { this.waveTime = 1.75; }
+
+  // Two-link leg IK. The boot stays level while its knee takes up the change in height.
+  private plant(l: typeof this.left, height: number, forward: number, lift: number) {
+    const dy = height - ANKLE - lift;
+    const vertical = Math.hypot(dy, this.pelvis.position.x);
+    const bend = Math.acos(clamp(Math.hypot(vertical, forward) / (2 * LEG)));
+    l.hip.rotation.z = -Math.atan2(this.pelvis.position.x, dy);
+    l.hip.rotation.x = Math.atan2(forward, vertical) + bend;
+    l.knee.rotation.x = -2 * bend;
+    l.foot.rotation.x = -l.hip.rotation.x - l.knee.rotation.x;
+    l.foot.rotation.z = -l.hip.rotation.z;
   }
 
-  get hatKind() {
-    return this.hat.kind;
+  // Convert the fixed strap grip into shoulder space, then solve toward it as the torso sways.
+  private grip(blend: number) {
+    const a = this.arms[1];
+    const dir = this.handTarget.set(.29 - this.pelvis.position.x, 1.835 - this.pelvis.position.y, -.14)
+      .applyQuaternion(this.inverse.copy(this.spine.quaternion).invert()).sub(a.shoulder.position);
+    const len = Math.min(2 * ARM - .0001, dir.length());
+    dir.normalize();
+    const pole = this.elbowPole.set(.7, 0, .4);
+    pole.addScaledVector(dir, -pole.dot(dir)).normalize();
+    const upper = pole.multiplyScalar(Math.sqrt(ARM * ARM - len * len / 4)).addScaledVector(dir, len / 2);
+    this.lower.copy(dir).multiplyScalar(len).sub(upper).normalize();
+    this.inverse.setFromUnitVectors(this.down, upper.normalize());
+    a.shoulder.quaternion.slerp(this.inverse, blend);
+    this.lower.applyQuaternion(this.inverse.invert());
+    a.elbow.quaternion.slerp(this.inverse.setFromUnitVectors(this.down, this.lower), blend);
   }
 
-  /** World position of the hat mount (for sparkle bursts). */
-  hatWorldPosition(out: T.Vector3) {
-    this.root.updateMatrixWorld(true);
-    return this.hatMount.getWorldPosition(out);
-  }
-
-  /** Per-frame pose. `riding` 0..1 blends idle into the board-surfing stance. */
-  update(t: number, dt: number, riding: boolean, speed: number, glowStrength: number) {
-    const k = 1 - Math.exp(-dt * 4);
-    this.riding += ((riding ? 1 : 0) - this.riding) * k;
-    this.lean += (Math.min(1.4, speed) * this.riding - this.lean) * k;
-    const r = this.riding;
-
-    const bob = Math.sin(t * 2.4) * 0.035;
-    this.board.position.y = 0.06 + Math.sin(t * 3.1) * 0.04 * (0.5 + r);
-    this.body.position.y = this.board.position.y - 0.02 + bob * (1 - r);
-    // Surfer stance while riding: turn a little sideways, lean into the motion.
-    this.body.rotation.y = r * 0.42;
-    this.body.rotation.x = -0.16 * this.lean;
-    this.body.rotation.z = Math.sin(t * 1.7) * 0.05 * r;
-    this.head.rotation.y = -r * 0.36 + Math.sin(t * 0.9) * 0.12 * (1 - r);
-    this.head.rotation.z = Math.sin(t * 1.3) * 0.05;
-
-    // Idle: arms hang and sway, with a friendly wave every few seconds. Riding: arms out.
-    const wave = Math.max(0, Math.sin(t * 0.9) - 0.6) / 0.4; // 0..1, a short window each cycle
-    const waveArm = (1 - r) * wave;
-    this.armL.rotation.z = -0.12 - r * 1.05 + Math.sin(t * 2.4) * 0.04;
-    this.armR.rotation.z = 0.12 + r * 1.05 + waveArm * 2.3 - Math.sin(t * 2.4) * 0.04;
-    this.armR.rotation.x = waveArm * Math.sin(t * 12) * 0.25;
-    this.armL.rotation.x = r * 0.25;
-    this.legL.rotation.x = r * 0.18;
-    this.legR.rotation.x = -r * 0.18;
-
-    this.boardGlow.opacity = glowStrength * (0.7 + 0.3 * Math.sin(t * 6) * 0.5 + 0.3 * r);
-    this.underGlow.opacity = glowStrength * (0.25 + 0.35 * r + 0.08 * Math.sin(t * 3));
-    this.marker.position.y = 2.95 + Math.sin(t * 2.2) * 0.12;
-    this.marker.rotation.y = t * 2;
-    const pulse = (t * 0.6) % 1;
-    this.ring.scale.setScalar(1 + pulse * 0.8);
-    this.ring.material.opacity = glowStrength * (0.65 * (1 - pulse) * (1 - r * 0.6));
-
-    // Hat pop: overshoot in, with a little drop from above.
-    if (this.hat.group && this.hat.born >= 0) {
-      const u = Math.min(1, (t - this.hat.born) / 0.7);
-      this.hat.group.scale.setScalar(Math.max(0.001, easeOutBack(u)));
-      this.hat.group.position.y = (1 - u) * (1 - u) * 0.9;
-      this.hat.group.rotation.y = (1 - u) * Math.PI * 2;
-      if (u >= 1) this.hat.born = -1;
+  update(t: number, dt: number, pose: RiderPose = "idle", distance = 0, length = 0, surface: WalkSurface = "level") {
+    const k = 1 - Math.exp(-dt * 10);
+    this.waveTime = Math.max(0, this.waveTime - dt);
+    this.cheerTime = Math.max(0, this.cheerTime - dt);
+    this.waveBlend += ((pose === "wave" || this.waveTime > .18 ? 1 : 0) - this.waveBlend) * k;
+    this.rideBlend += ((pose === "ride" ? 1 : 0) - this.rideBlend) * k;
+    const cheer = ease(clamp((1.65 - this.cheerTime) / .33)) * ease(clamp(this.cheerTime / .32));
+    const wave = this.waveBlend * (1 - cheer), ride = this.rideBlend;
+    const breathe = Math.sin(t * 2.15), sway = Math.sin(t * 1.68);
+    let l = 0, r = 0, liftL = 0, liftR = 0;
+    if (pose === "walk" && length > .001) {
+      const steps = Math.max(2, Math.round(length / .56));
+      const progress = clamp(distance / length) * steps;
+      const i = Math.min(steps - 1, Math.floor(progress)), u = progress - i;
+      const stride = length / steps;
+      const old = i < 2 ? 0 : (i - .5) * stride;
+      const next = i >= steps - 2 ? length : (i + 1.5) * stride;
+      const swing = old + (next - old) * ease(u) - distance;
+      const plant = (i === 0 ? 0 : i === steps - 1 ? length : (i + .5) * stride) - distance;
+      const lift = .125 * Math.sin(u * Math.PI) ** 2;
+      if (i % 2 === 0) { l = swing; r = plant; liftL = lift; }
+      else { r = swing; l = plant; liftR = lift; }
     }
-    for (let i = this.leaving.length - 1; i >= 0; i--) {
-      const old = this.leaving[i];
-      const u = Math.min(1, (t - old.born) / 0.22);
-      old.group.scale.setScalar(Math.max(0.001, 1 - u));
-      old.group.position.y = u * 0.4;
-      if (u >= 1) {
-        this.disposeGroup(old.group);
-        this.leaving.splice(i, 1);
-      }
+    if (surface !== "level") {
+      const boarding = surface === "board";
+      const radius = boarding ? length - distance : distance;
+      const floor = deckHeight(radius);
+      liftL += deckHeight(radius + (boarding ? -l : l)) - floor;
+      liftR += deckHeight(radius + (boarding ? -r : r)) - floor;
     }
-  }
-
-  private disposeGroup(group: T.Group) {
-    group.removeFromParent();
-    group.traverse(o => {
-      if (o instanceof T.Mesh) {
-        o.geometry.dispose();
-        (o.material as T.Material).dispose();
-      }
-    });
+    const stance = pose === "walk" ? 0 : .029 * ride;
+    l += stance; r -= stance;
+    const reach = (2 * LEG - .006) ** 2;
+    const height = Math.min(HIP, ANKLE + liftL + Math.sqrt(Math.max(.01, reach - l * l)),
+      ANKLE + liftR + Math.sqrt(Math.max(.01, reach - r * r)))
+      - .01 + breathe * .007 - cheer * .045 * (.5 + .5 * Math.cos(t * 8));
+    const shift = pose === "walk" ? .33 * (liftR - liftL) : .029 * Math.sin(t * .91) + .016 * ride * sway;
+    this.pelvis.position.set(shift, height, 0);
+    this.plant(this.left, height, l, liftL);
+    this.plant(this.right, height, r, liftR);
+    this.spine.rotation.set(-.018 + breathe * .016 + ride * sway * .042, .3 * (r - l) + .027 * Math.sin(t * .74),
+      .023 * Math.sin(t * .91) + ride * .063 * sway + .16 * (liftL - liftR));
+    const yawChange = this.root.rotation.y - this.previousYaw;
+    this.previousYaw = this.root.rotation.y;
+    const yawSpeed = Math.atan2(Math.sin(yawChange), Math.cos(yawChange)) / Math.max(.008, dt);
+    this.turnLean += (Math.max(-.23, Math.min(.23, yawSpeed * .085)) - this.turnLean) * k;
+    this.pack.rotation.z += ((l - r) * .08 - this.turnLean * .18 - this.pack.rotation.z) * (1 - Math.exp(-dt * 6));
+    const blink = Math.max(0, 1 - Math.abs(t % 3.91 - 2.5) / .105);
+    this.eyes.scale.y = 1 - .91 * ease(blink);
+    this.head.rotation.set(breathe * .028 + cheer * .07, .23 * Math.sin(t * .68) + .07 * Math.sin(t * 1.04) - .17 * wave + this.turnLean, -.035 * sway);
+    for (let i = 0; i < 2; i++) {
+      const side = i === 0 ? -1 : 1;
+      const a = this.arms[i], forward = i === 0 ? r : l, greeting = i === 1 ? wave : 0;
+      a.shoulder.rotation.set(.10 + forward * 1.35 + .037 * breathe + .32 * cheer, 0, side * (.105 + 2.38 * cheer + 1.45 * greeting));
+      a.elbow.rotation.set(.16 + .12 * breathe + .28 * cheer + .36 * greeting, 0, side * (.28 * cheer + greeting * (.94 + .37 * Math.sin(t * 13))));
+      a.wrist.rotation.z = side * (.12 * cheer + greeting * .22 * Math.sin(t * 13 - .55));
+    }
+    if (ride > .001) this.grip(ride * (1 - cheer));
+    if (this.hat) {
+      const u = clamp((t - this.hatBorn) / .48);
+      this.hat.position.y = .16 * (1 - u) ** 2;
+      this.hat.scale.setScalar(Math.max(.01, 1 + 2.4 * (u - 1) ** 3 + 1.4 * (u - 1) ** 2));
+    }
   }
 
   dispose() {
     this.root.removeFromParent();
-    this.root.traverse(o => {
-      if (o instanceof T.Mesh) {
-        o.geometry.dispose();
-        (o.material as T.Material).dispose();
-      }
-    });
+    for (const material of Object.values(this.mat)) material.dispose();
   }
 }

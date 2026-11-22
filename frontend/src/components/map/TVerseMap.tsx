@@ -4,7 +4,7 @@ import { useEffect, useImperativeHandle, useMemo, useRef, useState } from "react
 import type * as maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import "mapbox-gl/dist/mapbox-gl.css";
-import type { FeatureCollection, LineString } from "geojson";
+import { getAvatarLook, useAvatarLook } from "../avatar/look";
 import { MOCK_LINES } from "@/lib/mockData";
 import { BOSTON_CENTER } from "@/lib/theme";
 import type { StationId } from "@/types/tverse";
@@ -19,7 +19,8 @@ import { getMapEngine, loadMapLibrary, standardMap, switchMapEngine } from "./ma
 import { useMapLighting } from "./mapTheme";
 import { applyMapWeather, cycleWeatherOverride, useMapWeather, type WeatherOverride } from "./mapWeather";
 import { addStandardTransit, createMapStyle, setBasemapMode, setTransitVisibility } from "./mapStyle";
-import { DemoRide, RIDE_COORDS, RIDE_STOPS } from "./rideRoute";
+import { DEMO_TRIP, newRideFrame, type TripPlan } from "./rideRoute";
+import { UserRound } from "lucide-react";
 import { ThreeOverlayLayer } from "./ThreeOverlayLayer";
 import { resolveMapLayers, type FlyOptions, type MapViewMode, type TVerseMapHandle, type TVerseMapProps } from "./types";
 
@@ -37,11 +38,9 @@ const ENTRANCE_VIEWS: Partial<Record<StationId, FlyOptions>> = {
 };
 /** Zoom 14 on a ~1500 px wide screen; a bit further out on smaller ones so BU Central -> Park St fits. */
 const overviewZoom = (width: number) => Math.min(14.4, Math.max(13.3, 14 + Math.log2(Math.max(320, width) / 1500)));
-const RIDE_CAMERA = { zoom: 15.85, pitch: 64, bearingOffset: -38 };
+const RIDE_CAMERA = { zoom: 17.4, pitch: 55, bearingOffset: -45 };
 /** After a hand-drag/zoom, the ride camera leaves you alone for this long (ms). */
 const GESTURE_HOLD = 2500;
-/** The avatar idles this far (m) beside BU Central so it never covers the station's beacon or bubbles. */
-const HOME_OFFSET = 70;
 /** Station models load once the camera is this close (zoom, and metres from the map centre). */
 const MODEL_ZOOM = 14.8;
 const MODEL_RADIUS = 1500;
@@ -52,9 +51,6 @@ function allowNearbyModels(map: maplibregl.Map, layer: ThreeOverlayLayer | null,
     if (distanceMeters(centre, [s.lng, s.lat]) < MODEL_RADIUS) layer.requestStationModel(s.id);
   }
 }
-
-const STEP_OFF_S = 0.9;
-const smoothstep = (u: number) => u * u * (3 - 2 * u);
 
 const northUp = (mode?: MapViewMode) => mode === "2d" ? { pitch: 0, bearing: 0 } : {};
 
@@ -78,59 +74,24 @@ const unwrap = (from: number, to: number) => from + ((((to - from) % 360) + 540)
 
 /** Mutable Demo Ride bookkeeping (a class so React's immutability lint leaves it alone). */
 class RideState {
-  readonly sampler = new DemoRide(20);
-  private fired = new Set<number>();
+  plan = DEMO_TRIP;
+  station = DEMO_TRIP.origin;
+  readonly sample = newRideFrame();
+  readonly lngLat: [number, number] = [0, 0];
+  readonly camera = { center: [0, 0] as [number, number], zoom: 0, pitch: 0, bearing: 0 };
   private frame = 0;
-  private start = 0;
-  private last = 0;
-  private lastGesture = 0;
-  private offset = { x: 0, z: 0 };
+  private lastGesture = -Infinity;
   active = false;
 
-  /** Where the avatar waits before a ride: beside the first stop, on the left of the track. */
-  home() {
-    const s = this.sampler.sample(0);
-    const side = ((s.bearing - 90) * Math.PI) / 180;
-    return { x: s.x + Math.sin(side) * HOME_OFFSET, z: s.z - Math.cos(side) * HOME_OFFSET };
-  }
-
-  /** `from` = where the avatar is now; it eases onto the track over the first second. */
-  begin(now: number, from: { x: number; z: number }) {
+  begin(plan: TripPlan) {
     this.cancel();
+    this.plan = plan;
+    this.station = plan.origin;
     this.active = true;
-    this.start = this.last = now;
-    this.fired.clear();
-    const s = this.sampler.sample(0);
-    const dx = from.x - s.x, dz = from.z - s.z;
-    this.offset = Math.hypot(dx, dz) < 400 ? { x: dx, z: dz } : { x: 0, z: 0 };
+    this.lastGesture = -Infinity;
+    toLngLat(plan.origin.x, plan.origin.z, this.lngLat);
   }
-
-  /** Remaining hop-on offset at this point of the ride. */
-  hopOn(elapsed: number) {
-    const k = 1 - smoothstep(Math.min(1, elapsed / 0.9));
-    return { x: this.offset.x * k, z: this.offset.z * k };
-  }
-
-  /** After the last stop the avatar steps off the track to the left, clear of the station. */
-  stepOff(elapsed: number, bearing: number) {
-    const over = elapsed - this.sampler.durationS;
-    if (over <= 0) return { x: 0, z: 0, finished: false };
-    const k = smoothstep(Math.min(1, over / STEP_OFF_S));
-    const side = ((bearing - 90) * Math.PI) / 180;
-    return { x: Math.sin(side) * HOME_OFFSET * k, z: -Math.cos(side) * HOME_OFFSET * k, finished: over >= STEP_OFF_S };
-  }
-  /** Seconds since the ride began, and the frame delta. */
-  step(now: number) {
-    const dt = Math.min(0.1, (now - this.last) / 1000);
-    this.last = now;
-    return { elapsed: (now - this.start) / 1000, dt };
-  }
-  /** true the first time a stop index is passed. */
-  firstTime(stop: number) {
-    if (this.fired.has(stop)) return false;
-    this.fired.add(stop);
-    return true;
-  }
+  arrive(station: TripPlan["origin"]) { this.station = station; }
   schedule(fn: FrameRequestCallback) {
     this.frame = requestAnimationFrame(fn);
   }
@@ -149,12 +110,13 @@ class RideState {
 export default function TVerseMap(props: TVerseMapProps) {
   const {
     ref, stations, vehicles, linesGeoJson, touristMode = false, demoRideActive = false,
-    viewMode = "3d", visibleLayers, avatarHat = "none", showInfoCards = true, className, children,
+    viewMode = "3d", visibleLayers, trip, avatarHat = "none", showInfoCards = true, className, children,
   } = props;
 
   const { trains, alerts, shuttles, stories, tourist } = visibleLayers ?? {};
   const layers = useMemo(() => resolveMapLayers({ trains, alerts, shuttles, stories, tourist }),
     [trains, alerts, shuttles, stories, tourist]);
+  const look = useAvatarLook();
   const cameraMode = useRef<MapViewMode>(viewMode);
   const container = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -188,11 +150,6 @@ export default function TVerseMap(props: TVerseMapProps) {
     let cancelled = false;
     let map: maplibregl.Map | null = null;
     let hoverFrame = 0;
-
-    const placeHome = (layer: ThreeOverlayLayer) => {
-      const home = ride.home();
-      layer.setAvatarLocal(home.x, home.z, null, false, 0);
-    };
 
     const engine = getMapEngine();
     let leaving = false;
@@ -240,7 +197,13 @@ export default function TVerseMap(props: TVerseMapProps) {
       // Handy in the console while developing: __tverseMap.getZoom(), etc.
       if (process.env.NODE_ENV !== "production") (window as unknown as { __tverseMap?: maplibregl.Map }).__tverseMap = m;
 
-      const loadNearby = () => allowNearbyModels(m, layerRef.current, latest.current);
+      let lastModelScan = -Infinity;
+      const loadNearby = () => {
+        const now = performance.now();
+        if (ride.active && now-lastModelScan < 500) return;
+        lastModelScan = now;
+        allowNearbyModels(m, layerRef.current, latest.current);
+      };
       m.on("moveend", loadNearby);
 
       const onStyleLoad = () => {
@@ -267,11 +230,7 @@ export default function TVerseMap(props: TVerseMapProps) {
         const lines = p.linesGeoJson?.features?.length ? p.linesGeoJson : MOCK_LINES;
         m.getSource<maplibregl.GeoJSONSource>("lines")?.setData(lines);
         layer.setLines(lines);
-        const rideLine: FeatureCollection<LineString> = {
-          type: "FeatureCollection",
-          features: [{ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: RIDE_COORDS } }],
-        };
-        m.getSource<maplibregl.GeoJSONSource>("ride")?.setData(rideLine);
+        m.getSource<maplibregl.GeoJSONSource>("ride")?.setData(ride.plan.geometry);
         setFlatStations(m, p.stations);
         if (mode === "2d") setFlatTrains(m, p.vehicles);
         layer.setStations(p.stations);
@@ -279,13 +238,10 @@ export default function TVerseMap(props: TVerseMapProps) {
         layer.setVehicles(p.vehicles);
         layer.setTouristMode(!!p.touristMode && visible.tourist);
         layer.setHat(p.avatarHat ?? "none", false);
-        if (previous !== layer) {
-          const previousPosition = previous?.avatarLocal();
-          if (previousPosition) layer.setAvatarLocal(previousPosition.x, previousPosition.z, null, false);
-          else placeHome(layer);
-        }
+        layer.setAvatarLook(getAvatarLook());
+        if (ride.active) layer.setTripFrame(ride.sample);
+        else layer.setRiderStation(ride.station.x, ride.station.z);
         if (ride.active) {
-          m.setPaintProperty("ride-glow", "line-opacity", .5);
           m.setPaintProperty("ride-core", "line-opacity", .95);
         }
         setReady(true);
@@ -304,6 +260,7 @@ export default function TVerseMap(props: TVerseMapProps) {
       const gesture = (e: { originalEvent?: unknown }) => {
         if (e.originalEvent) ride.gesture();
       };
+      m.on("drag", gesture);
       m.on("dragstart", gesture);
       m.on("rotatestart", gesture);
       m.on("pitchstart", gesture);
@@ -449,81 +406,87 @@ export default function TVerseMap(props: TVerseMapProps) {
     layerRef.current?.setHat(avatarHat, true);
   }, [avatarHat, ready]);
 
-  // ------------------------------------------------------------ demo ride
+  useEffect(() => { layerRef.current?.setAvatarLook(look); }, [look, ready]);
 
-  const rideGlow = (on: boolean) => {
+  // ------------------------------------------------------------ trips
+
+  const highlightRoute = (on: boolean) => {
     const m = mapRef.current;
-    if (!m?.getLayer("ride-glow")) return;
-    m.setPaintProperty("ride-glow", "line-opacity", on ? 0.5 : 0);
+    if (!m?.getLayer("ride-core")) return;
     m.setPaintProperty("ride-core", "line-opacity", on ? 0.95 : 0);
   };
 
-  const stopRide = () => {
+  const stopRide = (recenter = true) => {
     if (!ride.active) return;
     ride.cancel();
-    const layer = layerRef.current;
-    if (layer) {
-      const [lng, lat] = layer.avatarLngLat();
-      layer.setAvatar(lng, lat, null, false, 0);
+    layerRef.current?.setRiderStation(ride.station.x, ride.station.z);
+    highlightRoute(false);
+    const m = mapRef.current;
+    if (recenter && m && ride.cameraFree(performance.now()) && !m.isMoving()) {
+      m.easeTo({ center: toLngLat(ride.station.x, ride.station.z), duration: 550 });
     }
-    rideGlow(false);
   };
 
-  const startRide = () => {
-    const m = mapRef.current;
-    const layer = layerRef.current;
+  const startRide = (plan: TripPlan = DEMO_TRIP) => {
+    const m = mapRef.current, layer = layerRef.current;
     if (!m || !layer) return;
     m.stop();
-    ride.begin(performance.now(), layer.avatarLocal());
-    rideGlow(true);
+    ride.begin(plan);
+    m.getSource<maplibregl.GeoJSONSource>("ride")?.setData(plan.geometry);
+    highlightRoute(true);
+    const start = performance.now();
+    let last = start, approach = 0, arrival = 0, following = false;
     const tick = (now: number) => {
       if (!ride.active) return;
-      const layer = layerRef.current;
-      if (!layer) return;
-      const { elapsed, dt } = ride.step(now);
-      const s = ride.sampler.sample(elapsed);
-      const hop = ride.hopOn(elapsed);
-      const off = ride.stepOff(elapsed, s.bearing);
-      const x = s.x + hop.x + off.x, z = s.z + hop.z + off.z;
-      const gliding = hop.x || hop.z || (s.done && !off.finished) ? 0.8 : 0;
-      layer.setAvatarLocal(x, z, s.bearing, !off.finished, Math.max(s.done ? 0 : s.speed, gliding));
-      // Announce each stop once, ~1 s before arrival. A dropped frame never skips a stop.
-      const due = s.hop >= 0.8 || s.done ? s.nextStop : s.nextStop - 1;
-      for (let i = 1; i <= due; i++) {
-        if (ride.firstTime(i)) latest.current.onApproachStation?.(RIDE_STOPS[i].id);
+      const dt = Math.min(.1, (now - last) / 1000);
+      const elapsed = (now - start) / 1000;
+      last = now;
+      const s = plan.sample(elapsed, ride.sample);
+      const prevLng = ride.lngLat[0], prevLat = ride.lngLat[1];
+      const target = toLngLat(s.x, s.z, ride.lngLat);
+      layerRef.current?.setTripFrame(s);
+      while (approach < plan.events.length && elapsed >= plan.events[approach].approach) {
+        const id = plan.events[approach++].stop.id;
+        const station = latest.current.stations.find(st => st.id === id);
+        if (station) latest.current.onApproachStation?.(station.id);
       }
-      if (ride.cameraFree(now)) {
-        const [lng, lat] = toLngLat(x, z);
-        const c = m.getCenter();
-        const k = 1 - Math.exp(-dt * 2.6);
-        const kb = 1 - Math.exp(-dt * 1.4);
+      while (arrival < plan.events.length && elapsed >= plan.events[arrival].arrival) {
+        const event = plan.events[arrival++];
+        ride.arrive(event.platform);
+        latest.current.onDemoRideStop?.(event.stop.id);
+      }
+      if (ride.cameraFree(now) && !m.isMoving()) {
+        const c = m.getCenter(), flat = latest.current.viewMode === "2d";
+        const k = 1 - Math.exp(-dt * 3.8);
+        const cam = ride.camera;
+        // Carry forward the train's displacement, then ease away any offset left by a gesture.
+        const lng = c.lng + (following ? target[0] - prevLng : 0);
+        const lat = c.lat + (following ? target[1] - prevLat : 0);
+        cam.center[0] = lng + (target[0] - lng) * k;
+        cam.center[1] = lat + (target[1] - lat) * k;
+        cam.zoom = m.getZoom() + ((flat ? 15.5 : RIDE_CAMERA.zoom) - m.getZoom()) * k;
+        cam.pitch = flat ? 0 : m.getPitch() + (RIDE_CAMERA.pitch - m.getPitch()) * k;
         const bearing = m.getBearing();
-        const targetBearing = unwrap(bearing, s.bearing + RIDE_CAMERA.bearingOffset);
-        m.jumpTo({
-          center: [c.lng + (lng - c.lng) * k, c.lat + (lat - c.lat) * k],
-          zoom: m.getZoom() + (RIDE_CAMERA.zoom - m.getZoom()) * k,
-          pitch: m.getPitch() + (RIDE_CAMERA.pitch - m.getPitch()) * k,
-          bearing: bearing + (targetBearing - bearing) * kb, ...northUp(latest.current.viewMode),
-        });
-      }
-      if (off.finished) {
-        ride.cancel();
-        layer.setAvatarLocal(x, z, null, false, 0);
-        rideGlow(false);
-        const [lng, lat] = toLngLat(x, z);
-        m.easeTo({ center: [lng, lat], zoom: 15.3, pitch: 60, ...northUp(latest.current.viewMode), duration: 1600 });
+        cam.bearing = flat ? 0 : bearing + (unwrap(bearing, s.cameraBearing + RIDE_CAMERA.bearingOffset) - bearing) * (1 - Math.exp(-dt * 2));
+        m.jumpTo(cam);
+        following = true;
+      } else following = false;
+      if (elapsed >= plan.durationS) {
+        ride.arrive(plan.destination);
+        stopRide(false);
         latest.current.onDemoRideEnd?.();
         return;
       }
+      if (latest.current.viewMode === "2d") m.triggerRepaint();
       ride.schedule(tick);
     };
-    ride.schedule(tick);
+    tick(start);
   };
 
   const resetAvatar = () => {
-    stopRide();
-    const home = ride.home();
-    layerRef.current?.setAvatarLocal(home.x, home.z, null, false, 0);
+    stopRide(false);
+    ride.arrive(DEMO_TRIP.origin);
+    layerRef.current?.setRiderStation(ride.station.x, ride.station.z);
   };
 
   // Refs to the latest helpers so the imperative handle and effects never go stale.
@@ -534,9 +497,10 @@ export default function TVerseMap(props: TVerseMapProps) {
 
   useEffect(() => {
     if (!ready) return;
-    if (demoRideActive) actions.current.startRide();
+    if (trip) actions.current.startRide(trip);
+    else if (demoRideActive) actions.current.startRide();
     else actions.current.stopRide();
-  }, [demoRideActive, ready]);
+  }, [demoRideActive, trip, ready]);
 
   // ------------------------------------------------------------ imperative handle
 
@@ -603,7 +567,7 @@ export default function TVerseMap(props: TVerseMapProps) {
       resetAvatar: () => actions.current.resetAvatar(),
       celebrate: () => layerRef.current?.celebrate(),
       project: (lng, lat, altitude = 0) => layerRef.current?.project(lng, lat, altitude) ?? null,
-      getAvatarLngLat: () => layerRef.current?.avatarLngLat() ?? [RIDE_COORDS[0][0], RIDE_COORDS[0][1]],
+      getAvatarLngLat: () => layerRef.current?.avatarLngLat() ?? toLngLat(ride.station.x, ride.station.z),
       getMap: () => mapRef.current,
     };
   }, [ride]);
@@ -641,6 +605,9 @@ export default function TVerseMap(props: TVerseMapProps) {
               </button>
             </MapAnchor>
           ))}
+          {viewMode === "2d" && <MapAnchor lng={0} lat={0} anchor="center" follow={() => ride.active ? ride.lngLat : null}>
+            <span aria-label="Your rider" className="pointer-events-none grid size-7 place-items-center rounded-full border-2 border-white bg-zinc-950 text-white shadow-md"><UserRound size={16} /></span>
+          </MapAnchor>}
           {children}
           {showInfoCards && infoStation && (
             <MapAnchor key={`info-${infoStation.id}`} lng={infoStation.lng} lat={infoStation.lat} altitude={20}>

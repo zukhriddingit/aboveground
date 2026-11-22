@@ -2,6 +2,7 @@
 import type { ReactNode, Ref } from "react";
 import type { Map as MapLibreMap } from "maplibre-gl";
 import type { AvatarHat, QuickCheckKind, Station, StationId, TLinesGeoJson, TrainVehicle } from "@/types/tverse";
+import type { TripPlan, TripStopId } from "./rideRoute";
 import type { StationSignalsResult } from "@/components/quickcheck";
 
 export type MapViewMode = "2d" | "3d";
@@ -35,10 +36,12 @@ export interface TVerseMapProps {
   /** Golden landmark beacons + labels over every station that has a `landmark`. */
   touristMode?: boolean;
   /**
-   * true starts the 20 s Demo Ride (BU Central -> Park St) from the beginning;
-   * false stops it where it is. Set it back to false in onDemoRideEnd.
+   * true starts the preset trip (BU Central -> Park St) from the beginning;
+   * false returns the rider to the last station reached. Set it back to false in onDemoRideEnd.
    */
   demoRideActive?: boolean;
+  /** Controlled planner trip. Omit to drive the preset with demoRideActive. */
+  trip?: TripPlan | null;
   avatarHat?: AvatarHat;
   /** Built-in station/train info cards (next arrival + crowdedness pill). Default true. */
   showInfoCards?: boolean;
@@ -56,6 +59,8 @@ export interface TVerseMapProps {
 
   /** The avatar is about to reach a station on the Demo Ride (fires once per stop, ~1 s early). */
   onApproachStation?: (stationId: StationId) => void;
+  /** Actual arrival, including intermediate and transfer stops, once per visit. */
+  onDemoRideStop?: (stationId: TripStopId) => void;
   onDemoRideEnd?: () => void;
   /** Clicked a station beacon (no active alert). */
   onStationClick?: (station: Station) => void;

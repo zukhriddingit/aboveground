@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { savedAvatarHat, setAvatarLook, subscribeAvatarLook } from "../avatar/look";
 import type { AvatarHat } from "@/types/tverse";
 import { RANKS, XP_REWARDS, hatUnlockedBetween, hatsFor, nextRank, rankFor, rankOfLevel, rankProgress, type Rank, type RankLevel } from "./ranks";
 
@@ -85,7 +86,19 @@ export function useProgress() {
   useEffect(() => {
     // localStorage is only readable after hydration.
     current.current = read();
+    const syncHat = () => {
+      const p = current.current;
+      const hat = savedAvatarHat();
+      if (hat !== undefined && p.unlocked.includes(hat) && hat !== p.equipped) {
+        current.current = { ...p, equipped: hat };
+        setProgress(current.current);
+        save(current.current);
+      }
+    };
+    syncHat();
+    if (savedAvatarHat() !== current.current.equipped) setAvatarLook({ hat: current.current.equipped });
     setProgress(current.current);
+    return subscribeAvatarLook(syncHat);
   }, []);
 
   const update = useCallback((fn: (p: Progress) => Progress) => {
@@ -93,6 +106,7 @@ export function useProgress() {
     current.current = next;
     setProgress(next);
     save(next);
+    if (savedAvatarHat() !== next.equipped) setAvatarLook({ hat: next.equipped });
     return next;
   }, []);
 
