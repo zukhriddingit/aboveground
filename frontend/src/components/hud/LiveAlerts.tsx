@@ -16,7 +16,7 @@ function groupOf(alert: LiveAlert) {
 }
 const GROUPS = ["Closures and suspensions", "Delays and service changes", "Station notices"];
 const TONES = {
-  danger: "bg-[#DA291C] text-white",
+  danger: "bg-[#DA291C] text-[#fff]",
   warn: "bg-amber-400/15 text-amber-200",
   good: "bg-emerald-400/15 text-emerald-200",
   info: "bg-white/10 text-zinc-200",
