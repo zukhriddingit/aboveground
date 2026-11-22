@@ -2,18 +2,20 @@
 // TVerseMapHandle.getMap(), so components/map stays untouched) plus a MapLibre line layer that
 // paints the broken track segment.
 //
-// When a station breaks, the street over it opens and shows the tunnel (TunnelCutaway): held
-// trains at the platform, a red signal, a smoking relay cabinet and a work crew. Fixing it plays
-// the repair down there, then the trains pull out and the street closes again.
+// When something breaks, the street opens over where it really is (TunnelCutaway): usually an
+// interlocking or a stretch of tunnel past the station, with the trains standing by at the platform,
+// a protected work zone and the crew. Fixing it plays the repair down there, then the trains pull out
+// and the street closes again. Surface stops get the same work zone down the median (SurfaceStation).
 import * as T from "three";
 import type { CustomLayerInterface, CustomRenderMethodInput, GeoJSONSource, Map as MapLibreMap } from "maplibre-gl";
 import { LINE_COLORS, routeLine } from "@/lib/theme";
 import type { Station, StationId } from "@/types/tverse";
 import { Puffs, Sparks } from "./fx";
 import type { IncidentSim } from "./incidentSim";
-import { FIX_MODEL_MATRIX, TRACKS, clamp, compassBearing, pointAt, sliceTrack, toLocal, zoomScale, type Track, type XZ } from "./trackGeo";
+import { SURFACE_STATIONS, faultSite, type FaultKind } from "./faults";
+import { FIX_MODEL_MATRIX, TRACKS, clamp, compassBearing, pointAt, sliceTrack, toLngLat, toLocal, zoomScale, type Track, type XZ } from "./trackGeo";
 import { SurfaceStation } from "./SurfaceStation";
-import { TunnelCutaway, type CutawayTrain } from "./TunnelCutaway";
+import { TunnelCutaway, cutRange, type CutawayTrain } from "./TunnelCutaway";
 import { TunnelView } from "./TunnelView";
 
 const MAP_3D_LAYER = "tverse-3d";
@@ -22,8 +24,6 @@ const TRACK_LAYER = "fixt-incident-track";
 const ALERT_Y = 215;
 /** Give the camera time to arrive before the street opens. */
 const OPEN_DELAY_MS = 1500;
-/** Stops at street level (BU Central sits in the median of Commonwealth Ave): no tunnel to open. */
-const SURFACE_STATIONS = new Set<StationId>(["place-bucen"]);
 /** Member 2's basemap source; its building footprints keep the cut to open street. */
 const BASEMAP_SOURCE = "boston";
 
@@ -79,6 +79,7 @@ function buildEmblem() {
 
 interface RepairRun {
   stationId: StationId;
+  fault: FaultKind;
   start: number;
   begun: boolean;
   restored: boolean;
@@ -104,7 +105,7 @@ class FixLayer implements CustomLayerInterface {
   private readonly flashRings: T.Mesh[] = [];
   private readonly waves: Array<{ mesh: T.Mesh; start: number; x: number; z: number; radius: number }> = [];
   readonly cutaways = new Map<StationId, TunnelCutaway>();
-  /** Street-level stations, drawn all the time. */
+  /** Work zones at street-level stops, while something's broken there. */
   readonly surfaces = new Map<StationId, SurfaceStation>();
   /** Stations where the street can't open (surface stops, or buildings over the whole tunnel). */
   private readonly noCut = new Set<StationId>();
@@ -178,7 +179,23 @@ class FixLayer implements CustomLayerInterface {
     return null;
   }
 
-  ensureCutaway(id: StationId, openAt: number): { cut: TunnelCutaway; created: boolean } | null {
+  /** Meters along the corridor's track from the station to where this kind of fault happens. */
+  faultOffset(id: StationId, kind: FaultKind, corridor: { track: Track; dS: number }) {
+    const site = faultSite(id, kind);
+    if (!site.meters) return 0;
+    let sign = 1;
+    if (site.toward) {
+      const there = this.sim.stationD(corridor.track, site.toward);
+      if (there !== null) sign = Math.sign(there - corridor.dS) || 1;
+    }
+    if (site.away) sign = -sign;
+    // Keep the whole scene on the mapped track.
+    const room = sign > 0 ? corridor.track.length - corridor.dS : corridor.dS;
+    if (room < site.meters + 160) sign = -sign;
+    return sign * site.meters;
+  }
+
+  ensureCutaway(id: StationId, openAt: number, fault: FaultKind): { cut: TunnelCutaway; created: boolean } | null {
     if (SURFACE_STATIONS.has(id) || this.noCut.has(id)) return null;
     const existing = this.cutaways.get(id);
     if (existing && !existing.isClosed(openAt) && existing.opening) return { cut: existing, created: false };
@@ -187,7 +204,10 @@ class FixLayer implements CustomLayerInterface {
     if (!station || !corridor) return null;
     existing?.dispose();
     const cut = new TunnelCutaway(
-      { stationId: id, name: station.name, line: station.line, lineColor: LINE_COLORS[station.line], track: corridor.track, dS: corridor.dS },
+      {
+        stationId: id, name: station.name, line: station.line, lineColor: LINE_COLORS[station.line], track: corridor.track, dS: corridor.dS,
+        fault, faultS: this.faultOffset(id, fault, corridor),
+      },
       routeLine,
     );
     cut.open(openAt);
@@ -199,27 +219,21 @@ class FixLayer implements CustomLayerInterface {
   private updateCutaways(now: number, dt: number) {
     for (const incident of this.sim.incidents.values()) {
       if (incident.status === "active" && !this.cutaways.has(incident.stationId)) {
-        this.ensureCutaway(incident.stationId, now + OPEN_DELAY_MS);
+        this.ensureCutaway(incident.stationId, now + OPEN_DELAY_MS, incident.fault);
       }
+      if (incident.status === "active" && SURFACE_STATIONS.has(incident.stationId)) this.ensureSurface(incident.stationId, incident.fault)?.setIncident(now);
     }
     const trains: CutawayTrain[] = [];
     this.sim.forEachTrain((t) => trains.push(t));
     const hidden = new Set<string>();
-    for (const id of SURFACE_STATIONS) {
-      let st = this.surfaces.get(id);
-      if (!st) {
-        const station = this.stationInfo(id);
-        const corridor = this.corridorFor(id);
-        if (!station || !corridor) continue;
-        st = new SurfaceStation(
-          { stationId: id, name: station.name, line: station.line, lineColor: LINE_COLORS[station.line], track: corridor.track, dS: corridor.dS },
-          routeLine,
-        );
-        this.scene.add(st.group);
-        this.surfaces.set(id, st);
-      }
-      if ([...this.sim.incidents.values()].some((i) => i.stationId === id && i.status === "active")) st.setIncident(now);
+    for (const [id, st] of this.surfaces) {
       for (const trainId of st.update(now, dt, trains, { sparks: this.sparks, puffs: this.puffs })) hidden.add(trainId);
+      const busy = this.repair?.stationId === id || [...this.sim.incidents.values()].some((i) => i.stationId === id && i.status === "active");
+      if (!busy) st.clear(now);
+      if (!busy && st.isClear(now)) {
+        st.dispose();
+        this.surfaces.delete(id);
+      }
     }
     for (const [id, cut] of this.cutaways) {
       if (!this.fitted.has(cut) && cut.startsAt !== null && now > cut.startsAt - 200) {
@@ -240,6 +254,25 @@ class FixLayer implements CustomLayerInterface {
       }
     }
     this.sim.setHidden(hidden);
+  }
+
+  /** The work zone at a street-level stop, down the median at the fault. */
+  ensureSurface(id: StationId, fault: FaultKind) {
+    const existing = this.surfaces.get(id);
+    if (existing) return existing;
+    const station = this.stationInfo(id);
+    const corridor = this.corridorFor(id);
+    if (!station || !corridor) return null;
+    const st = new SurfaceStation(
+      {
+        stationId: id, name: station.name, line: station.line, lineColor: LINE_COLORS[station.line], track: corridor.track, dS: corridor.dS,
+        fault, faultS: this.faultOffset(id, fault, corridor),
+      },
+      routeLine,
+    );
+    this.scene.add(st.group);
+    this.surfaces.set(id, st);
+    return st;
   }
 
   /** Building footprints (scene meters) around a station, from the basemap tiles already loaded. */
@@ -335,13 +368,13 @@ class FixLayer implements CustomLayerInterface {
       run.callbacks.onDone();
       return;
     }
-    const surface = this.surfaces.get(run.stationId);
+    const surface = SURFACE_STATIONS.has(run.stationId) ? this.ensureSurface(run.stationId, run.fault) : null;
     if (surface) {
       this.surfaceRepair(run, surface, xz, now);
       return;
     }
     const current = this.cutaways.get(run.stationId);
-    const opened = run.closing && current ? { cut: current, created: false } : this.ensureCutaway(run.stationId, now);
+    const opened = run.closing && current ? { cut: current, created: false } : this.ensureCutaway(run.stationId, now, run.fault);
     if (!opened) {
       this.streetRepair(run, xz, now);
       return;
@@ -485,9 +518,9 @@ export class FixTheTScene {
     this.frame = requestAnimationFrame(loop);
   }
 
-  /** The crew fixes it in the tunnel (onRestored when the signal goes green), then the street closes (onDone). */
-  playRepair(stationId: StationId, callbacks: RepairCallbacks) {
-    this.layer.repair = { stationId, start: performance.now(), begun: false, restored: false, closing: false, callbacks };
+  /** The crew fixes it in the tunnel (onRestored when the line is clear), then the street closes (onDone). */
+  playRepair(stationId: StationId, callbacks: RepairCallbacks, fault: FaultKind = "signal") {
+    this.layer.repair = { stationId, fault, start: performance.now(), begun: false, restored: false, closing: false, callbacks };
   }
 
   get repairing() {
@@ -506,23 +539,28 @@ export class FixTheTScene {
     return new TunnelView(host, this.layer.scene, cut);
   }
 
-  /** Where the relay cabinet is, so the walk-in camera can turn to watch the repair. */
+  /** Where the crew works, so the walk-in camera can turn to watch the repair. */
   repairSpot(stationId: StationId) {
     return this.layer.cutaways.get(stationId)?.weldPoint() ?? null;
   }
 
-  /** Camera that looks down into the opened street at a station, slanted along the tunnel. */
-  cutawayView(stationId: StationId): CutawayView | null {
+  /** Camera over the opened stretch, from the platform end to the work zone, slanted along the tunnel. */
+  cutawayView(stationId: StationId, fault?: FaultKind): CutawayView | null {
     const corridor = this.layer.corridorFor(stationId);
     const station = this.stationInfo(stationId);
     if (!corridor || !station) return null;
-    const tangent = compassBearing(pointAt(corridor.track, corridor.dS).angle);
+    const kind = fault ?? this.layer.cutaways.get(stationId)?.fault ?? this.sim.incidentAt(stationId)?.fault ?? "signal";
+    const f = this.layer.faultOffset(stationId, kind, corridor);
     if (SURFACE_STATIONS.has(stationId)) {
-      // Low and down the avenue: like standing at the crosswalk looking along the platforms.
-      return { center: [station.lng, station.lat], bearing: (tangent + 10) % 360, zoom: 18.3, pitch: 68 };
+      // Low and down the median from the station side, looking at the work zone.
+      const p = pointAt(corridor.track, corridor.dS + f * 0.85);
+      return { center: toLngLat(p.x, p.z), bearing: (compassBearing(p.angle) + (f >= 0 ? 10 : 190)) % 360, zoom: 18.1, pitch: 66 };
     }
+    const [from, to] = cutRange(f);
+    const p = pointAt(corridor.track, corridor.dS + (from + to) / 2);
+    const zoom = 18.3 - Math.max(0, Math.log2((to - from) / 150));
     // Steep enough to see over the buildings lining the street, turned a little off the tunnel axis.
-    return { center: [station.lng, station.lat], bearing: (tangent + 18) % 360, zoom: 18.3, pitch: 38 };
+    return { center: toLngLat(p.x, p.z), bearing: (compassBearing(p.angle) + 18) % 360, zoom, pitch: 40 };
   }
 
   private syncTrack(t: number) {
