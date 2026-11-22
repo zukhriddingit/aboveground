@@ -7,6 +7,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ExternalLink, X } from "lucide-react";
 import type { StationId } from "@/types/tverse";
 import { BUTTON, BUTTON_PRIMARY, FOCUS, LABEL } from "@/lib/ui";
+import { useMapTheme } from "./mapTheme";
+import { useMapWeather } from "./mapWeather";
 import { POCKET_CITIES, pocketCityUrl } from "./pocketCities";
 
 type Look = "app" | "original";
@@ -33,8 +35,11 @@ export function PocketCityOverlay({ stationId, onClose }: { stationId: StationId
   const [ready, setReady] = useState(false);
   const [closing, setClosing] = useState(false);
   const frame = useRef<HTMLIFrameElement>(null);
-  // Opens on Boston's live weather; the diorama's Weather picker can switch it to any season or weather.
-  const url = base ? `${base}?weather=live${look === "app" ? "&embed=1" : ""}` : null;
+  // Follows the map: Boston's live weather (or the Shift+W demo weather) and the map's light or dark theme. The
+  // diorama's own Weather picker and Night toggle can still change either.
+  const { theme } = useMapTheme();
+  const { override } = useMapWeather();
+  const url = base ? `${base}?weather=${override ?? "live"}&night=${theme === "dark" ? 1 : 0}${look === "app" ? "&embed=1" : ""}` : null;
   const shown = flown && ready && !closing;
 
   useEffect(() => {
@@ -97,7 +102,7 @@ export function PocketCityOverlay({ stationId, onClose }: { stationId: StationId
         <div className="flex h-12 shrink-0 items-center gap-3 border-b border-white/12 px-3 text-zinc-100 sm:px-4">
           <span className={`${LABEL} hidden sm:inline`}>Street view</span>
           <span className="truncate text-sm font-bold">{title}</span>
-          <span className="hidden truncate text-xs text-zinc-500 lg:inline">Pocket City diorama · live Boston weather · drag to turn, scroll to zoom</span>
+          <span className="hidden truncate text-xs text-zinc-500 lg:inline">Pocket City diorama · Boston&rsquo;s weather now · drag to turn, scroll to zoom</span>
           <div className="ml-auto flex items-center rounded-lg border border-white/12 p-0.5 text-xs" role="group" aria-label="Diorama look">
             {(["app", "original"] as const).map(l => (
               <button key={l} type="button" onClick={() => switchLook(l)} aria-pressed={look === l}

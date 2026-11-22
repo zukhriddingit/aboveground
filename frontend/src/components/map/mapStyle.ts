@@ -1,10 +1,13 @@
-import type { ExpressionSpecification, LayerSpecification, Map as LibreMap, StyleSpecification } from "maplibre-gl";
+import type { ExpressionSpecification, LayerSpecification, Map as LibreMap, StyleSpecification, SymbolLayerSpecification } from "maplibre-gl";
+import type { LayerSpecification as StandardLayer, Map as StandardMap } from "mapbox-gl";
+import type { LightPreset, MapTheme } from "./mapTheme";
+import { standardMap } from "./mapEngine";
 import { FLAT_TRANSIT } from "./flatTransit";
 import type { MapLayerVisibility, MapViewMode } from "./types";
 import { LINE_COLORS, LINE_GLOW } from "@/lib/theme";
 
 // Boston at dusk: indigo ground, deep-blue water, sodium-lamp arterials and slate-violet
-// towers with lit windows under a sunset horizon. Kept darker than the game objects so the
+// towers with softly shaded faces under a sunset horizon. Kept darker than the game objects so the
 // T lines, trains, holograms and the avatar own the brightest pixels.
 
 const height: ExpressionSpecification = ["to-number", ["get", "render_height"], 8];
@@ -25,50 +28,6 @@ export const railColor: ExpressionSpecification = ["match", ["coalesce", ["get",
     LINE_COLORS.Orange.toLowerCase(), LINE_GLOW.Orange,
     ["to-color", ["coalesce", ["get", "color"], "#38d283"]]],
 ];
-
-export const WINDOW_IMAGES = ["windows-low", "windows-mid", "windows-tall"] as const;
-
-/**
- * Procedural facade texture: a grid of windows, some lit. Seeded, so the city looks the
- * same on every load. `tier` 0..2 = low-rise .. tower.
- */
-export function windowTexture(tier: number, size = 64): { width: number; height: number; data: Uint8Array } {
-  const wall = [[38, 50, 96], [54, 69, 130], [78, 97, 176]][tier];
-  const dark = [[24, 32, 66], [32, 43, 88], [44, 58, 116]][tier];
-  const litChance = [0.2, 0.3, 0.42][tier];
-  const data = new Uint8Array(size * size * 4);
-  let seed = 1337 + tier * 7919;
-  const rand = () => {
-    seed = (seed * 1664525 + 1013904223) >>> 0;
-    return seed / 4294967296;
-  };
-  const cell = 4; // 4 px per window bay: 2x3 px of glass, the rest wall
-  const colors = new Map<number, number[]>();
-  for (let y = 0; y < size; y++) {
-    for (let x = 0; x < size; x++) {
-      const cx = Math.floor(x / cell), cy = Math.floor(y / cell);
-      const inGlass = x % cell >= 1 && x % cell <= 2 && y % cell >= 1;
-      let rgb = wall;
-      if (inGlass) {
-        const key = cy * 64 + cx;
-        let c = colors.get(key);
-        if (!c) {
-          const r = rand();
-          const tone = rand();
-          c = r > litChance ? dark
-            : tone < 0.72 ? [255, 214, 150] // warm office light
-            : tone < 0.97 ? [200, 228, 255] // cool fluorescent
-            : [255, 130, 200]; // the odd neon sign
-          colors.set(key, c);
-        }
-        rgb = c;
-      }
-      const i = (y * size + x) * 4;
-      data[i] = rgb[0]; data[i + 1] = rgb[1]; data[i + 2] = rgb[2]; data[i + 3] = 255;
-    }
-  }
-  return { width: size, height: size, data };
-}
 
 const ARTERIAL = ["motorway", "trunk", "primary"];
 const COLLECTOR = ["secondary", "tertiary"];
@@ -148,17 +107,16 @@ const transit: LayerSpecification[] = [
 ];
 
 const city: LayerSpecification[] = [
-  // Neon kerb line around every footprint; reads as street-level glow between the towers.
+  // A fine outline separates the tower base from the street.
   { id: "building-edges", type: "line", source: "boston", "source-layer": "building", minzoom: 15,
-    paint: { "line-color": "#46c8ff", "line-width": ["interpolate", ["linear"], ["zoom"], 15, 0.3, 17, 1.2],
+    paint: { "line-color": "#7284aa", "line-width": ["interpolate", ["linear"], ["zoom"], 15, 0.3, 17, 1.2],
       "line-opacity": ["interpolate", ["linear"], ["zoom"], 15, 0.1, 16, 0.35] } },
   // From the overview only the skyline stands up; every footprint rises as you zoom in. Extruding the
-  // whole city with window patterns at zoom 12-14 was the heaviest thing on the GPU.
+  // whole city at zoom 12-14 was the heaviest thing on the GPU.
   { id: "buildings-skyline", type: "fill-extrusion", source: "boston", "source-layer": "building", minzoom: 12, maxzoom: 15.2,
     filter: [">=", height, SKYLINE_HEIGHT],
     paint: {
-      "fill-extrusion-color": ["interpolate", ["linear"], height, 40, "#374684", 150, "#5062ad", 260, "#7286d6"],
-      "fill-extrusion-pattern": ["step", height, WINDOW_IMAGES[1], 70, WINDOW_IMAGES[2]],
+      "fill-extrusion-color": ["interpolate", ["linear"], height, 40, "#4b5872", 150, "#73809e", 260, "#929cb7"],
       "fill-extrusion-base": ["to-number", ["get", "render_min_height"], 0],
       "fill-extrusion-height": height,
       "fill-extrusion-vertical-gradient": true,
@@ -167,9 +125,7 @@ const city: LayerSpecification[] = [
   { id: "buildings", type: "fill-extrusion", source: "boston", "source-layer": "building", minzoom: 14.5,
     paint: {
       "fill-extrusion-color": ["interpolate", ["linear"], height,
-        0, "#1b2547", 25, "#26325f", 70, "#374684", 150, "#5062ad", 260, "#7286d6"],
-      // Lit-window facades (images registered by TVerseMap); taller buildings are brighter.
-      "fill-extrusion-pattern": ["step", height, WINDOW_IMAGES[0], 22, WINDOW_IMAGES[1], 70, WINDOW_IMAGES[2]],
+        0, "#39435a", 25, "#46536a", 70, "#52617e", 150, "#73809e", 260, "#929cb7"],
       "fill-extrusion-base": ["to-number", ["get", "render_min_height"], 0],
       "fill-extrusion-height": height,
       "fill-extrusion-vertical-gradient": true,
@@ -178,9 +134,10 @@ const city: LayerSpecification[] = [
 ];
 
 /** Flat footprints under the skyline at the overview, so city blocks still read. */
+const footprintOpacity: ExpressionSpecification = ["interpolate", ["linear"], ["zoom"], 12, 0.5, 14.5, 0.85, 15.2, 0];
 const footprints: LayerSpecification[] = [
   { id: "building-footprints", type: "fill", source: "boston", "source-layer": "building", minzoom: 12, maxzoom: 15.2,
-    paint: { "fill-color": "#1f2a52", "fill-opacity": ["interpolate", ["linear"], ["zoom"], 12, 0.5, 14.5, 0.85, 15.2, 0] } },
+    paint: { "fill-color": "#1f2a52", "fill-opacity": footprintOpacity } },
 ];
 
 const labels: LayerSpecification[] = [
@@ -193,85 +150,128 @@ const labels: LayerSpecification[] = [
     layout: { "text-field": ["upcase", ["coalesce", ["get", "name:en"], ["get", "name"]]], "text-font": ["Noto Sans Regular"],
       "text-size": 10.5, "text-letter-spacing": 0.28, "text-max-width": 7 },
     paint: { "text-color": "#8e9ad6", "text-halo-color": "#0a1024", "text-halo-width": 1.4, "text-opacity": 0.55 } },
-  { id: "station-names", type: "symbol", source: "stations",
-    layout: { "text-field": ["upcase", ["get", "name"]], "text-font": ["Noto Sans Bold"], "text-size": 11.5,
-      "text-letter-spacing": 0.12, "text-offset": [1.4, 0.4], "text-anchor": "left", "text-max-width": 16,
-      "text-allow-overlap": true },
-    paint: { "text-color": ["case", ["get", "alert"], "#ffb4bc", "#e3ebf7"],
-      "text-opacity": ["interpolate", ["linear"], ["zoom"], 16.1, 1, 17.8, .16, 18.35, 0],
-      "text-halo-color": "#070b1a", "text-halo-width": 1.8 } },
 ];
 
+const stationNames: SymbolLayerSpecification = {
+  id: "station-names", type: "symbol", source: "stations",
+  layout: { "text-field": ["upcase", ["get", "name"]], "text-font": ["Noto Sans Bold"], "text-size": 11.5,
+      "text-letter-spacing": 0.12, "text-offset": [1.4, 0.4], "text-anchor": "left", "text-max-width": 16,
+      "text-allow-overlap": true },
+  paint: { "text-color": ["case", ["get", "alert"], "#ffb4bc", "#e3ebf7"],
+      "text-opacity": ["interpolate", ["linear"], ["zoom"], 16.1, 1, 17.8, .16, 18.35, 0],
+    "text-halo-color": "#070b1a", "text-halo-width": 1.8 },
+};
+
 const empty = { type: "FeatureCollection" as const, features: [] };
+
+const transitSources = {
+  lines: { type: "geojson", data: empty },
+  ride: { type: "geojson", data: empty },
+  vehicles: { type: "geojson", data: empty },
+  curbs: { type: "geojson", data: empty },
+  sights: { type: "geojson", data: empty },
+  stations: { type: "geojson", data: empty },
+} as const satisfies StyleSpecification["sources"];
+
+const atmosphere = {
+  dark: {
+    light: { anchor: "map", color: "#d4deff", intensity: .43, position: [1.4, 315, 38] },
+    sky: { "sky-color": "#0b1030", "horizon-color": "#f28d70", "fog-color": "#2a2447",
+      "sky-horizon-blend": .75, "horizon-fog-blend": .85, "fog-ground-blend": .55, "atmosphere-blend": .9 },
+  },
+  light: {
+    light: { anchor: "map", color: "#fff3dc", intensity: .34, position: [1.4, 225, 42] },
+    sky: { "sky-color": "#90bbd5", "horizon-color": "#f5ecdc", "fog-color": "#e4ebeb",
+      "sky-horizon-blend": .75, "horizon-fog-blend": .85, "fog-ground-blend": .4, "atmosphere-blend": .7 },
+  },
+} satisfies Record<MapTheme, Pick<StyleSpecification, "light" | "sky">>;
 
 export function createMapStyle(): StyleSpecification {
   return {
     version: 8,
     projection: { type: "mercator" },
     glyphs: "https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf",
-    // Cool moonlight from the northwest gives every tower a lit face and a shadow face.
-    light: { anchor: "map", color: "#c9d4ff", intensity: 0.4, position: [1.4, 315, 38] },
-    // Last light on the horizon; visible on the low follow-cam angles of the Demo Ride.
-    sky: {
-      "sky-color": "#0b1030",
-      "horizon-color": "#ff6b4a",
-      "fog-color": "#2a1b52",
-      "sky-horizon-blend": 0.75,
-      "horizon-fog-blend": 0.85,
-      "fog-ground-blend": 0.55,
-      "atmosphere-blend": 0.9,
-    },
+    ...atmosphere.dark,
     sources: {
       boston: {
         type: "vector", url: "https://tiles.openfreemap.org/planet",
         attribution: '<a href="https://openfreemap.org/">OpenFreeMap</a> · <a href="https://openmaptiles.org/">OpenMapTiles</a> · © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
       },
-      lines: { type: "geojson", data: empty },
-      ride: { type: "geojson", data: empty },
-      vehicles: { type: "geojson", data: empty },
-      curbs: { type: "geojson", data: empty },
-      sights: { type: "geojson", data: empty },
-      stations: { type: "geojson", data: empty },
+      ...transitSources,
     },
-    layers: [...ground, ...footprints, ...roads, ...transit, ...city, ...FLAT_TRANSIT, ...labels],
+    layers: [...ground, ...footprints, ...roads, ...transit, ...city, ...FLAT_TRANSIT, ...labels, stationNames],
   };
+}
+
+/** Standard owns its basemap. Install only the application's GeoJSON, icons and labels. */
+export function addStandardTransit(map: StandardMap) {
+  for (const [id, source] of Object.entries(transitSources)) {
+    if (!map.getSource(id)) map.addSource(id, source);
+  }
+  for (const layer of [...transit, ...FLAT_TRANSIT, stationNames]) {
+    if (map.getLayer(layer.id)) continue;
+    const slot = layer.type === "line" ? "middle" : "top";
+    // Standard serves Mapbox font stacks. Omit the OpenFreeMap-specific font names.
+    const layout = { ...layer.layout };
+    if ("text-font" in layout) delete layout["text-font"];
+    const paint = { ...layer.paint };
+    if (layer.type === "symbol") Object.assign(paint, { "icon-emissive-strength": 1, "text-emissive-strength": 1 });
+    else Object.assign(paint, { [`${layer.type}-emissive-strength`]: 1 });
+    map.addLayer({ ...layer, slot, layout, paint } as StandardLayer);
+  }
 }
 
 type PaintKey = Parameters<LibreMap["setPaintProperty"]>[1];
 type PaintValue = Parameters<LibreMap["setPaintProperty"]>[2];
+const ivory: ExpressionSpecification = ["interpolate", ["linear"], height, 0, "#ddd7ca", 30, "#ebe5da", 120, "#fff9eb"];
 const daylight: [string, PaintKey, PaintValue][] = [
-  ["night", "background-color", "#f1f1eb"], ["landuse", "fill-color", "#edece6"],
+  ["night", "background-color", "#f1f1eb"], ["landuse", "fill-color", ["match", ["get", "class"],
+    ["university", "college", "school"], "#e9e1d4", ["commercial", "retail"], "#e6e3db",
+    ["cemetery", "stadium", "pitch", "playground"], "#d3e1cb", "#edece6"]],
   ["landcover", "fill-color", "#d1e4d2"], ["parks", "fill-color", "#bbdbbe"],
   ["water", "fill-color", "#acd7ea"], ["water-shore", "line-color", "#90bdc9"], ["channels", "line-color", "#a2cada"],
   ["streets", "line-color", "#ffffff"], ["collectors", "line-color", "#ffffff"], ["arterials", "line-color", "#fffaf1"],
   ["arterials", "line-opacity", 1], ["paths", "line-color", "#a49b8d"], ["runways", "line-color", "#c8c6be"],
   ["heavy-rail", "line-color", "#a29c9c"], ["building-footprints", "fill-color", "#d4d1c9"],
-  ["building-footprints", "fill-opacity", .85], ["water-names", "text-color", "#396c81"],
+  ["building-edges", "line-color", "#b3aa97"], ["buildings", "fill-extrusion-color", ivory],
+  ["buildings-skyline", "fill-extrusion-color", ivory], ["arterial-glow", "line-opacity", .05],
+  ["rail-glow", "line-opacity", .15], ["rail-hot", "line-opacity", .15], ["water-names", "text-color", "#396c81"],
   ["water-names", "text-halo-color", "#d1eaf2"], ["neighborhoods", "text-color", "#555d54"],
   ["neighborhoods", "text-halo-color", "#f7f7ef"], ["station-names", "text-halo-color", "#ffffff"],
-  ["station-names", "text-opacity", 1], ["rail-core", "line-color", ["to-color", ["coalesce", ["get", "color"], "#00843d"]]],
-  ["ride-core", "line-color", "#225c79"],
+  ["rail-core", "line-color", ["to-color", ["coalesce", ["get", "color"], "#00843d"]]],
+  ["sight-names", "text-color", "#705119"], ["sight-names", "text-halo-color", "#fffcf1"],
+  ["ride-core", "line-color", "#225c79"], ["ride-glow", "line-color", "#56a8b1"],
 ];
-const duskPaint = new Map([...ground, ...roads, ...footprints, ...transit, ...labels].map(l => [l.id, l.paint]));
+const duskPaint = new Map([...ground, ...roads, ...footprints, ...transit, ...city, ...FLAT_TRANSIT, ...labels, stationNames].map(l => [l.id, l.paint]));
 
 /** Keep the sources, hit targets and tile cache alive when changing map appearance. */
-export function setBasemapMode(map: LibreMap, mode: MapViewMode) {
+export function setBasemapMode(map: LibreMap, mode: MapViewMode, theme: MapTheme, preset: LightPreset) {
   const flat = mode === "2d";
-  for (const [id, key, value] of daylight) {
-    if (map.getLayer(id)) map.setPaintProperty(id, key, flat ? value : (duskPaint.get(id) as Record<string, PaintValue>)[key]);
+  const standard = standardMap(map);
+  if (standard) {
+    if (standard.getConfigProperty("basemap", "lightPreset") !== preset) standard.setConfigProperty("basemap", "lightPreset", preset);
+    if (standard.getConfigProperty("basemap", "show3dObjects") !== !flat) standard.setConfigProperty("basemap", "show3dObjects", !flat);
+  } else {
+    map.setLight(atmosphere[theme].light);
+    map.setSky(atmosphere[theme].sky);
+    map.setLayerZoomRange("building-footprints", 12, flat ? 24 : 15.2);
+    map.setPaintProperty("building-footprints", "fill-opacity", flat ? .85 : footprintOpacity);
   }
-  if (map.getLayer("building-footprints")) map.setLayerZoomRange("building-footprints", 12, flat ? 24 : 15.2);
+  for (const [id, key, value] of daylight) {
+    if (map.getLayer(id)) map.setPaintProperty(id, key, theme === "light" ? value : (duskPaint.get(id) as Record<string, PaintValue>)[key]);
+  }
   for (const id of ["buildings", "buildings-skyline", "building-edges", "arterial-glow", "rail-glow", "rail-hot", "ride-glow"]) {
     if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", flat ? "none" : "visible");
   }
   if (map.getLayer("station-names")) {
+    map.setPaintProperty("station-names", "text-opacity", flat ? 1 : stationNames.paint!["text-opacity"]);
     map.setLayoutProperty("station-names", "text-field", flat ? ["get", "name"] : ["upcase", ["get", "name"]]);
     map.setLayoutProperty("station-names", "text-letter-spacing", flat ? .01 : .12);
     map.setLayoutProperty("station-names", "text-allow-overlap", !flat);
   }
 }
 
-export function setTransitVisibility(map: LibreMap, mode: MapViewMode, layers: MapLayerVisibility, tourist: boolean) {
+export function setTransitVisibility(map: LibreMap, mode: MapViewMode, layers: MapLayerVisibility, tourist: boolean, theme: MapTheme) {
   const flat = mode === "2d";
   const visible: Record<string, boolean> = {
     "stop-disc": true, "train-marker": layers.trains, "delay-badge": layers.alerts,
@@ -280,6 +280,7 @@ export function setTransitVisibility(map: LibreMap, mode: MapViewMode, layers: M
   for (const [id, on] of Object.entries(visible)) {
     if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", flat && on ? "visible" : "none");
   }
-  if (map.getLayer("station-names")) map.setPaintProperty("station-names", "text-color", flat ? "#172d33"
-    : layers.alerts ? ["case", ["get", "alert"], "#ffb4bc", "#e3ebf7"] : "#e3ebf7");
+  const name = theme === "light" ? "#172d33" : "#e3ebf7";
+  const alert = theme === "light" ? "#932330" : "#ffb4bc";
+  map.setPaintProperty("station-names", "text-color", layers.alerts ? ["case", ["get", "alert"], alert, name] : name);
 }

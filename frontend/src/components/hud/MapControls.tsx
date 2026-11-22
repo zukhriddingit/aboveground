@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Bus, Camera, Gauge, Landmark, Layers, LocateFixed, Lock, TrainFront, TriangleAlert, X, type LucideIcon } from "lucide-react";
+import { Bus, Camera, Gauge, Landmark, Layers, LocateFixed, Lock, Moon, Sun, SunMoon, TrainFront, TriangleAlert, X, type LucideIcon } from "lucide-react";
 import { CONTROL, CONTROL_ACTIVE, CONTROL_STATIC, FOCUS, LABEL, PANEL } from "@/lib/ui";
 import type { MapLayerVisibility } from "@/components/map";
+import { useMapTheme } from "@/components/map/mapTheme";
 import { LAYER_INFO, LAYER_ORDER, TELEMETRY_INFO, type MapLayerKey, type ViewMode } from "./layers";
 import { Switch } from "./Switch";
 
@@ -14,6 +15,12 @@ const ICONS: Record<MapLayerKey, LucideIcon> = {
   shuttles: Bus,
   tourist: Landmark,
 };
+
+const THEMES = {
+  auto: { icon: SunMoon, label: "Auto", next: "light" },
+  light: { icon: Sun, label: "Light", next: "dark" },
+  dark: { icon: Moon, label: "Dark", next: "auto" },
+} as const;
 
 const VIEWS: Array<{ mode: ViewMode; short: string; label: string }> = [
   { mode: "2d", short: "2D", label: "2D Clean" },
@@ -50,6 +57,9 @@ export function MapControls({
   onOpen,
 }: MapControlsProps) {
   const [open, setOpen] = useState(false);
+  const { mode, setMode } = useMapTheme();
+  const { icon: ThemeIcon, label, next } = THEMES[mode];
+  const themeAction = `Map theme ${label}. Switch to ${THEMES[next].label}.`;
   const root = useRef<HTMLDivElement>(null);
   const extras = LAYER_ORDER.filter((k) => k !== "trains" && k !== "alerts" && layers[k]).length + (telemetry && !telemetryLockedHint ? 1 : 0);
 
@@ -108,6 +118,11 @@ export function MapControls({
             {extras}
           </span>
         )}
+      </button>
+
+      <button type="button" onClick={() => setMode(next)} aria-label={themeAction} title={themeAction}
+        className={`${mode === "auto" ? CONTROL : CONTROL_ACTIVE} size-11 justify-center ${FOCUS}`}>
+        <ThemeIcon aria-hidden className="size-[18px]" />
       </button>
 
       <button type="button" onClick={onRecenter} aria-label="Back to the overview" title="Back to the overview" className={`${CONTROL} size-11 justify-center ${FOCUS}`}>
