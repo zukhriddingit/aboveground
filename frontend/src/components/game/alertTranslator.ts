@@ -1,6 +1,15 @@
 // Plain-English fallbacks for Fix the T. The backend's AI translator is the source of truth;
 // these keep the demo working instantly when it's down or slow.
-import type { Station, StationId, TranslatedAlert } from "@/types/tverse";
+import { MOCK_ALERTS } from "@/lib/mockData";
+import type { RepairKind, Station, StationId, TranslatedAlert } from "@/types/tverse";
+
+/**
+ * The 2026 disruption scenarios a simulated delay replays at Chinatown (Orange Line track problem, shuttle
+ * bridge) and Airport (Blue Line overhead wire inspection), word for word from MOCK_ALERTS.
+ */
+const SCENARIOS = new Map<StationId, TranslatedAlert>(
+  MOCK_ALERTS.filter((a) => a.stationId === "place-chncl" || a.stationId === "place-aport").map((a) => [a.stationId, a]),
+);
 
 type Category = "SIGNAL" | "TRACK" | "SWITCH" | "FROZEN" | "POWER" | "DISABLED_TRAIN" | "PLANNED_WORK" | "EMERGENCY" | "DELAY";
 
@@ -87,14 +96,18 @@ const FLAVOR: Partial<Record<StationId, Partial<Record<Category, { title: string
   },
 };
 
+// First match wins. A disabled train outranks the signal trouble it causes ("a signal problem and a disabled
+// train"), and a named track problem outranks the shuttle buses covering it ("shuttle buses ... due to a track
+// problem"), so neither reads as a signal fix or a planned upgrade.
 const RULES: Array<[Category, RegExp]> = [
   ["EMERGENCY", /medical|police|fire department|emergency|unattended|injur/],
+  ["DISABLED_TRAIN", /disabled|mechanical|stalled/],
+  ["TRACK", /track (problem|defect|issue)|broken rail|rail (defect|fastener)/],
   ["PLANNED_WORK", /upgrade|shuttle|construction|maintenance|accessib|renovat|not stopping|closed|track work|scheduled/],
   ["SIGNAL", /signal|track circuit|relay/],
   ["FROZEN", /frozen|freez|\bice\b|snow/],
   ["SWITCH", /switch/],
   ["POWER", /power|overhead wire|third rail|electrical/],
-  ["DISABLED_TRAIN", /disabled|mechanical|stalled/],
   ["TRACK", /track|rail|screech/],
 ];
 
@@ -114,6 +127,7 @@ export const DEMO_RAW_TEXT: Partial<Record<StationId, string>> = {
   "place-bucen": "Green Line B Branch: Delays of about 10 minutes due to a track problem near BU Central.",
   "place-harsq": "Red Line: Delays of about 15 minutes due to a signal problem at Harvard.",
   "place-knncl": "Red Line: Delays of about 10 minutes due to a power problem near Kendall/MIT.",
+  ...Object.fromEntries([...SCENARIOS].map(([id, a]) => [id, a.rawMbtaText])),
 };
 
 const SHORT: Partial<Record<StationId, string>> = {
@@ -126,6 +140,8 @@ export function shortName(station: Pick<Station, "id" | "name">) {
 }
 
 export function translateLocally(station: Pick<Station, "id" | "name">, rawMbtaText: string, id: string): TranslatedAlert {
+  const scenario = SCENARIOS.get(station.id);
+  if (scenario && scenario.rawMbtaText === rawMbtaText) return { ...scenario, id, stationId: station.id };
   const category = classify(rawMbtaText);
   const template = TEMPLATES[category];
   const flavor = FLAVOR[station.id]?.[category];
@@ -214,7 +230,24 @@ export function demoAlert(station: Pick<Station, "id" | "name" | "line">): Trans
 /** Every kind of fix, picked from what actually broke. */
 export type GameKind = "WIRE_MATCH" | "TRACK_WELD" | "SWITCH_THROW" | "BREAKER_SEQUENCE" | "RESCUE_COUPLE" | "ICE_THAW";
 
+/** What crews physically fix, when the alert says so (the 2026 disruption scenarios). */
+const REPAIR_GAME: Record<RepairKind, GameKind> = {
+  SIGNAL_RELAY: "WIRE_MATCH",
+  CATENARY: "BREAKER_SEQUENCE",
+  SWITCH_CLEARANCE: "SWITCH_THROW",
+  RAIL_FASTENER: "TRACK_WELD",
+};
+
+function repairGame(alert: Pick<TranslatedAlert, "repairKind" | "disruption">): GameKind | null {
+  if (!alert.repairKind || !(alert.repairKind in REPAIR_GAME)) return null;
+  // Clearing the switch around a disabled train (Harvard) starts with getting the train out of the way.
+  if (alert.repairKind === "SWITCH_CLEARANCE" && alert.disruption === "SIGNAL_DELAY_DISABLED_TRAIN") return "RESCUE_COUPLE";
+  return REPAIR_GAME[alert.repairKind];
+}
+
 export function gameFor(alert: TranslatedAlert): GameKind {
+  const repair = repairGame(alert);
+  if (repair) return repair;
   switch (classify(alert.rawMbtaText)) {
     case "SIGNAL":
       return "WIRE_MATCH";
@@ -236,5 +269,5 @@ export function gameFor(alert: TranslatedAlert): GameKind {
 
 /** Medical and police situations get an explanation but no mini-game. */
 export function canPlay(alert: TranslatedAlert) {
-  return classify(alert.rawMbtaText) !== "EMERGENCY";
+  return repairGame(alert) !== null || classify(alert.rawMbtaText) !== "EMERGENCY";
 }

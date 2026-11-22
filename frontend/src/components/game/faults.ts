@@ -7,8 +7,11 @@ import type { GameKind } from "./alertTranslator";
 
 export type FaultKind = "signal" | "track" | "switch" | "power" | "train" | "frozen";
 
-/** Stops at street level (BU Central sits in the median of Commonwealth Ave): no tunnel to open. */
-export const SURFACE_STATIONS = new Set<StationId>(["place-bucen"]);
+/**
+ * Stops at street level, with no tunnel to open: BU Central sits in the median of Commonwealth Ave, and
+ * the Blue Line runs above ground at Airport.
+ */
+export const SURFACE_STATIONS = new Set<StationId>(["place-bucen", "place-aport"]);
 
 export function faultForGame(game: GameKind): FaultKind {
   switch (game) {
@@ -57,7 +60,8 @@ export function faultSite(stationId: StationId, kind: FaultKind) {
 export function faultPlace(kind: FaultKind, stationId: StationId, station: string) {
   if (SURFACE_STATIONS.has(stationId)) {
     if (kind === "train") return `A disabled train is stopped at ${station}.`;
-    return `Crews are on the tracks in the median just past ${station}; trains are standing by.`;
+    const where = stationId === "place-bucen" ? "in the median" : "at street level";
+    return `Crews are on the tracks ${where} just past ${station}; trains are standing by.`;
   }
   switch (kind) {
     case "train":
