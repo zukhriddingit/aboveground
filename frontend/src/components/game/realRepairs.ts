@@ -9,6 +9,8 @@ export interface RealRepair {
   detail: string;
   /** Real MBTA cases, most typical first. */
   examples: string[];
+  /** Which example is planned, project-scale work, for the card after a planned closure (default the first). */
+  planned?: number;
   sources: Array<{ label: string; url: string }>;
 }
 
@@ -22,6 +24,7 @@ export const REAL_REPAIRS: Record<GameKind, RealRepair> = {
       "June 11, 2019: a derailment near JFK/UMass wrecked the signals there. Crews rebuilt signal bungalows and nearly 20 miles of signal cable, and regular Red Line service took 106 days to come back.",
       "November 2026: the central Green Line tunnel closed for nine days to lay 12.5 miles of new signal cable, replacing signals over 100 years old. Copley's new signals are due in early March 2027.",
     ],
+    planned: 2,
     sources: [
       { label: "WBUR, Oct 2025", url: "https://www.wbur.org/news/2025/10/03/mbta-signal-system-red-orange-line-updates-boston" },
       { label: "Boston Globe, Jun 2025", url: "https://www.bostonglobe.com/2025/06/05/metro/red-line-d-line-medford-somerville-signal-problems/" },
@@ -48,6 +51,7 @@ export const REAL_REPAIRS: Record<GameKind, RealRepair> = {
       "Jan. 26, 2023: a signal and switch failure at Copley Junction stranded three trains around 9 p.m.; the switch was repaired and service resumed at 12:30 a.m., about three and a half hours later.",
       "After the 2019 derailment, switch operations at Columbia Junction near JFK/UMass stayed limited until new signals were finished in April 2026, almost seven years later.",
     ],
+    planned: 1,
     sources: [
       { label: "Boston.com, Jan 2023", url: "https://www.boston.com/news/local-news/2023/01/27/green-line-shutdown-mbta-riders-sent-walking-through-tunnels/" },
       { label: "MBTA, Apr 2026", url: "https://www.mbta.com/news/2026-04-08/mbta-completes-major-signal-modernization-columbia-junction-weeks-ahead-schedule" },

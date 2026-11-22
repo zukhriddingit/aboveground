@@ -11,4 +11,6 @@ export interface MiniGameProps {
   /** Station id and line, for games whose job depends on the station (an elevator only below the street). */
   stationId?: string;
   line?: TLine;
+  /** Part of a planned closure: the line is shut and parked, so the job is an upgrade and its testing, not an emergency fix. */
+  planned?: boolean;
 }
