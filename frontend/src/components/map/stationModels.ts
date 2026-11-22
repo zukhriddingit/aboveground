@@ -2,7 +2,6 @@ import * as T from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import type { Station, StationId, TLinesGeoJson } from "@/types/tverse";
 import { toLocal } from "./geo";
-import { fetchModel, modelUrl, warmModelCache } from "./modelCache";
 
 type StationKind = "headhouse_historic" | "headhouse_modern" | "surface_platform";
 type ModelKind = StationId | StationKind | "alert_signal";
@@ -21,14 +20,13 @@ interface Template {
 const loader = new GLTFLoader();
 const templates = new Map<ModelKind, Promise<Template | null>>();
 
-/** Each asset can become available independently, including across map remounts. Cache Storage first. */
+/** Each asset can become available independently, including across map remounts. */
 export function loadStationModel(kind: ModelKind) {
   let pending = templates.get(kind);
   if (!pending) {
-    pending = fetchModel(modelUrl(kind))
-      .then(buffer => loader.parseAsync(buffer, "/models/stations/"))
-      .then(({ scene }) => ({ scene, bounds: new T.Box3().setFromObject(scene) }))
-      .catch(() => null);
+    pending = loader.loadAsync(`/models/stations/${encodeURIComponent(kind)}.glb`).then(({ scene }) => ({
+      scene, bounds: new T.Box3().setFromObject(scene),
+    })).catch(() => null);
     templates.set(kind, pending);
   }
   return pending;
@@ -39,32 +37,24 @@ export const BESPOKE_STATIONS: ReadonlySet<StationId> = new Set<StationId>([
   "place-bucen", "place-kencl", "place-hymnl", "place-coecl", "place-boyls", "place-pktrm", "place-harsq", "place-knncl",
 ]);
 
-// Once the page has settled, fill the model cache in the background (underground / flaky Wi-Fi resilience).
-if (typeof window !== "undefined") {
-  warmModelCache(["alert_signal", ...BESPOKE_STATIONS, "headhouse_modern", "headhouse_historic", "surface_platform"]);
-}
-
 /**
  * A station's model (200-600 KB each) waits until the camera comes close to it; TVerseMap opens the
  * gate. At the overview the procedural beacons stand in, so the first load skips ~3.6 MB of GLBs.
  */
-const gates = new Map<StationId, { opened: boolean; open: () => void; ready: Promise<void> }>();
-export const stationModelAllowed = (id: StationId) => gates.get(id)?.opened === true;
+const gates = new Map<StationId, { open: () => void; ready: Promise<void> }>();
 function gate(id: StationId) {
   let g = gates.get(id);
   if (!g) {
     let open = () => {};
     const ready = new Promise<void>((resolve) => (open = resolve));
-    g = { opened: false, open, ready };
+    g = { open, ready };
     gates.set(id, g);
   }
   return g;
 }
 
 export function allowStationModel(id: StationId) {
-  const modelGate = gate(id);
-  modelGate.opened = true;
-  modelGate.open();
+  gate(id).open();
 }
 
 export async function loadStationSite(id: StationId) {
@@ -112,7 +102,7 @@ export class StationModel {
   alertSocket?: T.Object3D;
   sparkSocket?: T.Object3D;
 
-  constructor(template: Template, anisotropy = 1) {
+  constructor(template: Template) {
     this.root = template.scene.clone(true);
     this.bounds = template.bounds;
     this.height = this.bounds.max.y;
@@ -139,18 +129,6 @@ export class StationModel {
       if (node.userData.alertSocket) this.alertSocket = node;
       if (node instanceof T.Mesh && node.material instanceof T.MeshStandardMaterial) {
         const mat = node.material;
-        for (const slot of ["map", "emissiveMap", "normalMap", "roughnessMap", "metalnessMap"] as const) {
-          const texture = mat[slot];
-          if (!texture) continue;
-          const space = slot === "map" || slot === "emissiveMap" ? T.SRGBColorSpace : T.NoColorSpace;
-          if (texture.anisotropy === anisotropy && texture.colorSpace === space &&
-              texture.generateMipmaps && texture.minFilter === T.LinearMipmapLinearFilter) continue;
-          texture.colorSpace = space;
-          texture.anisotropy = anisotropy;
-          texture.generateMipmaps = true;
-          texture.minFilter = T.LinearMipmapLinearFilter;
-          texture.needsUpdate = true;
-        }
         if (mat.name === "LineAccent" || mat.name === "Sign" || mat.name === "Beacon") {
           const owned = this.materials.get(mat.name) ?? mat.clone();
           this.materials.set(mat.name, owned);
@@ -196,13 +174,13 @@ export class StationModel {
     if (accent) {
       accent.color.copy(line).lerp(warning, level);
       accent.emissive.copy(accent.color);
-      accent.emissiveIntensity = .72 + level * (1.95 * pulse - .30);
+      accent.emissiveIntensity = 1 + level * (2.7 * pulse - .6);
     }
     const sign = this.materials.get("Sign");
     if (sign) {
       sign.color.copy(paper).lerp(warning, level);
       sign.emissive.copy(sign.color);
-      sign.emissiveIntensity = .83 + level * (2.15 * pulse - .42);
+      sign.emissiveIntensity = 1.2 + level * (2.9 * pulse - .7);
       const halo = this.halos.get("Sign");
       if (halo) {
         halo.color.copy(sign.color);
