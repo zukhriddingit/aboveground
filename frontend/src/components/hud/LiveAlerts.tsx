@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Bell, BellOff, ChevronDown, Clock3, ExternalLink, Info, Loader2, MapPin, TriangleAlert, Wrench, X } from "lucide-react";
-import { causeLabel, effectLabel, whenLabel, type LiveAlert } from "@/components/game";
+import { causeLabel, describeEvent, effectLabel, whenLabel, type LiveAlert, type LiveEvent } from "@/components/game";
 import { LINE_COLORS, routeLine } from "@/lib/theme";
 
 const DELAY_EFFECTS = new Set(["DELAY", "SERVICE_CHANGE", "DETOUR", "TRACK_CHANGE", "MODIFIED_SERVICE", "CANCELLATION", "SCHEDULE_CHANGE"]);
@@ -14,6 +14,19 @@ function groupOf(alert: LiveAlert) {
   return 2;
 }
 const GROUPS = ["Closures and suspensions", "Delays and service changes", "Station notices"];
+const TONES = {
+  danger: "bg-red-600 text-white",
+  warn: "bg-amber-400/15 text-amber-200",
+  good: "bg-emerald-400/15 text-emerald-200",
+  info: "bg-cyan-400/15 text-cyan-200",
+} as const;
+
+function ago(at: number, now: number) {
+  const min = Math.floor((now - at) / 60_000);
+  if (min < 1) return "just now";
+  if (min < 60) return `${min} min ago`;
+  return new Date(at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+}
 
 function RoutePills({ routes }: { routes: string[] }) {
   const pills = [...new Set(routes)].map((r) => ({
@@ -79,12 +92,23 @@ export interface LiveAlertsPanelProps {
   exploreLabel: (alert: LiveAlert) => string | null;
   onExplore: (alert: LiveAlert) => void;
   notify: { supported: boolean; on: boolean; toggle: () => void };
+  /** What just happened on the T, newest first. */
+  events: LiveEvent[];
+  /** Fly to where an event happened. */
+  onShowEvent: (event: LiveEvent) => void;
 }
 
 /** Right-hand sheet with every alert in effect on the subway, straight from the MBTA. */
 export function LiveAlertsPanel(props: LiveAlertsPanelProps) {
-  const { open, onClose, alerts, status, updatedAt, focusId, notify } = props;
+  const { open, onClose, alerts, status, updatedAt, focusId, notify, events, onShowEvent } = props;
   const panel = useRef<HTMLDivElement>(null);
+  const [now, setNow] = useState(Date.now);
+
+  useEffect(() => {
+    if (!open) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 15_000);
+    return () => window.clearInterval(timer);
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -116,7 +140,7 @@ export function LiveAlertsPanel(props: LiveAlertsPanelProps) {
           <p className="text-sm font-semibold">Live MBTA alerts</p>
           <p className="text-[11px] text-slate-400">
             {status === "offline"
-              ? "Can't reach the MBTA API right now. Retrying every minute."
+              ? "Can't reach the MBTA API right now. Retrying every 20 seconds."
               : updatedAt
                 ? `From api-v3.mbta.com · updated ${new Date(updatedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`
                 : "Loading from api-v3.mbta.com…"}
@@ -141,6 +165,39 @@ export function LiveAlertsPanel(props: LiveAlertsPanelProps) {
       </div>
 
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-3">
+        <section className="space-y-1.5" aria-live="polite">
+          <h3 className="flex items-center gap-1.5 text-[11px] font-semibold tracking-widest text-slate-500 uppercase">
+            <span className="size-1.5 animate-pulse rounded-full bg-emerald-400" />
+            Latest, as it happens
+          </h3>
+          {events.length === 0 ? (
+            <p className="rounded-xl bg-white/5 p-2.5 text-[12px] leading-relaxed text-slate-400">
+              Watching the MBTA feed. New alerts, updates, all-clears and trains standing still between stations show up here the moment they come in.
+            </p>
+          ) : (
+            events.slice(0, 8).map((event) => {
+              const d = describeEvent(event);
+              const routes = event.alert?.routes ?? (event.train ? [event.train.route] : []);
+              return (
+                <button
+                  key={event.id}
+                  type="button"
+                  onClick={() => onShowEvent(event)}
+                  className="flex w-full items-start gap-2 rounded-xl border border-white/10 bg-white/[0.04] p-2.5 text-left text-[12px] hover:bg-white/[0.08] focus-visible:outline-2 focus-visible:outline-cyan-300"
+                >
+                  <span className={`mt-0.5 shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${TONES[d.tone]}`}>{d.badge}</span>
+                  <span className="min-w-0 flex-1">
+                    <span className="line-clamp-2 leading-snug text-slate-100">{d.text}</span>
+                    <span className="mt-1 flex items-center gap-2 text-[10px] text-slate-500">
+                      <RoutePills routes={routes} />
+                      {ago(event.at, now)}
+                    </span>
+                  </span>
+                </button>
+              );
+            })
+          )}
+        </section>
         {status === "loading" && alerts.length === 0 && (
           <div className="space-y-2" aria-hidden>
             {[0, 1, 2].map((i) => (

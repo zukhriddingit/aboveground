@@ -7,7 +7,7 @@ import type { Station, StationId } from "@/types/tverse";
 const pill =
   "flex h-11 items-center gap-2 rounded-xl px-3 text-sm font-semibold transition focus-visible:outline-2 focus-visible:outline-cyan-300 disabled:cursor-not-allowed disabled:opacity-50";
 
-/** Bottom floating bar: Post Story, Tourist Mode, Demo Ride, Simulate T Delay, overview. */
+/** Bottom floating bar: Post Story, Tourist Mode, Demo Ride, Simulate T Delay (demo), 2D/3D, overview. */
 export function DemoBar({
   stations,
   riding,
@@ -21,6 +21,8 @@ export function DemoBar({
   simulating,
   delayDisabledReason,
   onOverview,
+  view,
+  onToggleView,
   extra,
 }: {
   /** Extra pills right after "Post Story", e.g. the T-Feed button. */
@@ -37,6 +39,9 @@ export function DemoBar({
   simulating: boolean;
   delayDisabledReason: string | null;
   onOverview: () => void;
+  /** Flat 2D map or the tilted 3D city. */
+  view: "2d" | "3d";
+  onToggleView: () => void;
 }) {
   return (
     <div className="flex max-w-[calc(100vw-1rem)] items-center gap-1 overflow-x-auto rounded-2xl border border-white/10 bg-slate-950/75 p-1.5 shadow-lg backdrop-blur-md">
@@ -95,6 +100,17 @@ export function DemoBar({
         </select>
       </div>
 
+      <button
+        type="button"
+        onClick={onToggleView}
+        aria-label={view === "3d" ? "Switch to the flat 2D map" : "Switch to the 3D map"}
+        title={view === "3d" ? "Flat 2D map (lighter)" : "3D map"}
+        className={`${pill} min-w-11 justify-center bg-white/5 px-2 font-mono text-[13px] text-slate-100 hover:bg-white/10`}
+      >
+        <span className={view === "2d" ? "text-cyan-300" : "text-slate-500"}>2D</span>
+        <span className="text-slate-600">/</span>
+        <span className={view === "3d" ? "text-cyan-300" : "text-slate-500"}>3D</span>
+      </button>
       <button
         type="button"
         onClick={onOverview}

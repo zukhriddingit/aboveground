@@ -18,11 +18,14 @@ import {
   FixTheTMap,
   IncidentSim,
   IncidentTag,
+  LiveMarkers,
+  describeEvent,
   effectLabel,
   faultForGame,
   faultPlace,
   featuredStationFor,
   gameFor,
+  isServiceAlert,
   scenarioFor,
   shortName,
   translateForGame,
@@ -32,6 +35,7 @@ import {
   useWorldFeed,
   type GameKind,
   type LiveAlert,
+  type LiveEvent,
   type TunnelView,
 } from "@/components/game";
 import {
@@ -52,6 +56,7 @@ import {
 import { CommunityDrawer, FeedStopPins, TFeedButton, flyToFeedStop, useCommunityFeed } from "@/components/community";
 import { useStationSignals } from "@/components/quickcheck";
 import { useBranchGaps, withTransitData } from "@/components/transit";
+import { BOSTON_CENTER } from "@/lib/theme";
 import type { FixTheTScene } from "@/components/game/FixTheTScene";
 import type { AvatarHat, Station, StationId, StationStory, TranslatedAlert } from "@/types/tverse";
 
@@ -62,6 +67,9 @@ const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve,
 const flagKey = (id: StationId) => `flag:${id}`;
 const liveKey = (alert: LiveAlert) => `live-${alert.id}`;
 const NOTIFY_KEY = "tverse-notify-closures";
+const VIEW_KEY = "tverse-map-view";
+const FLAT_FOOTPRINTS = 0.85;
+const FOOTPRINT_OPACITY = ["interpolate", ["linear"], ["zoom"], 12, 0.5, 14.5, 0.85, 15.2, 0] as unknown as number;
 
 interface Staged {
   live: LiveAlert;
@@ -101,7 +109,7 @@ export default function Home() {
   const staged = useMemo(() => {
     const out = new Map<string, Staged>();
     for (const a of live.alerts) {
-      const scenario = scenarioFor(a.cause);
+      const scenario = isServiceAlert(a) ? scenarioFor(a.cause) : null;
       if (!scenario) continue;
       const station = featuredStationFor(a, world.stations, live.index, false);
       if (!station) continue;
@@ -110,6 +118,17 @@ export default function Home() {
     }
     return out;
   }, [live.alerts, live.index, world.stations]);
+
+  /** Real disruptions the MBTA reports at a featured station with no repair to explore: shown as LIVE tags. */
+  const liveOnly = useMemo(() => {
+    const out = new Map<StationId, LiveAlert>();
+    for (const a of live.alerts) {
+      if (!isServiceAlert(a) || a.closure || staged.has(liveKey(a))) continue;
+      const station = featuredStationFor(a, world.stations, live.index, false);
+      if (station && !out.has(station.id)) out.set(station.id, a);
+    }
+    return out;
+  }, [live.alerts, live.index, staged, world.stations]);
 
   /** Alerts raised here with "Simulate T Delay" (their trains are held by the engine). */
   const [simAlerts, setSimAlerts] = useState<TranslatedAlert[]>([]);
@@ -137,7 +156,7 @@ export default function Home() {
   }, [world.alerts, simAlerts, cleared, staged]);
 
   const stations = useMemo(() => {
-    const flagged = new Set(alerts.map((a) => a.stationId));
+    const flagged = new Set([...alerts.map((a) => a.stationId), ...liveOnly.keys()]);
     for (const s of world.stations) {
       const hasAlertObject = world.alerts.some((a) => a.stationId === s.id);
       if (s.hasActiveAlert && !hasAlertObject && !cleared.has(flagKey(s.id))) flagged.add(s.id);
@@ -149,7 +168,7 @@ export default function Home() {
     }));
     // Branch gaps, next usable train, planned closures (shuttle pin) and the stale-ETA flag.
     return withTransitData(base, gaps, signals.byStation);
-  }, [world.stations, world.alerts, alerts, cleared, live.nextMinutes, gaps, signals.byStation]);
+  }, [world.stations, world.alerts, alerts, liveOnly, cleared, live.nextMinutes, gaps, signals.byStation]);
   const openStopFeed = useCallback((id: StationId) => {
     setFeedStation(id);
     setFeedOpen(true);
@@ -202,6 +221,54 @@ export default function Home() {
     },
     [live.index],
   );
+
+  const showEvent = useCallback(
+    (event: LiveEvent) => {
+      if (event.alert) return showOnMap(event.alert);
+      if (!event.train) return;
+      map.current?.flyTo(event.train.lng, event.train.lat, { zoom: 15.8, pitch: 55, duration: 1600 });
+      if (window.innerWidth < 640) setAlertsOpen(false);
+    },
+    [showOnMap],
+  );
+
+  /** 2D: a flat, north-up map without 3D buildings (lighter); 3D: the tilted city. */
+  const [view, setView] = useState<"3d" | "2d">("3d");
+  const applyView = useCallback((mode: "3d" | "2d") => {
+    const m = map.current?.getMap();
+    if (!m) return;
+    const flat = mode === "2d";
+    for (const id of ["buildings", "buildings-skyline"]) if (m.getLayer(id)) m.setLayoutProperty(id, "visibility", flat ? "none" : "visible");
+    if (m.getLayer("building-footprints")) {
+      m.setLayerZoomRange("building-footprints", 12, flat ? 24 : 15.2);
+      m.setPaintProperty("building-footprints", "fill-opacity", flat ? FLAT_FOOTPRINTS : FOOTPRINT_OPACITY);
+    }
+    if (flat) {
+      m.dragRotate.disable();
+      m.touchZoomRotate.disableRotation();
+      m.touchPitch.disable();
+      m.keyboard.disableRotation();
+      m.easeTo({ pitch: 0, bearing: 0, duration: 700 });
+      m.once("moveend", () => m.setMaxPitch(0));
+    } else {
+      m.setMaxPitch(80);
+      m.dragRotate.enable();
+      m.touchZoomRotate.enableRotation();
+      m.touchPitch.enable();
+      m.keyboard.enableRotation();
+      m.easeTo({ pitch: 60, bearing: -15, duration: 700 });
+    }
+  }, []);
+  const toggleView = useCallback(() => {
+    const next = view === "3d" ? "2d" : "3d";
+    setView(next);
+    applyView(next);
+    try {
+      window.localStorage.setItem(VIEW_KEY, next);
+    } catch {
+      // private windows may block storage; the choice just won't stick
+    }
+  }, [applyView, view]);
 
   useEffect(
     () => () => {
@@ -286,13 +353,17 @@ export default function Home() {
   }, [exitTunnel, explore, fixAlert, repairing, sim]);
 
   const onReady = useCallback(() => {
+    if (window.localStorage.getItem(VIEW_KEY) === "2d") {
+      setView("2d");
+      applyView("2d");
+    }
     void import("@/components/game/FixTheTScene").then(({ FixTheTScene }) => {
       const m = map.current?.getMap();
       if (m && !scene.current) {
         scene.current = new FixTheTScene(m, sim, (id) => stationsRef.current.find((s) => s.id === id) ?? null);
       }
     });
-  }, [sim]);
+  }, [applyView, sim]);
 
   const simulateDelay = useCallback(async () => {
     const station = stationById(delayStation);
@@ -399,36 +470,52 @@ export default function Home() {
     setNotifyOn(true);
   }, [notifyOn, push]);
 
-  /** Toast (and optionally a browser notification) for each newly reported closure; one summary on load. */
-  const seenAlerts = useRef<Set<string> | null>(null);
+  /** One summary toast on load; then a toast (and, for closures, a browser notification) per live event. */
+  const summarized = useRef(false);
+  const names = useCallback(
+    (a: LiveAlert) => a.stations.map((id) => live.index?.stations.get(id)?.name).filter(Boolean).slice(0, 3).join(", "),
+    [live.index],
+  );
   useEffect(() => {
-    if (live.status !== "live" || !live.index) return;
-    const names = (a: LiveAlert) => a.stations.map((id) => live.index?.stations.get(id)?.name).filter(Boolean).slice(0, 3).join(", ");
-    if (seenAlerts.current === null) {
-      seenAlerts.current = new Set(live.alerts.map((a) => a.id));
-      const closed = live.alerts.filter((a) => a.closure);
-      if (closed.length) {
-        push(`${closed.length} ${closed.length === 1 ? "closure" : "closures"} on the T right now`, {
-          tone: "danger",
-          description: `${closed.map(names).join(" · ")}. Tap Alerts for rider instructions.`,
-          durationMs: 6500,
-        });
-      }
-      const first = [...staged.values()][0];
-      if (first) push(first.live.shortHeader, { description: `Tap it on the map to explore a simulated ${first.label}.`, durationMs: 6500 });
-      return;
+    if (summarized.current || live.status !== "live" || !live.index) return;
+    summarized.current = true;
+    const closed = live.alerts.filter((a) => a.closure);
+    if (closed.length) {
+      push(`${closed.length} ${closed.length === 1 ? "closure" : "closures"} on the T right now`, {
+        tone: "danger",
+        description: `${closed.map(names).join(" · ")}. Tap Alerts for rider instructions.`,
+        durationMs: 6500,
+      });
     }
-    for (const a of live.alerts) {
-      if (seenAlerts.current.has(a.id)) continue;
-      seenAlerts.current.add(a.id);
-      if (a.closure) {
-        push(`${effectLabel(a)}: ${names(a)}`, { tone: "danger", description: a.shortHeader, durationMs: 6500 });
-        if (notifyOn && document.visibilityState !== "visible") new Notification(`MBTA · ${effectLabel(a)}`, { body: a.header, tag: a.id });
-      } else if (staged.has(liveKey(a))) {
-        push(a.shortHeader, { description: `Tap it on the map to explore a simulated ${staged.get(liveKey(a))!.label}.` });
+    const first = [...staged.values()][0];
+    if (first) push(first.live.shortHeader, { description: `Tap it on the map to explore a simulated ${first.label}.`, durationMs: 6500 });
+  }, [live.alerts, live.index, live.status, names, push, staged]);
+
+  const seenEvents = useRef(new Set<string>());
+  useEffect(() => {
+    for (const e of [...live.events].reverse()) {
+      if (seenEvents.current.has(e.id)) continue;
+      seenEvents.current.add(e.id);
+      const a = e.alert;
+      if (e.kind === "stopped") {
+        push("Train standing still", { description: describeEvent(e).text, durationMs: 6000 });
+        continue;
       }
+      if (!a || !isServiceAlert(a) || e.kind === "updated" || e.kind === "moving") continue;
+      const where = names(a);
+      if (e.kind === "cleared") {
+        push(`Cleared: ${effectLabel(a)}${where ? ` at ${where}` : ""}`, { tone: "success", description: a.shortHeader, durationMs: 6000 });
+        continue;
+      }
+      const scenario = staged.get(liveKey(a));
+      push(`${effectLabel(a)}${where ? `: ${where}` : ""}`, {
+        tone: a.closure ? "danger" : "info",
+        description: scenario ? `${a.shortHeader} Tap it on the map to explore a simulated ${scenario.label}.` : a.shortHeader,
+        durationMs: 6500,
+      });
+      if (a.closure && notifyOn && document.visibilityState !== "visible") new Notification(`MBTA · ${effectLabel(a)}`, { body: a.header, tag: a.id });
     }
-  }, [live.alerts, live.index, live.status, notifyOn, push, staged]);
+  }, [live.events, names, notifyOn, push, staged]);
 
   const activeSim = simAlerts.find((a) => sim.incidents.has(a.id)) ?? null;
   useTicker(500, !!activeSim || !!fixAlert);
@@ -463,6 +550,8 @@ export default function Home() {
         }}
         onDemoRideEnd={() => setRiding(false)}
         onAlertClick={(station) => {
+          const real = liveOnly.get(station.id);
+          if (real && !alerts.some((a) => a.stationId === station.id)) return showAlertDetails(real);
           const alert = alertFor(station);
           if (alert) openAnyAlert(alert);
         }}
@@ -501,6 +590,20 @@ export default function Home() {
           );
         })}
         <ClosureMarkers closures={live.closures} getZoom={() => map.current?.getMap()?.getZoom() ?? 14} onOpen={showAlertDetails} />
+        <LiveMarkers
+          alerts={[...liveOnly].flatMap(([id, alert]) => {
+            const station = stationById(id);
+            return station ? [{ station, alert }] : [];
+          })}
+          stopped={live.stopped}
+          getZoom={() => map.current?.getMap()?.getZoom() ?? 14}
+          onOpenAlert={showAlertDetails}
+          onOpenTrain={(train) => {
+            setAlertFocus(null);
+            setAlertsOpen(true);
+            map.current?.flyTo(train.lng, train.lat, { zoom: 15.8, pitch: 55, duration: 1600 });
+          }}
+        />
       </FixTheTMap>
 
       <div
@@ -577,6 +680,8 @@ export default function Home() {
           exploreLabel={(a) => (scenarioFor(a.cause) && featuredStationFor(a, stations, live.index) ? scenarioFor(a.cause)!.label : null)}
           onExplore={exploreLive}
           notify={{ supported: notifySupported, on: notifyOn, toggle: () => void toggleNotify() }}
+          events={live.events}
+          onShowEvent={showEvent}
         />
       </div>
 
@@ -635,7 +740,9 @@ export default function Home() {
             onSimulateDelay={() => void simulateDelay()}
             simulating={simulating}
             delayDisabledReason={repairing ? "A repair is in progress" : null}
-            onOverview={() => map.current?.resetView()}
+            onOverview={() => (view === "2d" ? map.current?.getMap()?.easeTo({ center: BOSTON_CENTER, zoom: 13.4, bearing: 0, duration: 1200 }) : map.current?.resetView())}
+            view={view}
+            onToggleView={toggleView}
             extra={
               <TFeedButton
                 className="shrink-0"
