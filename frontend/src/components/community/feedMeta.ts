@@ -28,7 +28,7 @@ export const REACTIONS: { key: ReactionKey; emoji: string; label: string }[] = [
 
 export const BADGES: Record<RiderBadge, { emoji: string; color: string }> = {
   BU: { emoji: "🐾", color: "#ff6b6b" },
-  MIT: { emoji: "🦫", color: "#c4b5fd" },
+  MIT: { emoji: "🪫", color: "#c4b5fd" },
   NEU: { emoji: "🐺", color: "#fda4af" },
   Local: { emoji: "🦞", color: "#4ade80" },
   Tourist: { emoji: "📸", color: "#fbbf24" },
@@ -56,6 +56,11 @@ export function randomHandle() {
 
 export function cleanHandle(value: string) {
   return value.replace(/^@+/, "").replace(/\s+/g, "").slice(0, 24);
+}
+
+/** "@Adam" for one-word handles; names with spaces ("Anonymous Rider") are shown as they are. */
+export function authorLabel(author: string) {
+  return /\s/.test(author) ? author : `@${author}`;
 }
 
 export function relativeTime(iso: string, now: number) {

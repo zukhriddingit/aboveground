@@ -1,7 +1,8 @@
 // Tiny localStorage-backed stores (handle + badge, my reactions/likes, last seen time).
 // Every access is wrapped in try/catch: private mode or blocked storage just keeps it in memory.
 // useSyncExternalStore gives a fixed server snapshot, so SSR and hydration always agree.
-import { useSyncExternalStore } from "react";
+import { useMemo, useSyncExternalStore } from "react";
+import { ANONYMOUS_COLOR, publicName, useRiderPerks, useRiderProfile } from "@/lib/riderProfile";
 import type { ReactionKey, RiderBadge } from "@/types/tverse";
 import { AVATAR_COLORS, BADGE_KEYS, cleanHandle, randomHandle } from "./feedMeta";
 
@@ -67,16 +68,31 @@ function createLocalStore<T>(key: string, serverValue: T, init: () => T, valid: 
 const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
 
 // ---- Rider identity ----
+// The name comes from the shared rider profile (`@/lib/riderProfile`, edited in the HUD's Rider
+// Profile too); this store keeps T-Feed's own bits: the chosen rider badge and avatar colour.
 
-export interface RiderIdentity {
+interface StoredIdentity {
+  /** Legacy T-Feed handle, no longer shown (the profile's display name is). */
   handle: string;
   badge: RiderBadge;
   avatarColor: string;
 }
 
-const SERVER_IDENTITY: RiderIdentity = { handle: "TRider", badge: "Local", avatarColor: "#38d283" };
+export interface RiderIdentity {
+  /** Name on posts and replies: the display name, or "Anonymous Rider". */
+  handle: string;
+  /** Badge on posts and replies; none when anonymous or before the rank that unlocks it. */
+  badge?: RiderBadge;
+  avatarColor: string;
+  anonymous: boolean;
+  /** The badge the rider picked, shown once it's unlocked. */
+  chosenBadge: RiderBadge;
+  badgeUnlocked: boolean;
+}
 
-function freshIdentity(): RiderIdentity {
+const SERVER_IDENTITY: StoredIdentity = { handle: "TRider", badge: "Local", avatarColor: "#38d283" };
+
+function freshIdentity(): StoredIdentity {
   let handle = "";
   try {
     // Reuse the Stories handle if this browser already posted a Story.
@@ -90,15 +106,30 @@ function freshIdentity(): RiderIdentity {
   };
 }
 
-export const identityStore = createLocalStore<RiderIdentity>(
+export const identityStore = createLocalStore<StoredIdentity>(
   "tverse.feed.identity",
   SERVER_IDENTITY,
   freshIdentity,
-  (v): v is RiderIdentity =>
+  (v): v is StoredIdentity =>
     isObj(v) && typeof v.handle === "string" && !!v.handle && BADGE_KEYS.includes(v.badge as RiderBadge) && typeof v.avatarColor === "string",
 );
 
-export const useRiderIdentity = () => useLocalStore(identityStore);
+export function useRiderIdentity(): RiderIdentity {
+  const stored = useLocalStore(identityStore);
+  const profile = useRiderProfile();
+  const perks = useRiderPerks();
+  return useMemo(
+    () => ({
+      handle: publicName(profile),
+      badge: profile.anonymous || !perks.feedBadge ? undefined : stored.badge,
+      avatarColor: profile.anonymous ? ANONYMOUS_COLOR : stored.avatarColor,
+      anonymous: profile.anonymous,
+      chosenBadge: stored.badge,
+      badgeUnlocked: perks.feedBadge,
+    }),
+    [stored, profile, perks],
+  );
+}
 
 // ---- What this browser reacted to / liked (the backend has no accounts) ----
 

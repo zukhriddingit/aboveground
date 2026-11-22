@@ -2,12 +2,12 @@
 
 import { useMemo, useRef, useState } from "react";
 import type { CommunityPost, NewCommunityReply, TransitLine } from "@/types/tverse";
-import { colorFor, lineGlow, randomHandle, relativeTime } from "./feedMeta";
+import { authorLabel, colorFor, lineGlow, randomHandle, relativeTime } from "./feedMeta";
 import { showFeedToast } from "./FeedToaster";
 import { useRiderIdentity } from "./localStore";
 import { Avatar, BadgeTag, IdentityChip } from "./RiderBits";
 
-/** CharliePoints for a reply. */
+/** XP for a reply. */
 export const REPLY_POINTS = 5;
 
 export interface ReplyThreadProps {
@@ -44,7 +44,7 @@ export function ReplyThread({ post, now, onReply, onLikeReply, onPointsAwarded }
     setText("");
     setReplyTo(null);
     onPointsAwarded?.(REPLY_POINTS, post.line);
-    showFeedToast({ text: `+${REPLY_POINTS} CharliePoints · Replied on ${post.line} Line`, emoji: "💬", color: glow });
+    showFeedToast({ text: `+${REPLY_POINTS} XP · Replied on ${post.line} Line`, emoji: "💬", color: glow });
   };
 
   return (
@@ -58,14 +58,14 @@ export function ReplyThread({ post, now, onReply, onLikeReply, onPointsAwarded }
               <Avatar handle={r.author} color={colorFor(r.author)} size={26} />
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1.5 text-xs">
-                  <span className="truncate font-semibold text-white">@{r.author}</span>
+                  <span className="truncate font-semibold text-white">{authorLabel(r.author)}</span>
                   <BadgeTag badge={r.authorBadge} />
                   <span className="shrink-0 text-white/35">{relativeTime(r.createdAt, now)}</span>
                 </div>
                 <p className="mt-0.5 break-words text-[13px] leading-snug text-white/85">
                   {r.replyToAuthor && (
                     <span className="mr-1 font-semibold" style={{ color: glow }}>
-                      @{r.replyToAuthor}
+                      {authorLabel(r.replyToAuthor)}
                     </span>
                   )}
                   {r.text}
@@ -102,15 +102,15 @@ export function ReplyThread({ post, now, onReply, onLikeReply, onPointsAwarded }
         </ul>
       )}
 
-      <div className="sticky bottom-0 z-10 space-y-2 border-t border-white/[.07] bg-slate-950/95 px-3 pb-3 pt-2.5 backdrop-blur-xl">
+      <div className="sticky bottom-0 z-10 space-y-2 border-t border-white/12 bg-zinc-950/95 px-3 pb-3 pt-2.5 backdrop-blur-xl">
         <div className="flex flex-wrap items-center gap-2">
-          <IdentityChip label="as" accent={glow} />
+          <IdentityChip label="as" />
           {replyTo && (
             <span
               className="flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold"
               style={{ color: glow, background: `${glow}1f`, boxShadow: `inset 0 0 0 1px ${glow}55` }}
             >
-              Replying to @{replyTo}
+              Replying to {authorLabel(replyTo)}
               <button type="button" onClick={() => setReplyTo(null)} aria-label="Cancel reply" className="ml-0.5 text-white/60 hover:text-white">
                 ✕
               </button>
@@ -128,7 +128,7 @@ export function ReplyThread({ post, now, onReply, onLikeReply, onPointsAwarded }
             ref={inputRef}
             value={text}
             onChange={(e) => setText(e.target.value.slice(0, 300))}
-            placeholder={replyTo ? `Reply to @${replyTo}…` : "Add a reply…"}
+            placeholder={replyTo ? `Reply to ${authorLabel(replyTo)}…` : "Add a reply…"}
             enterKeyHint="send"
             aria-label="Reply"
             className="min-w-0 flex-1 rounded-full bg-white/[.07] px-4 py-2.5 text-sm text-white placeholder-white/35 outline-none ring-1 ring-white/10 focus:ring-white/35"
@@ -137,7 +137,7 @@ export function ReplyThread({ post, now, onReply, onLikeReply, onPointsAwarded }
             type="submit"
             disabled={!text.trim()}
             className="rounded-full px-4 py-2.5 text-sm font-bold text-black transition active:scale-95 disabled:opacity-35"
-            style={{ background: glow, boxShadow: text.trim() ? `0 0 18px ${glow}77` : undefined }}
+            style={{ background: glow }}
           >
             Send
           </button>
