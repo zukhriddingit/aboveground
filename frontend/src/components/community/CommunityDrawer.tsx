@@ -1,5 +1,6 @@
 "use client";
 
+import { ChevronRight, Clock, Flame, MapPin, Plus, TrainFront, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { StationId, TransitLine } from "@/types/tverse";
 import { CreatePostModal } from "./CreatePostModal";
@@ -25,7 +26,7 @@ export interface CommunityDrawerProps {
    */
   stationId?: StationId | null;
   onStationChange?: (stationId: StationId | null) => void;
-  /** A post's 📍 station tag was tapped: fly the 3D camera there (see flyToFeedStop). */
+  /** A post's station tag was tapped: fly the 3D camera there (see flyToFeedStop). */
   onJumpToStation?: (stationId: StationId) => void;
   /** XP: +25 XP for a post, +5 XP for a reply, +10 XP per Quick-Check tap. */
   onPointsAwarded?: (points: number, line: TransitLine) => void;
@@ -138,17 +139,18 @@ function Drawer({
             <button
               type="button"
               onClick={() => setComposing(true)}
-              className={`ml-auto rounded-lg bg-white px-3.5 py-2 text-xs font-bold text-zinc-950 transition hover:bg-zinc-200 active:scale-95 ${FOCUS}`}
+              className={`ml-auto inline-flex h-9 items-center gap-1.5 rounded-lg bg-white px-3 text-[13px] font-semibold text-zinc-950 transition-colors hover:bg-zinc-200 active:scale-95 ${FOCUS}`}
             >
-              + New Post
+              <Plus className="size-4" strokeWidth={2.25} aria-hidden />
+              New post
             </button>
             <button
               type="button"
               onClick={onClose}
               aria-label="Close T-Feed"
-              className={`flex h-9 w-9 items-center justify-center rounded-lg border border-white/12 text-white/80 transition hover:bg-white/10 ${FOCUS}`}
+              className={`flex h-9 w-9 items-center justify-center rounded-lg border border-white/12 text-zinc-300 transition-colors hover:bg-white/10 hover:text-white ${FOCUS}`}
             >
-              ✕
+              <X className="size-4" aria-hidden />
             </button>
           </div>
 
@@ -193,9 +195,10 @@ function Drawer({
                     setSort(s);
                     toTop();
                   }}
-                  className={`rounded-full px-3 py-1 text-[11px] font-bold transition ${sort === s ? "bg-white text-black" : "text-white/60 hover:text-white"}`}
+                  className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-[11px] font-semibold transition-colors ${FOCUS} ${sort === s ? "bg-white text-zinc-950" : "text-zinc-400 hover:text-white"}`}
                 >
-                  {s === "latest" ? "🕒 Latest" : "🔥 Trending"}
+                  {s === "latest" ? <Clock className="size-3" aria-hidden /> : <Flame className="size-3" aria-hidden />}
+                  {s === "latest" ? "Latest" : "Trending"}
                 </button>
               ))}
             </div>
@@ -204,7 +207,8 @@ function Drawer({
                 className="flex min-w-0 items-center gap-1 rounded-full py-1 pl-2.5 pr-1 text-[11px] font-semibold"
                 style={{ background: `${accent}1c`, boxShadow: `inset 0 0 0 1px ${accent}55` }}
               >
-                <span className="truncate">📍 Showing posts near {stopName(station)}</span>
+                <MapPin className="size-3 shrink-0" aria-hidden />
+                <span className="truncate">Near {stopName(station)}</span>
                 <button
                   type="button"
                   onClick={() => setStation(null)}
@@ -224,9 +228,9 @@ function Drawer({
               type="button"
               onClick={() => setQcOpen((o) => !o)}
               aria-expanded={qcOpen}
-              className="flex shrink-0 items-center gap-1 whitespace-nowrap text-[11px] font-bold text-white/70 transition hover:text-white"
+              className={`flex shrink-0 items-center gap-1 whitespace-nowrap rounded text-[11px] font-semibold text-zinc-300 transition-colors hover:text-white ${FOCUS}`}
             >
-              <span className={`inline-block transition-transform ${qcOpen ? "rotate-90" : ""}`}>▸</span>
+              <ChevronRight className={`size-3.5 transition-transform ${qcOpen ? "rotate-90" : ""}`} aria-hidden />
               How&apos;s the T at
             </button>
             {station ? (
@@ -260,7 +264,7 @@ function Drawer({
         </div>
 
         {/* Posts */}
-        <div ref={listRef} className="tf-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3">
+        <div ref={listRef} className="tf-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-2">
           {mounted &&
             (feed.loading ? (
               <Skeletons />
@@ -270,9 +274,9 @@ function Drawer({
                 onPost={() => setComposing(true)}
               />
             ) : (
-              <div className="space-y-3">
+              <div>
                 {feed.online === false && (
-                  <p className="rounded-2xl bg-amber-400/10 px-3 py-2 text-center text-[11px] text-amber-200/80 ring-1 ring-amber-300/20">
+                  <p className="mt-2 rounded-lg bg-amber-400/10 px-3 py-2 text-center text-[11px] text-amber-200/80 ring-1 ring-amber-300/20">
                     Backend offline · showing demo posts. Your posts stay on this device.
                   </p>
                 )}
@@ -289,7 +293,7 @@ function Drawer({
                     online={feed.online}
                   />
                 ))}
-                <p className="py-4 text-center text-[11px] text-white/30">You&apos;re all caught up · mind the gap 🚇</p>
+                <p className="py-5 text-center text-[11px] text-zinc-500">You&apos;re all caught up · mind the gap</p>
               </div>
             ))}
         </div>
@@ -328,15 +332,16 @@ function LiveCount({ online, count, loading }: { online: boolean | null; count: 
 function EmptyState({ where, onPost }: { where: string; onPost: () => void }) {
   return (
     <div className="flex flex-col items-center px-6 py-16 text-center">
-      <div className="mb-3 text-5xl">🚇</div>
+      <TrainFront className="mb-3 size-9 text-zinc-500" strokeWidth={1.5} aria-hidden />
       <p className="text-sm font-semibold text-white/85">Nothing posted near {where} yet</p>
       <p className="mt-1 text-xs text-white/45">Be the first. It takes five seconds and earns XP toward your next rank.</p>
       <button
         type="button"
         onClick={onPost}
-        className={`mt-4 rounded-lg bg-white px-4 py-2 text-xs font-bold text-zinc-950 hover:bg-zinc-200 ${FOCUS}`}
+        className={`mt-4 inline-flex h-9 items-center gap-1.5 rounded-lg bg-white px-3.5 text-[13px] font-semibold text-zinc-950 hover:bg-zinc-200 ${FOCUS}`}
       >
-        + New Post
+        <Plus className="size-4" strokeWidth={2.25} aria-hidden />
+        New post
       </button>
     </div>
   );

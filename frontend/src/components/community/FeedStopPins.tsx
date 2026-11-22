@@ -1,5 +1,6 @@
 "use client";
 
+import { MessageCircle } from "lucide-react";
 import { useMemo } from "react";
 import type { CommunityPost, Station, StationId } from "@/types/tverse";
 import { MapAnchor } from "@/components/map";
@@ -20,7 +21,7 @@ export interface FeedStopPinsProps {
 }
 
 /**
- * Small "💬 3" chips (name shown on the highlighted one) on the 3D map for T-Feed stops the map has no beacon for
+ * Small speech-bubble "3" chips (name shown on the highlighted one) on the 3D map for T-Feed stops the map has no beacon for
  * (Orange/Blue). Render inside <TVerseMap>. Low altitude, so they sit under Story bubbles.
  */
 export function FeedStopPins({ posts, onOpenStop, stations = MOCK_STATIONS, showAll = false, highlightId, altitude = 30 }: FeedStopPinsProps) {
@@ -62,7 +63,8 @@ export function FeedStopPins({ posts, onOpenStop, stations = MOCK_STATIONS, show
                   <span key={l} className="h-2 w-2 rounded-full" style={{ background: lineColor(l) }} />
                 ))}
               </span>
-              💬 {n}
+              <MessageCircle className="size-3" strokeWidth={2.25} aria-hidden />
+              {n}
               {hot && <span>· {s.name}</span>}
             </button>
           </MapAnchor>

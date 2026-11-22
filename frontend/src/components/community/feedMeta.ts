@@ -1,5 +1,6 @@
 // Labels, colours and small helpers for T-Feed. Line colours come from the shared theme.
 import { useSyncExternalStore } from "react";
+import { CloudLightning, Coffee, Flame, Heart, Sparkles, TrainFront, Users, UtensilsCrossed, type LucideIcon } from "lucide-react";
 import type { CommunityPost, PostVibe, ReactionKey, RiderBadge, StationId, TransitLine } from "@/types/tverse";
 import { LINE_COLORS, LINE_GLOW } from "@/lib/theme";
 
@@ -10,20 +11,21 @@ export type FeedSort = "latest" | "trending";
 export const lineColor = (line: TransitLine) => LINE_COLORS[line];
 export const lineGlow = (line: TransitLine) => LINE_GLOW[line];
 
-export const VIBES: Record<PostVibe, { label: string; emoji: string; color: string }> = {
-  ON_THE_T: { label: "On the T", emoji: "🚇", color: "#38bdf8" },
-  FOOD_SPOT: { label: "Food Spot", emoji: "🍜", color: "#fb923c" },
-  CROWD_CHECK: { label: "Crowd Check", emoji: "👥", color: "#facc15" },
-  STREET_VIBES: { label: "Street Vibes", emoji: "✨", color: "#c084fc" },
-  DELAY_VENT: { label: "Delay Vent", emoji: "😤", color: "#f87171" },
+/** Post tags. `icon` is what the feed draws (one line-icon set, like the rest of the app); `emoji` is kept for plain text. */
+export const VIBES: Record<PostVibe, { label: string; emoji: string; color: string; icon: LucideIcon }> = {
+  ON_THE_T: { label: "On the T", emoji: "🚇", color: "#38bdf8", icon: TrainFront },
+  FOOD_SPOT: { label: "Food spot", emoji: "🍜", color: "#fb923c", icon: UtensilsCrossed },
+  CROWD_CHECK: { label: "Crowd check", emoji: "👥", color: "#facc15", icon: Users },
+  STREET_VIBES: { label: "Street vibes", emoji: "✨", color: "#c084fc", icon: Sparkles },
+  DELAY_VENT: { label: "Delay vent", emoji: "😤", color: "#f87171", icon: CloudLightning },
 };
 export const VIBE_KEYS = Object.keys(VIBES) as PostVibe[];
 
-export const REACTIONS: { key: ReactionKey; emoji: string; label: string }[] = [
-  { key: "heart", emoji: "❤️", label: "Love" },
-  { key: "train", emoji: "🚇", label: "Same train" },
-  { key: "dunkin", emoji: "☕", label: "Dunkin' run" },
-  { key: "fire", emoji: "🔥", label: "Fire" },
+export const REACTIONS: { key: ReactionKey; emoji: string; label: string; icon: LucideIcon }[] = [
+  { key: "heart", emoji: "❤️", label: "Love", icon: Heart },
+  { key: "train", emoji: "🚇", label: "Same train", icon: TrainFront },
+  { key: "dunkin", emoji: "☕", label: "Dunkin' run", icon: Coffee },
+  { key: "fire", emoji: "🔥", label: "Fire", icon: Flame },
 ];
 
 export const BADGES: Record<RiderBadge, { emoji: string; color: string }> = {

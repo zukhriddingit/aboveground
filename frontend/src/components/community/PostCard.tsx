@@ -1,8 +1,11 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { Heart, MapPin, MessageCircle } from "lucide-react";
+import { LineBullet } from "@/components/hud/LineBullet";
+import { FOCUS } from "@/lib/ui";
 import type { CommunityPost, NewCommunityReply, ReactionKey, StationId, TransitLine } from "@/types/tverse";
-import { REACTIONS, VIBES, authorLabel, formatCount, lineColor, relativeTime } from "./feedMeta";
+import { REACTIONS, VIBES, authorLabel, formatCount, relativeTime } from "./feedMeta";
 import { ReplyThread } from "./ReplyThread";
 import { Avatar, BadgeTag } from "./RiderBits";
 
@@ -21,7 +24,10 @@ export interface PostCardProps {
   online?: boolean | null;
 }
 
-/** One T-Feed post: header, line + station pin, photo (double-tap ❤️) or gradient caption card, reactions, thread. */
+/**
+ * One T-Feed post as a row of the feed (hairline-separated, no box): who and when, the stop with its line bullet,
+ * the photo (double-tap to love) or the text, reactions, replies. One line-icon set, matte MBTA wayfinding look.
+ */
 export function PostCard({
   post,
   now,
@@ -37,12 +43,12 @@ export function PostCard({
   const [broken, setBroken] = useState(false);
   const [burst, setBurst] = useState(0);
   const lastTap = useRef(0);
-  const color = lineColor(post.line);
   const vibe = VIBES[post.vibe];
   const mine = post.myReactions ?? [];
   const showImage = !!post.imageUrl && !broken;
   const localOnly = post.id.startsWith("local-");
   const pending = localOnly && online !== false;
+  const route = post.branch ?? post.line;
 
   const doubleTapLike = () => {
     setBurst((b) => b + 1);
@@ -58,96 +64,84 @@ export function PostCard({
     }
   };
 
-  const station = (
-    <button
-      type="button"
-      onClick={() => onJumpToStation?.(post.stationId)}
-      className="inline-flex max-w-full items-center gap-1 truncate rounded-full px-2 py-0.5 text-[11px] font-semibold text-white/85 transition hover:text-white"
-      style={{ background: "rgba(255,255,255,.05)", boxShadow: "inset 0 0 0 1px rgba(255,255,255,.12)" }}
-      title="Show on the 3D map"
-    >
-      <span>📍</span>
-      <span className="truncate">
-        {post.stationName} · {post.branch ?? post.line}
-      </span>
-    </button>
+  const vibeTag = (
+    <span className="inline-flex items-center gap-1 text-[11px] font-medium text-zinc-300">
+      <vibe.icon className="size-3.5" strokeWidth={2} aria-hidden />
+      {vibe.label}
+    </span>
   );
 
   return (
     <article
-      className="relative overflow-clip rounded-2xl border border-white/12 bg-white/[.03]"
+      className="border-b border-white/10 py-4 first:pt-2 last:border-b-0"
       style={{ animation: localOnly ? "tf-pop-in .3s ease-out" : undefined }}
     >
-      {/* Header */}
-      <header className="flex items-start gap-2.5 px-3.5 pb-2.5 pt-3">
-        <Avatar handle={post.author} color={post.avatarColor} />
+      <header className="flex items-center gap-2.5 px-1">
+        <Avatar handle={post.author} color={post.avatarColor} size={32} />
         <div className="min-w-0 flex-1">
-          <div className="flex min-w-0 items-center gap-1.5 text-[13px]">
-            <span className="truncate font-bold text-white">{authorLabel(post.author)}</span>
+          <div className="flex min-w-0 items-center gap-1.5 text-[13px] leading-5">
+            <span className="truncate font-semibold text-zinc-50">{authorLabel(post.author)}</span>
             <BadgeTag badge={post.authorBadge} />
-            <span className="shrink-0 text-white/35">
-              · {pending ? "posting…" : relativeTime(post.createdAt, now)}
+            <span className="shrink-0 text-zinc-500">
+              {pending ? "posting…" : relativeTime(post.createdAt, now)}
               {localOnly && !pending && " · on this device"}
             </span>
           </div>
-          <div className="mt-1 flex min-w-0">{station}</div>
+          <button
+            type="button"
+            onClick={() => onJumpToStation?.(post.stationId)}
+            className={`group mt-0.5 flex max-w-full items-center gap-1.5 rounded text-[12px] text-zinc-400 transition-colors hover:text-zinc-100 ${FOCUS}`}
+            title="Show on the 3D map"
+          >
+            <LineBullet route={route} size={15} />
+            <span className="truncate">{post.stationName}</span>
+            <MapPin className="size-3 shrink-0 opacity-0 transition-opacity group-hover:opacity-100" aria-hidden />
+          </button>
         </div>
-        <span
-          className="shrink-0 rounded px-2 py-1 text-[10px] font-extrabold uppercase tracking-wider text-white"
-          style={{ background: color }}
-        >
-          {post.line} Line
-        </span>
       </header>
 
-      {/* Media: photo with double-tap heart, or a line-coloured caption card */}
-      <div className="relative select-none" onPointerUp={onMediaPointerUp} onDoubleClick={(e) => e.preventDefault()}>
+      {/* Photo with double-tap love, or the post's text */}
+      <div className="relative mt-3 select-none" onPointerUp={onMediaPointerUp} onDoubleClick={(e) => e.preventDefault()}>
         {showImage ? (
-          // eslint-disable-next-line @next/next/no-img-element -- data URLs from the composer / seeds
-          <img
-            src={post.imageUrl}
-            alt={post.caption}
-            draggable={false}
-            onError={() => setBroken(true)}
-            className="aspect-[4/5] w-full bg-slate-900 object-cover"
-          />
+          <div className="relative overflow-hidden rounded-lg border border-white/10 bg-zinc-900">
+            {/* eslint-disable-next-line @next/next/no-img-element -- data URLs from the composer / seeds */}
+            <img
+              src={post.imageUrl}
+              alt={post.caption}
+              draggable={false}
+              onError={() => setBroken(true)}
+              className="aspect-[4/3] w-full object-cover"
+            />
+            <span className="pointer-events-none absolute left-2 top-2 rounded-md bg-zinc-950/75 px-2 py-1 backdrop-blur-md">{vibeTag}</span>
+          </div>
         ) : (
-          <div
-            className="relative flex aspect-[5/4] w-full flex-col justify-center overflow-hidden border-l-[6px] bg-zinc-900 px-6 py-8"
-            style={{ borderLeftColor: color }}
-          >
-            <span aria-hidden className="pointer-events-none absolute -right-3 -top-5 rotate-12 text-[132px] leading-none opacity-[.13] saturate-50">
-              {vibe.emoji}
-            </span>
-            <p className={`relative font-bold leading-snug text-white ${post.caption.length > 140 ? "text-lg" : "text-[22px]"}`}>
-              {post.caption}
-            </p>
-            <p className="relative mt-3 text-xs font-semibold text-white/70">
-              📍 {post.stationName} · {post.branch ?? `${post.line} Line`}
-            </p>
+          <div className="px-1">
+            {vibeTag}
+            <p className="mt-1.5 whitespace-pre-line break-words text-[15px] leading-relaxed text-zinc-100">{post.caption}</p>
           </div>
         )}
-        <span
-          className="pointer-events-none absolute left-3 top-3 flex items-center gap-1 rounded-full bg-black/45 px-2.5 py-1 text-[11px] font-bold backdrop-blur-md"
-          style={{ color: vibe.color, boxShadow: `inset 0 0 0 1px ${vibe.color}55` }}
-        >
-          {vibe.emoji} {vibe.label}
-        </span>
         {burst > 0 && (
           <span
             key={burst}
             aria-hidden
-            className="pointer-events-none absolute left-1/2 top-1/2 text-[96px] leading-none"
+            className="pointer-events-none absolute left-1/2 top-1/2"
             style={{ animation: "tf-heart-burst .9s ease-out forwards" }}
           >
-            ❤️
+            <Heart className="size-20 fill-white text-white drop-shadow-[0_6px_18px_rgba(0,0,0,0.55)]" strokeWidth={1.5} />
           </span>
         )}
       </div>
 
+      {showImage && (
+        <p className="mt-2.5 break-words px-1 text-[13.5px] leading-relaxed text-zinc-200">
+          <span className="mr-1.5 font-semibold text-zinc-50">{authorLabel(post.author)}</span>
+          {post.caption}
+        </p>
+      )}
+
       {/* Reactions + replies */}
-      <div className="flex items-center gap-1.5 px-3 pt-2.5">
-        {REACTIONS.map(({ key, emoji, label }) => {
+      <div className="mt-3 flex items-center gap-1.5 px-1">
+        {REACTIONS.map(({ key, label, icon: Icon }) => {
           const on = mine.includes(key);
           return (
             <button
@@ -157,16 +151,16 @@ export function PostCard({
               aria-pressed={on}
               aria-label={`${label} (${post.reactions[key]})`}
               title={label}
-              className="flex items-center gap-1 rounded-full px-2.5 py-1.5 text-xs font-semibold tabular-nums transition active:scale-90"
-              style={
-                on
-                  ? { background: "rgba(255,255,255,.14)", color: "#fff", boxShadow: "inset 0 0 0 1px rgba(255,255,255,.7)" }
-                  : { background: "rgba(255,255,255,.05)", color: "rgba(255,255,255,.7)", boxShadow: "inset 0 0 0 1px rgba(255,255,255,.08)" }
-              }
+              className={`flex h-8 items-center gap-1.5 rounded-full border px-2.5 text-[12px] font-semibold tabular-nums transition-colors active:scale-95 ${FOCUS} ${
+                on ? "border-white bg-white text-zinc-950" : "border-white/12 bg-white/[0.04] text-zinc-300 hover:bg-white/[0.09] hover:text-white"}`}
             >
-              <span key={on ? "on" : "off"} className="text-sm leading-none" style={{ animation: on ? "tf-bump .35s ease-out" : undefined }}>
-                {emoji}
-              </span>
+              <Icon
+                key={on ? "on" : "off"}
+                className={`size-3.5 ${on && key === "heart" ? "fill-current" : ""}`}
+                strokeWidth={2}
+                style={{ animation: on ? "tf-bump .35s ease-out" : undefined }}
+                aria-hidden
+              />
               {formatCount(post.reactions[key])}
             </button>
           );
@@ -175,23 +169,19 @@ export function PostCard({
           type="button"
           onClick={() => setThreadOpen((o) => !o)}
           aria-expanded={threadOpen}
-          className="ml-auto flex items-center gap-1 rounded-full px-2.5 py-1.5 text-xs font-semibold text-white/75 transition hover:bg-white/10"
-          style={threadOpen ? { color: "#fff", background: "rgba(255,255,255,.1)" } : undefined}
+          aria-label={`${post.replies.length} replies`}
+          className={`ml-auto flex h-8 items-center gap-1.5 rounded-full px-2.5 text-[12px] font-semibold tabular-nums transition-colors ${FOCUS} ${
+            threadOpen ? "bg-white/[0.1] text-white" : "text-zinc-400 hover:bg-white/[0.07] hover:text-white"}`}
         >
-          💬 {post.replies.length}
+          <MessageCircle className="size-3.5" strokeWidth={2} aria-hidden />
+          {post.replies.length}
         </button>
       </div>
 
-      {showImage && (
-        <p className="break-words px-4 pt-2 text-[13.5px] leading-snug text-white/90">
-          <span className="mr-1.5 font-bold text-white">{authorLabel(post.author)}</span>
-          {post.caption}
-        </p>
-      )}
       <button
         type="button"
         onClick={() => setThreadOpen((o) => !o)}
-        className="px-4 pb-3 pt-1.5 text-left text-xs font-semibold text-white/45 transition hover:text-white/80"
+        className={`mt-2 rounded px-1 text-left text-[12px] font-medium text-zinc-500 transition-colors hover:text-zinc-200 ${FOCUS}`}
       >
         {threadOpen
           ? "Hide replies"

@@ -1,4 +1,5 @@
 "use client";
+import { Check } from "lucide-react";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { QuickCheckKind, StationId, StationSignals, TLine } from "@/types/tverse";
@@ -135,16 +136,14 @@ export function QuickCheckBar({
           touchAction: "manipulation",
         }}
       >
-        <span className={compact ? "text-sm" : "text-base"} aria-hidden>
-          {meta.emoji}
-        </span>
+        <meta.icon className={`${compact ? "size-3.5" : "size-4"} shrink-0 ${done ? "text-white" : "text-zinc-400"}`} strokeWidth={2} aria-hidden />
         <span className="whitespace-nowrap">{compact ? meta.short : meta.label}</span>
         {count > 0 && (
           <span className="min-w-[1.15rem] rounded-full bg-white/15 px-1 text-center text-[10px] font-bold leading-[1.15rem] text-white tabular-nums">
             {count}
           </span>
         )}
-        {done && !count && <span className="text-[10px]" aria-hidden>✓</span>}
+        {done && !count && <Check className="size-3 text-white" strokeWidth={2.5} aria-hidden />}
       </button>
     );
   };
@@ -155,7 +154,7 @@ export function QuickCheckBar({
       style={{ animation: q.syncing ? "qc-pulse 1s ease-in-out infinite" : "qc-in .25s ease-out" }}
       role="status"
     >
-      {q.syncing ? "⟳ Syncing…" : `☁️ Queued${pending > 1 ? ` (${pending})` : ""} · will sync at next stop`}
+      {q.syncing ? "Syncing…" : `Queued${pending > 1 ? ` (${pending})` : ""} · will sync at next stop`}
     </span>
   );
 
