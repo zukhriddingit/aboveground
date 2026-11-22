@@ -1,4 +1,7 @@
-"""Gemini text for AboveGround: plain-English delay translations and Tourist Mode mini-stories.
+"""AI text for AboveGround: plain-English delay translations, Tourist Mode mini-stories, the T-Feed Line Pulse.
+
+Provider: Gemini whenever a Gemini key is set (the MLH Gemini track); otherwise Claude (``ai_claude.py``) when
+``ANTHROPIC_API_KEY`` is set; otherwise the templates. ``AI_PROVIDER=gemini|claude`` forces one of them.
 
 Uses the official ``google-genai`` SDK (``from google import genai``). The API key comes from
 ``GEMINI_API_KEY`` (or ``GOOGLE_API_KEY``) in the environment and is never hard-coded. The model
@@ -7,13 +10,15 @@ defaults to a fast Flash-Lite model and can be overridden with ``GEMINI_MODEL``.
 Demo rule: an AI call can never stall the app. Every call has a hard 4-second budget
 (``asyncio.wait_for`` around the async client, plus the SDK's own HTTP timeout), and on no key,
 timeout, any error or an empty answer we return rich deterministic templates instead. Each result
-says where it came from: ``source`` is ``"gemini"`` or ``"fallback"``.
+says where it came from: ``source`` is ``"gemini"``, ``"claude"`` or ``"fallback"``.
 
 Env vars:
     GEMINI_API_KEY        Gemini Developer API key (GOOGLE_API_KEY also works)
     GEMINI_MODEL          default "gemini-3.5-flash-lite"
     GEMINI_TIMEOUT_S      default 4.0 (hard cap per call)
     GEMINI_THINKING_LEVEL optional, e.g. "MINIMAL" or "LOW" for thinking models
+    ANTHROPIC_API_KEY     Claude, used when no Gemini key is set (see ai_claude.py; ANTHROPIC_MODEL overrides)
+    AI_PROVIDER           optional: "gemini" or "claude" to force one when both keys are set
     AI_DISABLED=1         always use the fallback templates
 """
 
@@ -28,6 +33,8 @@ from typing import Any, Optional
 
 log = logging.getLogger("ai_translator")
 
+import ai_claude  # noqa: E402  (interim provider: Claude when no Gemini key is set)
+
 try:  # imported at startup so the first request doesn't pay for it; the app still runs without it
     from google import genai
     from google.genai import types as genai_types
@@ -39,7 +46,7 @@ DEFAULT_MODEL = "gemini-3.5-flash-lite"
 CACHE_TTL_S = 600
 
 
-def model_name() -> str:
+def gemini_model() -> str:
     return (os.environ.get("GEMINI_MODEL") or DEFAULT_MODEL).strip()
 
 
@@ -57,6 +64,33 @@ def _api_key() -> Optional[str]:
 
 def gemini_configured() -> bool:
     return bool(_api_key()) and os.environ.get("AI_DISABLED") != "1"
+
+
+def active_provider() -> Optional[str]:
+    """"gemini", "claude" or None (templates only). Gemini wins when its key is set, unless AI_PROVIDER says otherwise."""
+    if os.environ.get("AI_DISABLED") == "1":
+        return None
+    gemini = bool(_api_key()) and genai is not None
+    claude = ai_claude.configured()
+    forced = (os.environ.get("AI_PROVIDER") or "").strip().lower()
+    if forced == "claude" and claude:
+        return "claude"
+    if forced == "gemini" and gemini:
+        return "gemini"
+    if gemini:
+        return "gemini"
+    if claude:
+        return "claude"
+    return None
+
+
+def ai_configured() -> bool:
+    return active_provider() is not None
+
+
+def model_name() -> str:
+    """The model that answers right now (the active provider's), or the Gemini default when none is configured."""
+    return ai_claude.model_name() if active_provider() == "claude" else gemini_model()
 
 
 # ---------------------------------------------------------------------------
@@ -280,26 +314,45 @@ def _clean(text: Optional[str], max_chars: int = 480) -> Optional[str]:
     return t
 
 
-def _note_error(exc: BaseException) -> None:
+def _note_error(exc: BaseException, provider: Optional[str] = "gemini") -> None:
     global _last_error_logged
     if time.monotonic() - _last_error_logged > 30:  # don't spam the console during a demo
         _last_error_logged = time.monotonic()
-        log.warning("Gemini call failed, using fallback (%s: %s)", type(exc).__name__, str(exc)[:200])
+        log.warning("%s call failed, using fallback (%s: %s)", (provider or "AI").capitalize(), type(exc).__name__, str(exc)[:200])
 
 
 async def generate(prompt: str, system: str, *, max_tokens: int = 220, cache_key: Optional[str] = None) -> Optional[str]:
-    """One Gemini call. Returns cleaned text, or None on no key / timeout / error / empty answer."""
-    if not gemini_configured():
-        return None
+    """One AI call (Gemini, else Claude). Returns cleaned text, or None on no key / timeout / error / empty answer."""
+    text, _ = await generate_text(prompt, system, max_tokens=max_tokens, cache_key=cache_key)
+    return text
+
+
+async def generate_text(
+    prompt: str, system: str, *, max_tokens: int = 220, cache_key: Optional[str] = None,
+) -> tuple[Optional[str], str]:
+    """Like generate(), plus the source to report: the provider that answered, or "fallback"."""
+    provider = active_provider()
+    if provider is None:
+        return None, "fallback"
     if cache_key:
+        cache_key = f"{provider}|{model_name()}|{cache_key}"
         hit = _cache.get(cache_key)
         if hit and hit[0] > time.monotonic():
-            return hit[1]
+            return hit[1], provider
     started = time.monotonic()
     try:
+        if provider == "claude":
+            raw = await asyncio.wait_for(
+                ai_claude.generate(prompt, system, max_tokens=max_tokens, timeout_s=_timeout_s()),
+                timeout=max(0.1, _timeout_s() - (time.monotonic() - started)),
+            )
+            text = _clean(raw)
+            if text and cache_key:
+                _cache[cache_key] = (time.monotonic() + CACHE_TTL_S, text)
+            return text, (provider if text else "fallback")
         client = _get_client()
         if client is None:
-            return None
+            return None, "fallback"
         types = genai_types
         cfg: dict[str, Any] = {
             "system_instruction": system,
@@ -311,7 +364,7 @@ async def generate(prompt: str, system: str, *, max_tokens: int = 220, cache_key
             cfg["thinking_config"] = types.ThinkingConfig(thinking_level=level)
         resp = await asyncio.wait_for(
             client.aio.models.generate_content(
-                model=model_name(),
+                model=gemini_model(),
                 contents=prompt,
                 config=types.GenerateContentConfig(**cfg),
             ),
@@ -320,14 +373,14 @@ async def generate(prompt: str, system: str, *, max_tokens: int = 220, cache_key
         )
         text = _clean(getattr(resp, "text", None))
     except (asyncio.TimeoutError, TimeoutError) as exc:
-        _note_error(exc)
-        return None
+        _note_error(exc, provider)
+        return None, "fallback"
     except Exception as exc:  # bad key, quota, network, safety block, SDK change: never crash the demo
-        _note_error(exc)
-        return None
+        _note_error(exc, provider)
+        return None, "fallback"
     if text and cache_key:
         _cache[cache_key] = (time.monotonic() + CACHE_TTL_S, text)
-    return text
+    return text, (provider if text else "fallback")
 
 
 # ---------------------------------------------------------------------------
@@ -379,13 +432,13 @@ async def translate_alert(
         f"Known good alternate move: {fb['alternateMove']}\n"
         "Rewrite this for a rider in exactly 2 sentences."
     )
-    text = await generate(
+    text, source = await generate_text(
         prompt, _ALERT_SYSTEM, max_tokens=220,
-        cache_key=f"alert|{model_name()}|{station_id}|{fb['disruption']}|{fb['estimatedFixMin']}|{raw}",
+        cache_key=f"alert|{station_id}|{fb['disruption']}|{fb['estimatedFixMin']}|{raw}",
     )
     out = {**fb, "source": "fallback"}
     if text:
-        out.update(plainExplanation=text, source="gemini", model=model_name())
+        out.update(plainExplanation=text, source=source, model=model_name())
     return out
 
 
@@ -407,10 +460,10 @@ async def narrate_station(
         f"Reference fact: {landmark_fact or fb['text']}\n"
         "Narrate it in exactly 2 sentences."
     )
-    text = await generate(prompt, _NARRATE_SYSTEM, max_tokens=160, cache_key=f"narrate|{model_name()}|{station_id}|{fb['title']}")
+    text, source = await generate_text(prompt, _NARRATE_SYSTEM, max_tokens=160, cache_key=f"narrate|{station_id}|{fb['title']}")
     out: dict[str, Any] = {**fb, "source": "fallback"}
     if text:
-        out.update(text=text, source="gemini", model=model_name())
+        out.update(text=text, source=source, model=model_name())
     return out
 
 
@@ -449,7 +502,7 @@ async def line_vibe_summary(line: str, captions: list[str], kind_counts: dict[st
     counts = ", ".join(f"{_KIND_LABELS.get(k, k)}: {n}" for k, n in kind_counts.items() if n) or "none"
     posts = "\n".join(f"- {c[:200]}" for c in captions[:5]) or "- (no posts)"
     prompt = f"Line: {line}\nLast T-Feed posts:\n{posts}\nOne-tap reports (last 20 min): {counts}\nOne sentence."
-    text = await generate(prompt, _VIBE_SYSTEM, max_tokens=80, cache_key=f"vibe|{model_name()}|{line}|{counts}|{posts}")
+    text, source = await generate_text(prompt, _VIBE_SYSTEM, max_tokens=80, cache_key=f"vibe|{line}|{counts}|{posts}")
     if text:
-        return {"line": line, "text": text, "source": "gemini", "model": model_name()}
+        return {"line": line, "text": text, "source": source, "model": model_name()}
     return {"line": line, "text": fb, "source": "fallback"}

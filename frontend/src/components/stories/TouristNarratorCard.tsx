@@ -191,7 +191,7 @@ export function TouristNarratorCard({ touristMode, station, autoHideMs = 7000, o
             </div>
             <h3 className="mt-0.5 flex items-center gap-2 text-base font-bold leading-tight">
               {narration.title || landmark.title}
-              {narration.source === "gemini" && <AiSourceTag source="gemini" />}
+              {narration.source !== "fallback" && <AiSourceTag source={narration.source} />}
             </h3>
             <p className="mt-1 text-[13px] leading-snug text-white/80">{narration.text || landmark.fact}</p>
             <div className="mt-3 flex items-center gap-2">

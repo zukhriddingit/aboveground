@@ -22,7 +22,7 @@ import ai_translator as ai
 router = APIRouter(prefix="/api/ai", tags=["ai"])
 
 TLine = Literal["Green", "Red", "Orange", "Blue"]
-AiSource = Literal["gemini", "fallback"]
+AiSource = Literal["gemini", "claude", "fallback"]
 StationId = Literal[
     "place-bucen", "place-kencl", "place-hymnl", "place-coecl", "place-boyls", "place-pktrm",
     "place-harsq", "place-knncl", "place-chmnl", "place-dwnxg", "place-chncl", "place-state",
@@ -140,4 +140,10 @@ async def line_vibe(line: TLine = Query("Green")) -> dict[str, Any]:
 @router.get("/status")
 def status() -> dict[str, Any]:
     """Is a key configured, and which model would be used (never returns the key)."""
-    return {"geminiConfigured": ai.gemini_configured(), "model": ai.model_name(), "timeoutS": ai._timeout_s()}
+    return {
+        "geminiConfigured": ai.gemini_configured(),
+        # Which AI answers right now: "gemini", "claude" (interim, no Gemini key) or None (templates).
+        "provider": ai.active_provider(),
+        "model": ai.model_name(),
+        "timeoutS": ai._timeout_s(),
+    }

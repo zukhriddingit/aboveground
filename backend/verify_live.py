@@ -61,19 +61,33 @@ def call(base: str, method: str, path: str, body: Any = None, timeout: float = 1
         return 0, str(exc), time.monotonic() - started
 
 
-def env_file_key() -> bool:
-    """Is a Gemini key set in the environment or a .env file? (Never read out loud.)"""
-    if (os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY") or "").strip():
+def _key_set(*names: str) -> bool:
+    """Is one of these keys set in the environment or a .env file? (Never read out loud.)"""
+    if any((os.environ.get(n) or "").strip() for n in names):
         return True
     for path in (HERE / ".env", HERE.parent / ".env"):
         try:
             for line in path.read_text(encoding="utf-8").splitlines():
                 key, _, value = line.strip().removeprefix("export ").partition("=")
-                if key.strip() in ("GEMINI_API_KEY", "GOOGLE_API_KEY") and value.strip().strip("'\""):
+                if key.strip() in names and value.strip().strip("'\""):
                     return True
         except OSError:
             continue
     return False
+
+
+def env_file_key() -> bool:
+    """Is a Gemini key set in the environment or a .env file?"""
+    return _key_set("GEMINI_API_KEY", "GOOGLE_API_KEY")
+
+
+def expected_provider() -> str:
+    """Which AI should answer with your env: Gemini wins when its key is set, then Claude, else the templates."""
+    forced = (os.environ.get("AI_PROVIDER") or "").strip().lower()
+    gemini, claude = env_file_key(), _key_set("ANTHROPIC_API_KEY")
+    if forced == "claude" and claude:
+        return "claude"
+    return "gemini" if gemini else "claude" if claude else "fallback"
 
 
 def free_port() -> int:
@@ -174,16 +188,17 @@ def check_core(base: str, write: bool) -> None:
 
 
 def check_ai(base: str, expect: str, label: str) -> None:
-    """expect: "gemini" (a key is set), "fallback" (no or bad key)."""
+    """expect: "gemini" / "claude" (that provider's key is set), "fallback" (no or bad key)."""
     status, st, _ = call(base, "GET", "/api/ai/status")
     if status != 200 or not isinstance(st, dict):
         report("FAIL", f"[{label}] GET /api/ai/status", f"HTTP {status}")
         return
-    configured = bool(st.get("geminiConfigured"))
-    if expect == "gemini":
-        report("PASS" if configured else "FAIL", f"[{label}] key picked up", f"geminiConfigured={configured}, model {st.get('model')}")
+    provider = st.get("provider")
+    if expect in ("gemini", "claude"):
+        ok = provider == expect
+        report("PASS" if ok else "FAIL", f"[{label}] key picked up", f"provider={provider}, model {st.get('model')}")
     else:
-        report("PASS", f"[{label}] /api/ai/status", f"geminiConfigured={configured}, model {st.get('model')}, cap {st.get('timeoutS')} s")
+        report("PASS", f"[{label}] /api/ai/status", f"provider={provider}, model {st.get('model')}, cap {st.get('timeoutS')} s")
 
     probes = [
         ("POST /api/ai/translate-alert", "POST", "/api/ai/translate-alert", {"stationId": "place-boyls", "rawMbtaText": "Green Line: Delays of about 15 minutes due to a signal problem at Boylston."}),
@@ -196,11 +211,11 @@ def check_ai(base: str, expect: str, label: str) -> None:
         text = ""
         if isinstance(res, dict):
             text = str(res.get("plainExplanation") or res.get("text") or "")[:70]
-        if status != 200 or source not in ("gemini", "fallback"):
+        if status != 200 or source not in ("gemini", "claude", "fallback"):
             report("FAIL", f"[{label}] {name}", f"HTTP {status} {res}")
         elif t > AI_BUDGET_S:
             report("FAIL", f"[{label}] {name}", f"took {t:.2f} s (over the {AI_BUDGET_S} s budget)")
-        elif expect == "gemini" and source != "gemini":
+        elif expect in ("gemini", "claude") and source != expect:
             report("WARN", f"[{label}] {name}", f"key set but answered from templates in {t:.2f} s (check the key, quota or network)")
         elif expect == "fallback" and source != "fallback":
             report("FAIL", f"[{label}] {name}", f"expected the fallback, got {source}")
@@ -213,13 +228,13 @@ def main() -> int:
     ap.add_argument("--url", help="check an already running backend instead of starting one")
     ap.add_argument("--write", action="store_true", help="with --url: also POST a story, a post and an alert")
     args = ap.parse_args()
-    has_key = env_file_key()
-    print(f"Gemini key in the environment or .env: {'yes' if has_key else 'no'}\n")
+    expect_env = expected_provider()
+    print(f"Gemini key in the environment or .env: {'yes' if env_file_key() else 'no'} · AI that should answer: {expect_env}\n")
 
     if args.url:
         base = args.url.rstrip("/")
         check_core(base, args.write)
-        check_ai(base, "gemini" if has_key else "fallback", "running server")
+        check_ai(base, expect_env, "running server")
     else:
         tmp = tempfile.mkdtemp(prefix="aboveground-verify-")
         data = {
@@ -227,13 +242,21 @@ def main() -> int:
             "STORIES_DATA_FILE": f"{tmp}/stories.json",
         }
         passes = [
-            ("your env", {**os.environ, **data}, "gemini" if has_key else "fallback", True),
-            ("no key", {**os.environ, **data, "GEMINI_API_KEY": "", "GOOGLE_API_KEY": "", "WORLD_LIVE": "0"}, "fallback", False),
-            ("bad key", {**os.environ, **data, "GEMINI_API_KEY": "verify-live-invalid-key", "GOOGLE_API_KEY": "", "WORLD_LIVE": "0"}, "fallback", False),
+            ("your env", {**os.environ, **data}, expect_env, True),
+            ("no key", {**os.environ, **data, "GEMINI_API_KEY": "", "GOOGLE_API_KEY": "", "ANTHROPIC_API_KEY": "", "WORLD_LIVE": "0"}, "fallback", False),
+            ("bad key", {**os.environ, **data, "GEMINI_API_KEY": "verify-live-invalid-key", "GOOGLE_API_KEY": "", "ANTHROPIC_API_KEY": "", "WORLD_LIVE": "0"}, "fallback", False),
             (
                 "Gemini hangs",
-                {**os.environ, **data, "GEMINI_API_KEY": "verify-live-slow", "GOOGLE_API_KEY": "", "WORLD_LIVE": "0",
+                {**os.environ, **data, "GEMINI_API_KEY": "verify-live-slow", "GOOGLE_API_KEY": "", "ANTHROPIC_API_KEY": "", "WORLD_LIVE": "0",
                  "GOOGLE_GEMINI_BASE_URL": "http://10.255.255.1/"},
+                "fallback",
+                False,
+            ),
+            ("Claude bad key", {**os.environ, **data, "GEMINI_API_KEY": "", "GOOGLE_API_KEY": "", "ANTHROPIC_API_KEY": "verify-live-invalid-key", "WORLD_LIVE": "0"}, "fallback", False),
+            (
+                "Claude hangs",
+                {**os.environ, **data, "GEMINI_API_KEY": "", "GOOGLE_API_KEY": "", "ANTHROPIC_API_KEY": "verify-live-slow", "WORLD_LIVE": "0",
+                 "ANTHROPIC_BASE_URL": "http://10.255.255.1/"},
                 "fallback",
                 False,
             ),
