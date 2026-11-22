@@ -4,13 +4,13 @@ Uses the official ``anthropic`` SDK. The key comes from ``ANTHROPIC_API_KEY`` in
 ``backend/.env`` and is never hard-coded. ``ai_translator`` picks Gemini first whenever ``GEMINI_API_KEY``
 is set, so adding a Gemini key later switches the app back with no code change.
 
-The calls are short (one or two sentences), so the request uses effort "low" to stay well inside the shared
-4-second cap; ``ai_translator`` wraps every call in that cap and falls back to its templates on any error,
+The job is short grounded rewriting (one or two sentences from facts we pass in), and an answer only counts if
+it lands inside the shared 4-second cap, so the default is the fastest model, Claude Haiku 5.5, at effort "low"; ``ai_translator`` wraps every call in that cap and falls back to its templates on any error,
 timeout, refusal or empty answer.
 
 Env vars:
     ANTHROPIC_API_KEY   Claude API key
-    ANTHROPIC_MODEL     default "claude-opus-5-5"
+    ANTHROPIC_MODEL     default "claude-haiku-5-5" (e.g. "claude-sonnet-5-5" or "claude-opus-5-5" to override)
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ try:  # imported at startup so the first request doesn't pay for it; the app sti
 except Exception:  # pragma: no cover - package missing or broken
     anthropic = None
 
-DEFAULT_MODEL = "claude-opus-5-5"
+DEFAULT_MODEL = "claude-haiku-5-5"
 
 # Models that accept the server-side refusal fallback ("default" routing picks the fallback model by category).
 _FALLBACK_MODELS = {"claude-opus-5-5", "claude-opus-5", "claude-sonnet-5-5", "claude-fable-5-2", "claude-fable-5-1"}
