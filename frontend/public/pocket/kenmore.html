@@ -39,13 +39,18 @@ dialog{color:var(--ink);background:var(--panel);border:1px solid #afb5a5;border-
 @media(min-width:761px){.compass{top:72px;right:18px}}
 @media(max-width:760px){.views{max-width:calc(100% - 20px);padding:3px}.vbtn{height:30px;padding:0 10px;font-size:12px}.stage>.tools{top:8px;right:8px}}
 @media(max-height:480px) and (orientation:landscape){.stage>.tools{top:6px;right:8px}.compass{top:auto;bottom:6px}}
+
+/* AboveGround weather (add_weather.py) */
+#wxNote[hidden]{display:none}
+#nightBtn svg{color:#6c6890}
+@media(min-width:761px){#wxRow{margin-top:6px}}
 </style></head><body>
 
 
 <header class="top"><div class="identity"><span class="brand-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" aria-hidden="true" focusable="false" stroke-linecap="round" stroke-linejoin="round"><g stroke="#507968" stroke-width="1.25"><path d="m2.7 28.8 11.5-5.4 12.3 2.7 10.6-4.4 8.2 10.6-12.6 7.2-12.3-2.7-10.2 4Z" fill="#a9ccaa"/><path d="m14.2 23.4 6.2 13.4 12.3 2.7-6.2-13.4Z" fill="#e9ddad"/><path d="m5.5 33.4 10.1-4.1 11.8 2.2 13.8-5.6" stroke="#6a9d95" stroke-width="2.3"/></g><g stroke="#774638" stroke-width="1.25"><path d="m24.8 30.9 8.9-4.8V13.8l-8.9 3.4Z" fill="#c98353"/><path d="m15.2 27.7 9.6 3.2V17.2l-2-.7v-2.3l-2-.7v-2.2l-2.7-.9v2.1l-1.9-.6v2.5l-1-.3Z" fill="#e8ac68"/><path d="m24.8 17.2 8.9-3.4-5.9-5.7-7 3.2 1 2.2 2 .7v2.3Z" fill="#985b49"/><path d="m11.6 32.8 8.9 3.6V17.7l-2.1-.8v-2.6l-2.2-.8v-2.7l-2.8-1.1v2.6l-2-.8v2.8l-1.8-.6v2.8l-1.4-.6v15.6Z" fill="#db7153"/><path d="m20.5 17.7 5.7-3-6-7.7-4 3.8v2.7l2.2.8v2.6Z" fill="#b35545"/><path d="m20.5 36.4 5.7-3.3V14.7l-5.7 3Z" fill="#a65548"/></g><g fill="#fceac8"><path d="m10.4 18.8 2.1.8v3.6l-2.1-.8Zm5 1.9 2.2.9v3.5l-2.2-.8Zm-5 4.4 2.1.8v3.6l-2.1-.8Z"/></g><path d="m15.4 33.9 2.2.8v-6.4l-2.2-.8Z" fill="#41584f"/><path d="m28.4 17 .1 3.3m2.6-4.6v3.2" stroke="#fcdfaa" stroke-width="1.65"/></svg></span><span class="wordmark">Pocket City</span></div><nav class="city-nav" aria-label="Place"><a aria-current="page" id="placeTab" href="#"></a></nav><div class="topnav"><div class="status" id="status"><i></i><span>Simulation live</span></div><button id="notesBtn" aria-label="Field notes" class="button" aria-haspopup="dialog"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 6c-2-2-5-3-9-2v15c4-1 7 0 9 2 2-2 5-3 9-2V4c-4-1-7 0-9 2v15"/></svg><span>Field notes</span></button></div></header>
 <main class="workspace">
 <aside class="rail" aria-label="Street atlas controls"><section class="paper info"><div class="stamp-line"><span>The Netherlands</span><i class="flag" aria-hidden="true"></i></div><h1 id="cityName">Amsterdam</h1><p class="location">Reguliersgracht × Keizersgracht</p><div class="coords"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M19 10c0 5-7 11-7 11S5 15 5 10a7 7 0 1 1 14 0Z"/><circle cx="12" cy="10" r="2.2"/></svg> 52.36345° N &nbsp; 4.89598° E</div>
-<div class="season-box"><h2 class="subhead">Season</h2><div class="season-scroll"><div id="chips" class="chips" role="group" aria-label="Season"><button class="chip" data-s="spring"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20V10m0 6c-5 0-6-3-6-5 4 0 6 2 6 5m0-2c4 0 6-2 6-4-3 0-6 1-6 4"/><path d="M12 9c-5 1-7-3-4-4-1-3 3-5 4-2 2-3 5-1 4 2 3 1 1 5-4 4Z" fill="#e8c5b1"/></svg> Spring</button><button class="chip" data-s="summer"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4.1" fill="#f3d492"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3M5 5l2 2m10 10 2 2M5 19l2-2M17 7l2-2"/></svg> Summer</button><button class="chip" data-s="autumn"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 3C9 3 3 7 5 14c2 7 13 4 15-11Z" fill="#eac29b"/><path d="M3 21 15 9m-5 5v-4"/></svg> Autumn</button><button class="chip" data-s="winter"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M3.5 7l17 10m-17 0 17-10M9 4l3 2 3-2M9 20l3-2 3 2M4 10l3-1V6m10 12v-3l3-1M4 14l3 1v3M17 6v3l3 1"/></svg> Winter</button></div><div class="events"><div class="select-wrap"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 21V4c5-4 8 4 14 0v10c-6 4-9-4-14 0"/></svg><select id="event" aria-label="Special scenes"><option value="">Special scenes</option><option value="kings">King’s Day</option><option value="frozen">Frozen canals</option></select><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m5 9 7 7 7-7"/></svg></div><button class="chip" id="snow" hidden>+ Snow</button></div></div><div class="note" id="note" aria-live="polite"></div></div></section>
+<div class="season-box"><h2 class="subhead">Season</h2><div class="season-scroll"><div id="chips" class="chips" role="group" aria-label="Season"><button class="chip" data-s="spring"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20V10m0 6c-5 0-6-3-6-5 4 0 6 2 6 5m0-2c4 0 6-2 6-4-3 0-6 1-6 4"/><path d="M12 9c-5 1-7-3-4-4-1-3 3-5 4-2 2-3 5-1 4 2 3 1 1 5-4 4Z" fill="#e8c5b1"/></svg> Spring</button><button class="chip" data-s="summer"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4.1" fill="#f3d492"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3M5 5l2 2m10 10 2 2M5 19l2-2M17 7l2-2"/></svg> Summer</button><button class="chip" data-s="autumn"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 3C9 3 3 7 5 14c2 7 13 4 15-11Z" fill="#eac29b"/><path d="M3 21 15 9m-5 5v-4"/></svg> Autumn</button><button class="chip" data-s="winter"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M3.5 7l17 10m-17 0 17-10M9 4l3 2 3-2M9 20l3-2 3 2M4 10l3-1V6m10 12v-3l3-1M4 14l3 1v3M17 6v3l3 1"/></svg> Winter</button></div><div class="events"><div class="select-wrap"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 21V4c5-4 8 4 14 0v10c-6 4-9-4-14 0"/></svg><select id="event" aria-label="Special scenes"><option value="">Special scenes</option><option value="kings">King’s Day</option><option value="frozen">Frozen canals</option></select><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m5 9 7 7 7-7"/></svg></div><button class="chip" id="snow" hidden>+ Snow</button></div><div class="events" id="wxRow"><div class="select-wrap"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7 18h10a4 4 0 0 0 .6-7.95A6 6 0 0 0 6.2 9.1 4.5 4.5 0 0 0 7 18Z"/><path d="M9 21l1-1.5M13 21l1-1.5" /></svg><select id="weather" aria-label="Weather"></select><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m5 9 7 7 7-7"/></svg></div><button class="chip" id="nightBtn" aria-pressed="false"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z" fill="#d9d6ea"/></svg> Night</button></div></div><div class="note" id="note" aria-live="polite"></div><div class="note" id="wxNote" aria-live="polite" hidden></div></div></section>
 <section class="paper field-key"><button class="key-toggle" id="keyToggle" aria-controls="keyBody" aria-expanded="true">Map legend <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m5 9 7 7 7-7"/></svg></button><div class="key-body" id="keyBody">
 <button class="row" data-f="buildings" aria-label="Fly to the buildings"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" aria-hidden="true" focusable="false" stroke-linecap="round" stroke-linejoin="round"><g stroke-width="1.25"><path d="M22 18.1 29 7.8l5.4 7.6v21l-12.4-2Z" fill="#e9b56f" stroke="#906843"/><path d="m29 7.8 5.1-1.1 6.5 6.4-6.2 2.3Z" fill="#807d87" stroke="#555764"/><path d="m34.4 15.4 6.2-2.3v21l-6.2 2.3Z" fill="#c98b58" stroke="#906843"/><path d="m6.5 37.3 14.8 3.2v-24l-2.6-.6v-3l-2.3-.5V9.6L13.6 9v2.7l-2.6-.6v2.8l-2.4-.5v2.8l-2.1-.4Z" fill="#e18972" stroke="#985a4a"/><path d="m21.3 16.5 6.3-2.6-7.1-7.3L16.4 9.6v2.8l2.3.5v3Z" fill="#996b63" stroke="#785954"/><path d="m21.3 40.5 6.3-3V13.9l-6.3 2.6Z" fill="#bb7362" stroke="#985a4a"/></g><path d="m9.4 19.7 2.6.5v3.5l-2.6-.6Zm5.9 1.3 2.7.5V25l-2.7-.6Zm-5.9 5.3 2.6.5v3.6l-2.6-.6Z" fill="#f9e4b8"/><path d="m15.2 39.1 3 .7v-8.3l-3-.7Z" fill="#5c6460"/><path d="m29.8 19.1.1 3.7m-.1 3.5.1 3.7" stroke="#fff0c8" stroke-width="2.2"/><path d="m5.6 38 15.8 3.3 6.5-3.3" stroke="#806b59" stroke-width="1.3"/></svg><span class="row-label"><strong>Buildings</strong><small>3DBAG</small></span><span class="count">98</span><span class="arrow">↗</span></button>
 <button class="row" data-f="trees" aria-label="Fly to the registered trees"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" aria-hidden="true" focusable="false" stroke-linecap="round" stroke-linejoin="round"><path d="m11.2 39.2 10.3-3.3 12.7 3.5-10.2 4Z" fill="#d9d7b3"/><path d="m20.3 27.6 4.8.2-.5 10.4 2.1 1.5-4.3.7-2.8-.7 1.4-1.4Z" fill="#aa7961" stroke="#755748" stroke-width="1.15"/><path d="M10.7 25.4c-3.5-1.3-3.7-6.1.1-8.3-.8-3.7 2.3-7 6-6.7 1.1-4.1 6-5.8 9.9-3.4 3.6-1 7.1 1.8 7.4 5.1 3.2 1.1 4.8 4.4 3.9 7.3 3.5 4.2.4 9.6-4 9.6-2 3.5-6.2 4.8-9.9 2.9-4.8 2.3-9.1.2-9.8-2.7-2.2-.4-3.4-1.7-3.6-3.8Z" fill="#8ca879" stroke="#5b765a" stroke-width="1.3"/><path d="M10.8 21.6c-1.2-2.3.7-4.9 3.1-5.3-.3-2.8 2.1-4.7 4.8-4.4 1.7-3.1 5.2-3.8 7.5-2.1 2.6-.5 4.9 1.1 5.3 3.3-1.8-.2-3.6 1.3-3.9 3.3-3.7-1.1-6.4.9-6.7 3.6-2.2-.1-4 1.2-4.2 3.4-2.1-1.5-3.8-1.7-5.9-1.8Z" fill="#c1ce91"/><path d="m14.2 16.6 2.4-1.2m7.5-3.4 2.6 1m-3.1 11.5 2.4-1.5m5.2-3.5 2.3 1" stroke="#6d885d" stroke-width="1.1" opacity=".8"/></svg><span class="row-label"><strong>Registered trees</strong><small>Amsterdam tree register</small></span><span class="count">43</span><span class="arrow">↗</span></button>
@@ -683,8 +688,8 @@ const SNOW = { l: '#f6f8fb', m: '#e2e8f2', d: '#c3cbdd' };
 // rain and drizzle: short streaks slanting with the wind; snow and fluff: round dots that drift as they fall.
 // Paths are in metres; widths (w) are in ink units, so a flake stays the same size on screen at any zoom
 const WX = {
-  rain:    { n: 320, v: 12, len: 2.4, w: .85, col: '#5f7bb0', op: .6, top: 30 },
-  drizzle: { n: 420, v: 7,  len: 1.8, w: .7,  col: '#6a82b4', op: .55, top: 26 },
+  rain:    { n: 560, v: 12, len: 3.4, w: 2.1, col: '#5a77ad', op: .7, top: 30 },
+  drizzle: { n: 640, v: 7,  len: 2.2, w: 1.5, col: '#6782b6', op: .62, top: 26 },
   snow:    { n: 320, v: 1.1, w: 3,   col: '#ffffff', op: .95, top: 30, drift: .9, edge: '#9aa7c4' },
   heavysnow: { n: 980, v: 1.35, w: 3.5, col: '#ffffff', op: .95, top: 30, drift: 1.25, edge: '#9aa7c4' },
   fluff:   { n: 80,  v: .45, w: 3.2, col: '#fbf3dc', op: .9,  top: 14, drift: 1.6, edge: '#c9b98e' },
@@ -2112,9 +2117,24 @@ function setGroundColours(){
   WATER=SEASON.ice?'#dfe9ec':PAL.water;
 }
 const FEEDS=SCENE.routes.map((r,i)=>({kind:r.kind,paths:[measuredLane({...r,junctions:[]})],interval:(r.kind==='car'?7.5:r.kind==='bike'?11:7)*(PHONE?1.4:1)}));
-function setSeason(id){
+/* AboveGround weather (add_weather.py): the page sends m.wx = "<kind>|<night>". An empty kind keeps the season's
+   own weather; night is 'night', 'day' or '' (the season or occasion decides). */
+let WX_KEY='';
+function applyWeather(S,w){
+  const [kind='',night='']=String(w||'').split('|');
+  if(kind){
+    const wet=kind==='rain'||kind==='drizzle',snow=kind==='snow'||kind==='heavysnow';
+    S.wx=wet||snow?kind:'none';S.wet=wet;S.umbrellas=wet;S.haze=kind==='fog';S.fog=kind==='fog';S.overcast=wet;
+    if(snow){S.snow=true;S.coats=true;S.cafes=false}
+    if(wet&&S.cafes)S.cafes='closed';
+    if(wet||snow)S.petals=false;
+    S.crowd=(S.crowd??1)*({rain:.75,drizzle:.9,snow:.8,heavysnow:.55,fog:.9}[kind]??1);
+  }
+  if(night==='night')S.night=true;else if(night==='day')S.night=false;
+}
+function setSeason(id,w){
   const st=SEASONS.find(s=>s.id===id)||SEASONS[0];
-  SEASON={...st};SEASON_ID=st.id;LOOK.clear();DECOR=null;setGroundColours();
+  SEASON={...st};SEASON_ID=st.id;WX_KEY=w||'';applyWeather(SEASON,w);LOOK.clear();DECOR=null;setGroundColours();
   const c=SEASON.crowd??1;
   const flow=FEEDS.map((f,i)=>({...f,walkSpeed:1.05+.05*(i%3),interval:f.interval/(f.kind==='ped'?c:Math.max(.4,Math.min(1.4,c)))}));
   TRAFFIC=streetSimulation(flow,Math.round((PHONE?90:150)*Math.min(1.6,c)),500);
@@ -2645,7 +2665,7 @@ function renderFrame(m){
   FIG_W=m.width;FIG_H=m.height;paintTime=m.time;
   const book=m.finish==='book',changed=book!==pictureBook;
   pictureBook=book;
-  if(SEASON_ID!==m.season)setSeason(m.season);
+  if(SEASON_ID!==m.season||WX_KEY!==(m.wx||''))setSeason(m.season,m.wx);
   else if(changed)setGroundColours(SEASON);
   const width=Math.max(1,Math.round(FIG_W*m.dpr)),height=Math.max(1,Math.round(FIG_H*m.dpr));
   if(!frameCanvas || frameCanvas.width!==width || frameCanvas.height!==height)frameCanvas=makeSurface(width,height);
@@ -2660,7 +2680,7 @@ function renderFrame(m){
   VIEW_BOX=[vbW,vbH];INK_K=.83/pixelsPerUnit;UPX=1/pixelsPerUnit;WOBBLE=m.wobble;
   paintScale=width/vbW;pathPrecision=paintScale>16?1000:100;
   washEnabled=pictureBook||m.finish==='wash';
-  const key=[width,height,cm.yaw,cm.pitch,cm.x,cm.y,cm.z,cm.zoom,WOBBLE,m.season,m.finish,frontageCutaway,entranceView].join(',');
+  const key=[width,height,cm.yaw,cm.pitch,cm.x,cm.y,cm.z,cm.zoom,WOBBLE,m.season,m.wx,m.finish,frontageCutaway,entranceView].join(',');
   if(key!==lastCameraKey){stamps.clear();repeats=0;lastCameraKey=key}else repeats++;
   const g=frameCanvas.getContext('2d');g.setTransform(1,0,0,1,0,0);g.clearRect(0,0,width,height);
   g.setTransform(paintScale,0,0,paintScale,0,0);g.lineCap=g.lineJoin='round';
@@ -2671,8 +2691,8 @@ function renderFrame(m){
   }
   _clipN=0;
   paintOps(g,compileInk(scene(m.time)));
-  if(SEASON.haze){
-    g.save();g.globalCompositeOperation='source-atop';g.fillStyle='rgba(224,207,176,.38)';
+  if(SEASON.haze||SEASON.overcast){
+    g.save();g.globalCompositeOperation='source-atop';g.fillStyle=SEASON.fog?'rgba(226,230,235,.52)':SEASON.haze?'rgba(224,207,176,.38)':'rgba(92,108,138,.16)';
     g.fillRect(0,0,vbW,vbH);g.restore();
   }
   const north=Dv(...NORTH);
@@ -2890,10 +2910,103 @@ function tick(now){
   const key=[revision,playing?time:0,...Object.values(camera).map(v=>v.toFixed(4))].join('|');
   if(key===lastKey)return;const slot=workers.find(s=>!s.busy);if(!slot&&!mainRenderer)return;
   lastRequest=now-lastRequest>=2*interval?now:lastRequest+interval;lastKey=key;
-  const m={width:W,height:H,dpr:Math.min(devicePixelRatio||1,phone?1.6:2),camera:{...camera},frontage:false,entrance:false,time,wobble,finish,season,seq:++seq,generation};
+  const m={width:W,height:H,dpr:Math.min(devicePixelRatio||1,phone?1.6:2),camera:{...camera},frontage:false,entrance:false,time,wobble,finish,season,wx:wxMsg(),seq:++seq,generation};
   if(slot){slot.busy=true;slot.worker.postMessage(m)}else{try{const r=mainRenderer(m);display({...r,seq:m.seq},generation)}catch(e){console.error(e);mainRenderer=null;$('loading').textContent='The drawing could not start. Reload to try again.'}}
 }
+/* ---------- weather (AboveGround weather (add_weather.py)) ----------
+   Season's weather keeps what the season draws. Live reads the latest observation at Logan Airport (National Weather
+   Service), falling back to Open-Meteo for this plate, and turns night on after sunset. */
+const WX_KINDS=[['','Season’s weather'],['live','Live · Boston now'],['clear','Clear'],['drizzle','Drizzle'],['rain','Rain'],['snow','Snow'],['heavysnow','Heavy snow'],['fog','Fog']];
+const wxQ=new URLSearchParams(location.search);
+let wxChoice=WX_KINDS.some(([k])=>k===wxQ.get('weather'))?wxQ.get('weather'):'';
+let wxNight=wxQ.get('night')==='1'?'night':wxQ.get('night')==='0'?'day':'';   // '' = the season or occasion (or, in Live, the sun) decides
+let wxLive=null,wxLiveFailed=false,wxLastSent='';
+const wxSel=$('weather'),nightBtn=$('nightBtn'),wxNote=$('wxNote');
+wxSel.replaceChildren(...WX_KINDS.map(([k,l])=>new Option(l,k)));
+
+/* The sun's altitude in degrees (NOAA's low-precision formulas, good to about a degree). */
+function sunAltitude(lat,lon,date=new Date()){
+  const rad=Math.PI/180,d=date.getTime()/864e5-10957.5;   // days from J2000.0
+  const g=(357.529+.98560028*d)*rad,q=280.459+.98564736*d;
+  const L=(q+1.915*Math.sin(g)+.02*Math.sin(2*g))*rad,e=(23.439-3.6e-7*d)*rad;
+  const ra=Math.atan2(Math.cos(e)*Math.sin(L),Math.cos(L)),dec=Math.asin(Math.sin(e)*Math.sin(L));
+  const gmst=((18.697374558+24.06570982441908*d)%24+24)%24,ha=(gmst*15+lon)*rad-ra;
+  return Math.asin(Math.sin(lat*rad)*Math.sin(dec)+Math.cos(lat*rad)*Math.cos(dec)*Math.cos(ha))/rad;
+}
+const sunDown=()=>sunAltitude(META.lat,META.lon)<-4;
+const sceneNight=()=>!!(SEASONS.concat(OCCASIONS).find(x=>x.id===season)||{}).night;
+function wxMsg(){
+  const live=wxChoice==='live';
+  const kind=live?(wxLive?wxLive.kind:''):wxChoice;
+  const night=wxNight||(live&&sunDown()?'night':'');
+  return kind+'|'+night;
+}
+function wxText(t){const s=String(t||'').trim();return s?s[0].toLowerCase()+s.slice(1):''}
+/* An NWS description ("Light Rain and Fog/Mist", "Mostly Cloudy") to a kind the page draws. */
+function wxFromText(text,present){
+  const t=(String(text||'')+' '+(present||[]).map(w=>(w.intensity||'')+' '+(w.weather||'')).join(' ')).toLowerCase();
+  if(!t.trim())return null;
+  if(/snow|sleet|ice pellets|flurr/.test(t))return /heavy/.test(t)?'heavysnow':'snow';
+  if(/thunder|rain|shower/.test(t))return /heavy|thunder/.test(t)?'rain':/light/.test(t)?'drizzle':'rain';
+  if(/drizzle/.test(t))return 'drizzle';
+  if(/fog|mist|haze|smoke/.test(t))return 'fog';
+  return 'clear';
+}
+/* A WMO weather code (Open-Meteo) to [kind, words]. */
+function wxFromCode(c){
+  if(c===0)return['clear','Clear'];if(c<=2)return['clear','Partly cloudy'];if(c===3)return['clear','Overcast'];
+  if(c===45||c===48)return['fog','Fog'];if(c>=51&&c<=57)return['drizzle','Drizzle'];
+  if(c===61||c===80)return['drizzle','Light rain'];if((c>=62&&c<=67)||c===81||c===82)return['rain','Rain'];
+  if(c===75||c===86)return['heavysnow','Heavy snow'];if((c>=71&&c<=77)||c===85)return['snow','Snow'];
+  if(c>=95)return['rain','Thunderstorm'];return['clear','Clear'];
+}
+async function fetchLive(){
+  const f=c=>Math.round(c*9/5+32);
+  try{
+    const r=await fetch('https://api.weather.gov/stations/KBOS/observations/latest');
+    if(!r.ok)throw new Error('NWS '+r.status);
+    const p=(await r.json()).properties||{};
+    const kind=wxFromText(p.textDescription,p.presentWeather);
+    if(!kind)throw new Error('NWS: no description');
+    return{kind,text:p.textDescription||'Clear',tempF:p.temperature&&p.temperature.value!=null?f(p.temperature.value):null,
+      at:new Date(p.timestamp),where:'Logan Airport',source:'National Weather Service',url:'https://forecast.weather.gov/data/obhistory/KBOS.html'};
+  }catch(e){
+    const u='https://api.open-meteo.com/v1/forecast?latitude='+META.lat.toFixed(4)+'&longitude='+META.lon.toFixed(4)+'&current=temperature_2m,weather_code&temperature_unit=fahrenheit';
+    const r=await fetch(u);if(!r.ok)throw new Error('Open-Meteo '+r.status);
+    const c=(await r.json()).current;const [kind,text]=wxFromCode(c.weather_code);
+    return{kind,text,tempF:Math.round(c.temperature_2m),at:new Date(c.time+'Z'),where:CITY.name,source:'Open-Meteo',url:'https://open-meteo.com/'};
+  }
+}
+function wxUi(){
+  wxSel.value=wxChoice;wxSel.parentElement.classList.toggle('on',!!wxChoice);
+  const night=wxMsg().split('|')[1];
+  nightBtn.setAttribute('aria-pressed',String(night==='night'||(night===''&&sceneNight())));
+  if(wxChoice!=='live'){wxNote.hidden=true;return}
+  wxNote.hidden=false;
+  if(!wxLive){wxNote.textContent=wxLiveFailed?'Live weather is unavailable right now, so this is the season’s weather.':'Checking the weather in Boston…';return}
+  const a=document.createElement('a');a.href=wxLive.url;a.target='_blank';a.rel='noopener';a.textContent=wxLive.source+' ↗';
+  const at=isNaN(wxLive.at)?'':', '+wxLive.at.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',timeZone:'America/New_York'});
+  wxNote.replaceChildren(document.createTextNode('Live at '+wxLive.where+': '+(wxLive.tempF!=null?wxLive.tempF+'°F, ':'')+wxText(wxLive.text)+at+(sunDown()?', after dark':'')+'. '),a);
+}
+function wxApply(){const k=wxMsg();if(k!==wxLastSent){wxLastSent=k;generation++;redraw()}wxUi()}
+async function wxRefresh(){
+  try{wxLive=await fetchLive();wxLiveFailed=false}catch(e){console.warn('Live weather:',e);wxLiveFailed=!wxLive}
+  wxApply();
+}
+function wxSet(choice){
+  wxChoice=choice;
+  if(choice==='live'){if(season!==months[localMonth-1])selectSeason(months[localMonth-1]);if(!wxLive)wxRefresh()}
+  wxApply();
+}
+wxSel.onchange=e=>wxSet(e.target.value);
+nightBtn.onclick=()=>{const on=nightBtn.getAttribute('aria-pressed')==='true';wxNight=on?'day':'night';wxApply()};
+setInterval(()=>{if(wxChoice==='live'&&!document.hidden)wxRefresh()},10*60*1000);   // a fresh reading every 10 minutes
+setInterval(()=>{if(wxChoice==='live')wxApply()},60*1000);                           // and dusk on time
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&wxChoice==='live')wxRefresh()});
+$('chips').addEventListener('click',()=>setTimeout(wxUi));$('event').addEventListener('change',()=>setTimeout(wxUi));
+wxSet(wxChoice);
 selectSeason(season);setPlay(playing);requestAnimationFrame(tick);
+wxUi();
 
 </script>
 </body></html>
