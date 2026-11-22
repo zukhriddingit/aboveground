@@ -85,7 +85,8 @@ export interface IncidentStats {
   elapsedMs: number;
 }
 
-export type FeedSource = "backend" | "live" | "sim";
+/** "overnight": the T is closed, so the map runs a labelled sample daytime service on the real tracks. */
+export type FeedSource = "backend" | "live" | "sim" | "overnight";
 
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 

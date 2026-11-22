@@ -85,7 +85,7 @@ const liveKey = (alert: LiveAlert) => `live-${alert.id}`;
 const NOTIFY_KEY = "tverse-notify-closures";
 const VIEW_KEY = "tverse-map-view";
 const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? "").replace(/\/$/, "");
-const SOURCE_LABEL: Record<FeedSource, string> = { backend: "Backend", live: "MBTA", sim: "Simulated" };
+const SOURCE_LABEL: Record<FeedSource, string> = { backend: "Backend", live: "MBTA", sim: "Simulated", overnight: "Sample (T closed)" };
 
 // localStorage can throw (private windows, blocked site data): every access goes through these.
 function readStorage(key: string): string | null {

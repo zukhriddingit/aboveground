@@ -149,7 +149,7 @@ are released when the rider leaves.
 | `tunnelModels.ts`, `tunnelTextures.ts`, `fx.ts` | MBTA fleets, crew, signal, cabinet, work-zone props; canvas textures; sparks and smoke |
 | `FixTheTModal.tsx` + six `*Game.tsx` | Delay card and the mini-games (loaded on demand, like `FixTheTScene`) |
 | `realRepairs.ts` | How long each kind of repair really takes, with sources |
-| `useWorldFeed.ts` | `/api/world` → live MBTA vehicles → simulated fleet; `triggerDelay()` |
+| `useWorldFeed.ts` | `/api/world` → live MBTA vehicles → simulated fleet; overnight (00:30–06:00 Boston, under 20 live trains) a labelled sample service (`?service=sample\|live` forces it); `triggerDelay()` |
 | `alertTranslator.ts` | Plain-English copy for simulated delays and how each repair works |
 
 ## Swapping in Blender models

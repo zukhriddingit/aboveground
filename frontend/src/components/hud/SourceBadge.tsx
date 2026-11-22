@@ -11,6 +11,12 @@ const COPY: Record<FeedSource, { label: string; detail: string; live: boolean }>
     detail: "Couldn't reach the backend or the MBTA, so trains are simulated on the real tracks.",
     live: false,
   },
+  overnight: {
+    label: "Sample trains",
+    detail:
+      "The T is closed overnight, so the map shows a sample daytime service on the real tracks. Live trains come back when service starts.",
+    live: false,
+  },
 };
 
 /** Top-right pill: where the trains on the map come from right now. */
@@ -27,7 +33,9 @@ export function SourceBadge({ source, trainCount }: { source: FeedSource | null;
         <>
           <span className={`size-2 rounded-full ${copy.live ? "bg-emerald-400" : "bg-amber-400"}`} />
           <span className="font-semibold text-white">{copy.label}</span>
-          <span className="hidden text-zinc-400 tabular-nums sm:inline">{trainCount} trains</span>
+          <span className="hidden text-zinc-400 tabular-nums sm:inline">
+            {source === "overnight" ? "T closed overnight" : `${trainCount} trains`}
+          </span>
         </>
       )}
     </div>
