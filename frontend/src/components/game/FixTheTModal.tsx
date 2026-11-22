@@ -6,10 +6,11 @@ import type { Station, TranslatedAlert } from "@/types/tverse";
 import { AccessUpgradeGame } from "./AccessUpgradeGame";
 import { canPlay, gameFor, type GameKind } from "./alertTranslator";
 import { BreakerSequenceGame } from "./BreakerSequenceGame";
+import { isSurfaceStation } from "./faults";
 import { GameStyles } from "./GameStyles";
 import { formatElapsed } from "./format";
 import { IceThawGame } from "./IceThawGame";
-import { closureReason, closureStatus, closureTiming, type LiveAlert } from "./mbtaV3";
+import { announcedWork, closureReason, closureStatus, closureTiming, type LiveAlert, type WorkItem } from "./mbtaV3";
 import type { MiniGameProps } from "./miniGame";
 import { REAL_REPAIRS } from "./realRepairs";
 import type { IncidentStats } from "./incidentSim";
@@ -42,6 +43,68 @@ export interface ExploreInfo {
   label: string;
   /** The MBTA alert it was staged from. */
   alert: LiveAlert;
+  /** For planned work, the jobs the alert names ("switch and rail upgrades"), each with its own puzzle. */
+  items?: WorkItem[];
+}
+
+/** The steps of a job the puzzle has you do; accessibility work depends on the station. */
+function playedSteps(item: WorkItem, station: Station | null): number[] {
+  if (item.id !== "access") return item.play;
+  const green = !station?.line || station.line === "Green";
+  const underground = station ? !isSurfaceStation(station.id) : true;
+  return [...(green ? [1] : []), ...(underground || !green ? [2] : [])];
+}
+
+/** A planned closure's jobs, played back to back with a short card between them. */
+function JobSequence({
+  jobs,
+  names,
+  station,
+  onWin,
+  onExit,
+}: {
+  jobs: GameKind[];
+  names: string[];
+  station: Station | null;
+  onWin: () => void;
+  onExit: () => void;
+}) {
+  const [index, setIndex] = useState(0);
+  const [between, setBetween] = useState(false);
+  useEffect(() => {
+    if (!between) return;
+    const t = setTimeout(() => {
+      setBetween(false);
+      setIndex((i) => i + 1);
+    }, 2600);
+    return () => clearTimeout(t);
+  }, [between]);
+  if (between) {
+    return (
+      <div className="fixed inset-0 z-[75] flex items-center justify-center bg-black text-white" role="status" aria-label="Next job">
+        <GameStyles />
+        <div className="animate-[fixt-pop_0.3s_ease-out] px-6 text-center">
+          <p className="text-[11px] font-semibold tracking-[0.4em] text-[#7ee2a8] uppercase">
+            Job {index + 1} of {jobs.length} done
+          </p>
+          <p className="mt-2 text-[28px] font-light">{names[index]}</p>
+          <p className="mt-4 text-[14px] text-white/70">Next: {names[index + 1]}</p>
+        </div>
+      </div>
+    );
+  }
+  const game = GAMES[jobs[index]];
+  return (
+    <game.Game
+      key={index}
+      onWin={() => (index + 1 < jobs.length ? setBetween(true) : onWin())}
+      onExit={onExit}
+      place={`${station?.name ?? "The station"} · job ${index + 1} of ${jobs.length}`}
+      stationId={station?.id}
+      line={station?.line}
+      planned
+    />
+  );
 }
 
 export interface FixTheTModalProps {
@@ -76,6 +139,16 @@ function FixTheTDialog({ alert, station, stats, simulated, unlockName, explore, 
   const closure = explore?.alert.closure
     ? { timing: closureTiming(explore.alert), reason: closureReason(explore.alert), status: closureStatus(explore.alert) }
     : null;
+  const items = explore?.items ?? [];
+  const jobs: GameKind[] = items.length ? [...new Set(items.map((i) => i.game))] : [kind];
+  const jobName = (g: GameKind) => {
+    const label = items.find((i) => i.game === g)?.label ?? explore?.label ?? game.done;
+    return label.charAt(0).toUpperCase() + label.slice(1);
+  };
+  const announced = explore?.alert.closure ? announcedWork(explore.alert) : null;
+  const sources = [
+    ...new Map([...(announced ? [announced.source] : []), ...jobs.flatMap((g) => REAL_REPAIRS[g].sources)].map((s) => [s.url, s])).values(),
+  ];
   const holdMs = closure ? WON_HOLD_CLOSURE_MS : WON_HOLD_MS;
 
   // The page re-renders every half second while this is open and hands in a fresh onWin each time,
@@ -99,7 +172,10 @@ function FixTheTDialog({ alert, station, stats, simulated, unlockName, explore, 
   }, [step, onClose]);
 
   if (step === "game") {
-    return <game.Game onWin={() => setStep("won")} onExit={() => setStep("brief")} place={station?.name} stationId={station?.id} line={station?.line} />;
+    if (jobs.length > 1) return <JobSequence jobs={jobs} names={jobs.map(jobName)} station={station} onWin={() => setStep("won")} onExit={() => setStep("brief")} />;
+    return (
+      <game.Game onWin={() => setStep("won")} onExit={() => setStep("brief")} place={station?.name} stationId={station?.id} line={station?.line} planned={!!closure} />
+    );
   }
 
   return (
@@ -156,18 +232,72 @@ function FixTheTDialog({ alert, station, stats, simulated, unlockName, explore, 
               </div>
             )}
 
-            <div className="rounded-xl border border-cyan-400/20 bg-cyan-400/5 p-3">
-              <p className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold tracking-widest text-cyan-300 uppercase">
-                <Bot className="size-3.5" />
-                {explore ? `What a ${explore.label} usually involves` : "What actually broke"}
-              </p>
-              <p className="text-[15px] leading-relaxed text-slate-100">{alert.plainExplanation}</p>
-            </div>
+            {items.length > 0 ? (
+              <div className="rounded-xl border border-cyan-400/20 bg-cyan-400/5 p-3">
+                <p className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold tracking-widest text-cyan-300 uppercase">
+                  <Bot className="size-3.5" />
+                  What crews are doing, and why
+                </p>
+                <ol className="space-y-3.5">
+                  {items.map((item, n) => {
+                    const play = playedSteps(item, station);
+                    return (
+                      <li key={item.id}>
+                        <p className="text-[14px] font-semibold text-white">
+                          {items.length > 1 ? `${n + 1}. ` : ""}
+                          {item.label}
+                        </p>
+                        {item.here && <p className="text-[14px] leading-relaxed text-slate-100">{item.here}</p>}
+                        <p className="mt-0.5 text-[13px] leading-relaxed text-slate-300">
+                          {item.what} {item.why}
+                        </p>
+                        <ol className="mt-1.5 space-y-1 border-l border-white/10 pl-3">
+                          {item.steps.map((text, k) => (
+                            <li key={text} className={`text-[12px] leading-snug ${play.includes(k) ? "font-medium text-cyan-200" : "text-slate-400"}`}>
+                              {text}
+                              {play.includes(k) && (
+                                <span className="ml-1.5 inline-block rounded-full bg-cyan-400/15 px-1.5 py-px text-[10px] font-semibold tracking-wide text-cyan-200 uppercase">
+                                  You do this
+                                </span>
+                              )}
+                            </li>
+                          ))}
+                        </ol>
+                      </li>
+                    );
+                  })}
+                </ol>
+                {announced?.why && <p className="mt-3 text-[12px] leading-relaxed text-slate-400">Why close it for days: {announced.why}</p>}
+                {announced && (
+                  <a
+                    href={announced.source.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-2 inline-flex items-center gap-1 text-[11px] text-cyan-300 underline-offset-2 hover:underline"
+                  >
+                    From the MBTA&apos;s announcement: {announced.source.label}
+                    <ExternalLink className="size-3" />
+                  </a>
+                )}
+              </div>
+            ) : (
+              <div className="rounded-xl border border-cyan-400/20 bg-cyan-400/5 p-3">
+                <p className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold tracking-widest text-cyan-300 uppercase">
+                  <Bot className="size-3.5" />
+                  {explore ? `What a ${explore.label} usually involves` : "What actually broke"}
+                </p>
+                <p className="text-[15px] leading-relaxed text-slate-100">{alert.plainExplanation}</p>
+              </div>
+            )}
 
             {explore && (
               <p className="rounded-xl border border-white/10 bg-white/5 p-3 text-[13px] leading-relaxed text-slate-300">
-                The puzzle shows how crews might handle a {explore.label}. Playing it doesn&apos;t change real service, and the alert stays up until the
-                MBTA clears it.
+                {jobs.length > 1
+                  ? `You'll do the marked steps of each job, in the order the MBTA lists them: ${jobs.map(jobName).join(", then ")}.`
+                  : items.length
+                    ? "You'll do the marked steps."
+                    : `The puzzle shows how crews might handle a ${explore.label}.`}{" "}
+                Playing doesn&apos;t change real service, and the alert stays up until the MBTA clears it.
               </p>
             )}
 
@@ -193,7 +323,13 @@ function FixTheTDialog({ alert, station, stats, simulated, unlockName, explore, 
                 className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-fuchsia-500 to-cyan-400 text-base font-semibold text-slate-950 transition hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
               >
                 <Zap className="size-5" />
-                {explore ? `Explore a simulated ${explore.label}` : game.cta}
+                {jobs.length > 1
+                  ? `Do the ${jobs.length} jobs: ${items.map((i) => i.short).join(", then ")}`
+                  : items.length
+                    ? `Try the job: ${items[0].label.toLowerCase()}`
+                    : explore
+                      ? `Explore a simulated ${explore.label}`
+                      : game.cta}
               </button>
             ) : (
               <p className="rounded-xl bg-white/5 p-3 text-sm text-slate-300">
@@ -235,10 +371,52 @@ function FixTheTDialog({ alert, station, stats, simulated, unlockName, explore, 
                   {closure.reason ? ` for ${closure.reason}` : ""}.
                 </p>
                 <p className="mt-1 text-[14px] leading-relaxed text-slate-100">{closure.timing.long}</p>
-                <p className="mt-2 text-[12px] leading-relaxed text-slate-400">The puzzle shows one job; the closure covers the whole project.</p>
               </div>
             )}
 
+            {closure ? (
+              <div className="rounded-xl border border-amber-300/20 bg-amber-300/5 p-3.5">
+                <p className="mb-2 flex items-center gap-2 text-[11px] font-semibold tracking-widest text-amber-200 uppercase">
+                  <Clock3 className="size-3.5" />
+                  How the work adds up
+                </p>
+                <p className="text-[13px] leading-relaxed text-slate-300">
+                  {items.length ? (jobs.length > 1 ? "You did one step of each job, once." : "You did one step of the job, once.") : "You did the job once."} Real crews
+                  do every step, all along the closed stretch and around the clock, so one job&apos;s time is only a small part of the closure.
+                </p>
+                <ul className="mt-2 space-y-2">
+                  {jobs.map((g) => {
+                    const r = REAL_REPAIRS[g];
+                    const examples = jobs.length > 1 ? [r.examples[r.planned ?? 0]] : r.examples;
+                    return (
+                      <li key={g} className="rounded-lg bg-black/30 p-2.5">
+                        <p className="flex flex-wrap items-center gap-2 text-[13px] font-semibold text-white">
+                          {jobName(g)}
+                          <span className="rounded-full bg-amber-300/15 px-2 py-0.5 text-[11px] font-normal text-amber-100">
+                            One job: {r.typical.charAt(0).toLowerCase() + r.typical.slice(1)}
+                          </span>
+                        </p>
+                        {jobs.length === 1 && <p className="mt-1 text-[13px] leading-relaxed text-slate-200">{r.detail}</p>}
+                        {examples.map((example) => (
+                          <p key={example} className="mt-1.5 text-[13px] leading-relaxed text-slate-300">
+                            {example}
+                          </p>
+                        ))}
+                      </li>
+                    );
+                  })}
+                </ul>
+                <p className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-slate-400">
+                  Sources:
+                  {sources.map((src) => (
+                    <a key={src.url} href={src.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-cyan-300 underline-offset-2 hover:underline">
+                      {src.label}
+                      <ExternalLink className="size-3" />
+                    </a>
+                  ))}
+                </p>
+              </div>
+            ) : (
             <div className="rounded-xl border border-amber-300/20 bg-amber-300/5 p-3.5">
               <p className="mb-2 flex flex-wrap items-center gap-2 text-[11px] font-semibold tracking-widest text-amber-200 uppercase">
                 <Clock3 className="size-3.5" />
@@ -263,6 +441,7 @@ function FixTheTDialog({ alert, station, stats, simulated, unlockName, explore, 
                 ))}
               </p>
             </div>
+            )}
 
             {unlockName && <p className="text-center text-sm text-fuchsia-200">New hat unlocked: {unlockName}</p>}
 
