@@ -54,7 +54,7 @@ RiderBadge = Literal["BU", "MIT", "NEU", "Local", "Tourist"]
 StationId = Literal[
     "place-bucen", "place-kencl", "place-hymnl", "place-coecl", "place-boyls", "place-pktrm",
     "place-harsq", "place-knncl", "place-chmnl", "place-dwnxg", "place-chncl", "place-state",
-    "place-aqucl", "place-gover",
+    "place-aqucl", "place-gover", "place-aport",
 ]
 
 REACTION_KEYS: tuple[str, ...] = ("heart", "train", "dunkin", "fire")
@@ -74,6 +74,7 @@ STATION_NAMES: dict[str, str] = {
     "place-state": "State",
     "place-aqucl": "Aquarium",
     "place-gover": "Government Center",
+    "place-aport": "Airport",
 }
 
 

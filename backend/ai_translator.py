@@ -195,6 +195,16 @@ def _classify(raw: str) -> Optional[str]:
     return None
 
 
+def scenario_matches(
+    raw_text: Optional[str], repair_kind: Optional[str] = None, disruption: Optional[str] = None,
+) -> bool:
+    """False for real alert text that is none of the four repair scenarios (police, medical, generic delays):
+    our scenario ops notes would then be made up, so the AI prompt gets neutral context instead."""
+    if (disruption in SCENARIOS) or (repair_kind in REPAIR_TO_SCENARIO) or not (raw_text or "").strip():
+        return True
+    return _classify(raw_text or "") is not None
+
+
 def _minutes(raw: str) -> Optional[int]:
     m = re.search(r"(\d{1,3})\s*(?:-|to)?\s*(?:\d{1,3}\s*)?min", raw.lower())
     return int(m.group(1)) if m else None
@@ -212,11 +222,12 @@ def fallback_alert(
     """Rich deterministic translation for any station/scenario."""
     name = station_name or STATION_NAMES.get(station_id, "this stop")
     line = line or STATION_LINES.get(station_id, "Green")
+    # An explicit kind wins; then what the MBTA text actually says; then the station's demo scenario.
     key = (
         (disruption if disruption in SCENARIOS else None)
         or REPAIR_TO_SCENARIO.get(repair_kind or "")
-        or STATION_SCENARIO.get(station_id)
         or _classify(raw_text or "")
+        or STATION_SCENARIO.get(station_id)
         or "SIGNAL_MODERNIZATION"
     )
     sc = SCENARIOS[key]
@@ -286,7 +297,20 @@ def fallback_narration(
 _client: Any = None
 _client_key: Optional[str] = None
 _cache: dict[str, tuple[float, str]] = {}
+CACHE_MAX = 256
 _last_error_logged = 0.0
+
+
+def _cache_put(key: str, text: str) -> None:
+    """Remember an answer for CACHE_TTL_S; at most CACHE_MAX entries (expired ones go first, then the oldest)."""
+    now = time.monotonic()
+    _cache.pop(key, None)
+    if len(_cache) >= CACHE_MAX:
+        for k in [k for k, (exp, _) in _cache.items() if exp <= now]:
+            del _cache[k]
+    while len(_cache) >= CACHE_MAX:
+        del _cache[next(iter(_cache))]  # dicts keep insertion order: the first key is the oldest
+    _cache[key] = (now + CACHE_TTL_S, text)
 
 
 def _get_client() -> Any:
@@ -348,7 +372,7 @@ async def generate_text(
             )
             text = _clean(raw)
             if text and cache_key:
-                _cache[cache_key] = (time.monotonic() + CACHE_TTL_S, text)
+                _cache_put(cache_key, text)
             return text, (provider if text else "fallback")
         client = _get_client()
         if client is None:
@@ -379,7 +403,7 @@ async def generate_text(
         _note_error(exc, provider)
         return None, "fallback"
     if text and cache_key:
-        _cache[cache_key] = (time.monotonic() + CACHE_TTL_S, text)
+        _cache_put(cache_key, text)
     return text, (provider if text else "fallback")
 
 
@@ -424,11 +448,20 @@ async def translate_alert(
     fb = fallback_alert(station_id, station_name, line, raw_text, fix_min, repair_kind, disruption)
     name = station_name or STATION_NAMES.get(station_id, station_id)
     raw = raw_text or f"{line or STATION_LINES.get(station_id, '')} Line delays near {name}."
+    if scenario_matches(raw_text, repair_kind, disruption):
+        context = (
+            f"What crews are doing (our ops notes): {fb['plainExplanation']}\n"
+            f"Expected wait: about {fb['estimatedFixMin']} minutes.\n"
+        )
+    else:  # a real alert that isn't one of our repair scenarios: don't feed the model invented repair details
+        context = (
+            "What crews are doing: not stated; only describe what the alert text itself says, without guessing a cause.\n"
+            + (f"Expected wait: about {fix_min} minutes.\n" if fix_min else "Expected wait: not stated; do not give a number unless the alert text has one.\n")
+        )
     prompt = (
         f"MBTA alert text: {raw}\n"
         f"Station: {name} ({line or STATION_LINES.get(station_id, 'T')} Line{', ' + branch if branch and branch != line else ''})\n"
-        f"What crews are doing (our ops notes): {fb['plainExplanation']}\n"
-        f"Expected wait: about {fb['estimatedFixMin']} minutes.\n"
+        f"{context}"
         f"Known good alternate move: {fb['alternateMove']}\n"
         "Rewrite this for a rider in exactly 2 sentences."
     )

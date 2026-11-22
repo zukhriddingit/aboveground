@@ -164,17 +164,115 @@ export const MOCK_ALERTS: TranslatedAlert[] = [
 
 const now = Date.now();
 const ago = (min: number) => new Date(now - min * 60_000).toISOString();
-const photo = (seed: string) => `https://picsum.photos/seed/${seed}/720/1280`;
+interface StorySceneOptions {
+  water?: boolean;
+  sun?: string;
+  stars?: boolean;
+}
+
+/**
+ * A 720x1280 generated SVG "photo" for a seeded story, in the T-Feed scene style. Inline, so the story
+ * bubbles and viewer never 404 offline. Integer-only maths: backend/stories.py's story_scene() builds the
+ * byte-identical data URL.
+ */
+export function storyScene(
+  top: string,
+  bottom: string,
+  glow: string,
+  track: string,
+  emojis: [string, number, number, number][],
+  seed: number,
+  { water = false, sun, stars = false }: StorySceneOptions = {},
+): string {
+  let state = (seed * 7919) % 2147483647 || 1;
+  const next = () => (state = (state * 48271) % 2147483647);
+  const int = (lo: number, hi: number) => lo + (next() % (hi - lo + 1));
+  const W = 720;
+  const H = 1280;
+  const base = 990;
+  const out: string[] = [
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">`,
+    `<defs><linearGradient id="s" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${top}"/><stop offset="1" stop-color="${bottom}"/></linearGradient>`,
+    `<radialGradient id="g" cx=".5" cy=".4" r=".55"><stop offset="0" stop-color="${glow}" stop-opacity=".75"/><stop offset="1" stop-color="${glow}" stop-opacity="0"/></radialGradient></defs>`,
+    `<rect width="${W}" height="${H}" fill="url(#s)"/>`,
+    `<circle cx="360" cy="520" r="430" fill="url(#g)"/>`,
+  ];
+  if (stars) {
+    for (let i = 0; i < 18; i++) {
+      const cx = int(20, 700);
+      const cy = int(60, 520);
+      const r = int(2, 4);
+      out.push(`<circle cx="${cx}" cy="${cy}" r="${r}" fill="#ffffff" opacity="0.${int(40, 90)}"/>`);
+    }
+  }
+  if (sun) out.push(`<circle cx="360" cy="${base - 230}" r="120" fill="${sun}"/>`);
+  let x = -16;
+  while (x < W) {
+    const bw = int(60, 118);
+    const bh = water ? int(80, 250) : int(140, 430); // a river view: a low, distant skyline
+    out.push(`<rect x="${x}" y="${base - bh}" width="${bw}" height="${bh}" fill="#0a0f24" opacity=".94"/>`);
+    for (let wy = base - bh + 22; wy < base - 18; wy += 36) {
+      for (let wx = x + 10; wx < x + bw - 14; wx += 24) {
+        if (next() % 100 < 30) out.push(`<rect x="${wx}" y="${wy}" width="8" height="12" fill="#ffd98a" opacity="0.${int(45, 95)}"/>`);
+      }
+    }
+    x += bw + int(4, 14);
+  }
+  if (water) {
+    out.push(`<rect y="${base}" width="${W}" height="${H - base}" fill="#0b1636"/>`);
+    for (let i = 0; i < 10; i++) {
+      const half = 40 + int(40, 200);
+      out.push(
+        `<rect x="${360 - half}" y="${base + 26 + i * 28}" width="${2 * half}" height="5" rx="2.5" fill="${sun ?? glow}" opacity="0.${String(55 - i * 5).padStart(2, "0")}"/>`,
+      );
+    }
+  } else {
+    out.push(`<rect y="${base}" width="${W}" height="${H - base}" fill="#060a18"/>`);
+  }
+  const ty = water ? base + 8 : base + 48;
+  out.push(`<rect y="${ty - 12}" width="${W}" height="24" fill="${track}" opacity=".28"/>`);
+  out.push(`<rect y="${ty - 3}" width="${W}" height="6" fill="${track}"/>`);
+  for (const [ch, cx, cy, size] of emojis) {
+    out.push(
+      `<text x="${cx}" y="${cy}" font-size="${size}" text-anchor="middle" dominant-baseline="central" font-family="Apple Color Emoji,Segoe UI Emoji,Noto Color Emoji,sans-serif">${ch}</text>`,
+    );
+  }
+  out.push("</svg>");
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(out.join(""))}`;
+}
+
+const GREEN = "#38d283";
+const RED = "#ff5948";
+
+/** One scene per seeded story, matching its caption (same as STORY_SCENES in backend/stories.py). */
+export const STORY_SCENES: Record<string, string> = {
+  // $7 pizza slice before the game, Kenmore
+  s1: storyScene("#3a1240", "#ff7a3d", "#ffb36b", GREEN, [["🍕", 360, 560, 300], ["⚾", 560, 330, 110], ["🏟️", 170, 310, 110]], 11),
+  // Sox fans on Lansdowne St at night
+  s2: storyScene("#0b1442", "#9b1c2e", RED, GREEN, [["🧢", 360, 560, 280], ["⚾", 190, 330, 110], ["📣", 560, 320, 110]], 12, { stars: true }),
+  // Sunset over the Charles from the BU Bridge
+  s3: storyScene("#3d1a5c", "#ff8a4c", "#ffcf6b", GREEN, [["🚣", 540, 1110, 90]], 13, { water: true, sun: "#ffd27a" }),
+  // Bates Hall reading room, Boston Public Library (the green lamps)
+  s4: storyScene("#0b2a24", "#1f5f4a", "#7ee0a8", GREEN, [["📚", 360, 540, 280], ["💡", 190, 310, 110], ["🏛️", 550, 300, 110]], 14),
+  // Ramen under $15 near Copley
+  s5: storyScene("#2a0f2e", "#c2410c", "#ffab31", GREEN, [["🍜", 360, 560, 290], ["🥢", 560, 350, 120], ["♨️", 190, 340, 100]], 15),
+  // Free outdoor show at the Parkman Bandstand on the Common
+  s6: storyScene("#120b3a", "#4c1d95", "#c084fc", GREEN, [["🎸", 360, 540, 270], ["🎶", 190, 320, 110], ["🌳", 570, 330, 120]], 16, { stars: true }),
+  // Chinatown dumplings, 8 for $6
+  s7: storyScene("#3a0d12", "#b4361c", "#ffab31", GREEN, [["🥟", 360, 560, 290], ["🏮", 170, 280, 110], ["🏮", 550, 260, 110]], 17),
+  // Street musician in the Harvard Pit
+  s8: storyScene("#1a0b2e", "#7f1d1d", RED, RED, [["🎷", 360, 540, 280], ["🎵", 190, 330, 110], ["🎶", 560, 300, 110]], 18),
+};
 
 export const MOCK_STORIES: StationStory[] = [
-  { id: "s1", stationId: "place-kencl", category: "CHEAP_EATS", author: "maya.bu", caption: "$7 pizza slice the size of my face before the game", placeName: "Pizza by the Slice", priceTag: "$7", walkMin: 4, imageUrl: photo("kenmore-slice"), createdAt: ago(12) },
-  { id: "s2", stationId: "place-kencl", category: "EVENTS", author: "jtan", caption: "Sox fans spilling onto Lansdowne already", placeName: "Lansdowne St", walkMin: 6, imageUrl: photo("lansdowne"), createdAt: ago(25) },
-  { id: "s3", stationId: "place-bucen", category: "VIBES", author: "terriergirl", caption: "Sunset over the Charles from the BU bridge", placeName: "BU Bridge", walkMin: 5, imageUrl: photo("charles-sunset"), createdAt: ago(40) },
-  { id: "s4", stationId: "place-coecl", category: "VIBES", author: "readsalot", caption: "Bates Hall reading room is silent and gorgeous", placeName: "Boston Public Library", walkMin: 1, imageUrl: photo("bates-hall"), createdAt: ago(18) },
-  { id: "s5", stationId: "place-coecl", category: "CHEAP_EATS", author: "noodlenerd", caption: "Ramen under $15 that actually slaps", placeName: "Boylston St ramen", priceTag: "$14", walkMin: 3, imageUrl: photo("copley-ramen"), createdAt: ago(55) },
-  { id: "s6", stationId: "place-pktrm", category: "EVENTS", author: "commonfolk", caption: "Free outdoor show at the Parkman Bandstand tonight", placeName: "Boston Common", walkMin: 2, imageUrl: photo("common-show"), createdAt: ago(8) },
-  { id: "s7", stationId: "place-boyls", category: "CHEAP_EATS", author: "dumplingdan", caption: "Chinatown dumplings, 8 for $6", placeName: "Chinatown", priceTag: "$6", walkMin: 5, imageUrl: photo("chinatown-dumplings"), createdAt: ago(30) },
-  { id: "s8", stationId: "place-harsq", category: "VIBES", author: "pitpal", caption: "Street musician in the Pit is unreal right now", placeName: "The Pit", walkMin: 1, imageUrl: photo("harvard-pit"), createdAt: ago(15) },
+  { id: "s1", stationId: "place-kencl", category: "CHEAP_EATS", author: "maya.bu", caption: "$7 pizza slice the size of my face before the game", placeName: "Pizza by the Slice", priceTag: "$7", walkMin: 4, imageUrl: STORY_SCENES.s1, createdAt: ago(12) },
+  { id: "s2", stationId: "place-kencl", category: "EVENTS", author: "jtan", caption: "Sox fans spilling onto Lansdowne already", placeName: "Lansdowne St", walkMin: 6, imageUrl: STORY_SCENES.s2, createdAt: ago(25) },
+  { id: "s3", stationId: "place-bucen", category: "VIBES", author: "terriergirl", caption: "Sunset over the Charles from the BU bridge", placeName: "BU Bridge", walkMin: 5, imageUrl: STORY_SCENES.s3, createdAt: ago(40) },
+  { id: "s4", stationId: "place-coecl", category: "VIBES", author: "readsalot", caption: "Bates Hall reading room is silent and gorgeous", placeName: "Boston Public Library", walkMin: 1, imageUrl: STORY_SCENES.s4, createdAt: ago(18) },
+  { id: "s5", stationId: "place-coecl", category: "CHEAP_EATS", author: "noodlenerd", caption: "Ramen under $15 that actually slaps", placeName: "Boylston St ramen", priceTag: "$14", walkMin: 3, imageUrl: STORY_SCENES.s5, createdAt: ago(55) },
+  { id: "s6", stationId: "place-pktrm", category: "EVENTS", author: "commonfolk", caption: "Free outdoor show at the Parkman Bandstand tonight", placeName: "Boston Common", walkMin: 2, imageUrl: STORY_SCENES.s6, createdAt: ago(8) },
+  { id: "s7", stationId: "place-boyls", category: "CHEAP_EATS", author: "dumplingdan", caption: "Chinatown dumplings, 8 for $6", placeName: "Chinatown", priceTag: "$6", walkMin: 5, imageUrl: STORY_SCENES.s7, createdAt: ago(30) },
+  { id: "s8", stationId: "place-harsq", category: "VIBES", author: "pitpal", caption: "Street musician in the Pit is unreal right now", placeName: "The Pit", walkMin: 1, imageUrl: STORY_SCENES.s8, createdAt: ago(15) },
 ];
 
 export const MOCK_WORLD: WorldResponse = {
