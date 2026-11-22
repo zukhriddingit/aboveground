@@ -20,3 +20,5 @@ backend/reports_data.json.tmp
 # Stories: backend/stories.py mirrors rider-posted Stories here
 backend/stories_data.json
 backend/stories_data.json.tmp
+backend/accounts_data.json
+backend/accounts_data.json.tmp
