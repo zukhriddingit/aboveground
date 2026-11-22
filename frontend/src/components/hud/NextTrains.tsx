@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { ChevronDown, TrainFront, TriangleAlert, X } from "lucide-react";
-import { countdownLabel, effectLabel, type Arrival, type LiveAlert } from "@/components/game";
+import { closureTiming, countdownLabel, effectLabel, type Arrival, type LiveAlert } from "@/components/game";
 import { StaleEtaBadge } from "@/components/quickcheck";
 import { branchLabel } from "@/components/transit";
 import { CONTROL, DANGER_TEXT, FOCUS, LABEL, PANEL, WARN_TEXT } from "@/lib/ui";
@@ -135,7 +135,10 @@ export function NextTrains({
               className={`mb-2 flex w-full items-start gap-2 rounded-lg border border-[#DA291C]/45 bg-[#DA291C]/[0.06] p-2 text-left text-[12px] text-zinc-100 hover:bg-[#DA291C]/[0.12] ${FOCUS}`}
             >
               <X className={`mt-0.5 size-3.5 shrink-0 ${DANGER_TEXT}`} strokeWidth={3} />
-              <span className="line-clamp-2">{a.shortHeader}</span>
+              <span className="min-w-0">
+                <span className="line-clamp-2">{a.shortHeader}</span>
+                <span className={`mt-0.5 block text-[11px] font-semibold ${DANGER_TEXT}`}>{closureTiming(a, now).short}</span>
+              </span>
             </button>
           ))}
 

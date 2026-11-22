@@ -15,7 +15,7 @@ plus Harvard and Kendall/MIT on the Red Line. Live MBTA trains are drawn citywid
 | 1 · Backend, MBTA, AI | `backend/**` | FastAPI on :8000, MBTA poller (`/vehicles`, `/alerts`, `/predictions`) with mock-train fallback, in-memory Stories (12 seeded + POST), AI plain-English alert translator with fallback templates |
 | 2 · 3D map, trains, avatar | `frontend/src/components/map/**`, `frontend/src/app/map-dev/**` | MapLibre 3D Boston, glowing T lines, Three.js layer: train pods, station beacons, alert holograms, tourist landmark beacons, the avatar + hats + Demo Ride |
 | 3 · Stories, Tourist Mode | `frontend/src/components/stories/**` | Story bubbles, Instagram-style Story viewer, 5-second Post Story sheet, Tourist narrator card (`speechSynthesis`) |
-| 4 · Fix the T, HUD, integration | `frontend/src/components/game/**`, `frontend/src/components/hud/**`, `frontend/src/app/page.tsx` | Six 3D repair mini-games, AI delay card, Transit Rank XP + wardrobe, map controls, dock, wiring everything in `page.tsx` |
+| 4 · Fix the T, HUD, integration | `frontend/src/components/game/**`, `frontend/src/components/hud/**`, `frontend/src/app/page.tsx` | Seven 3D repair mini-games, AI delay card, Transit Rank XP + wardrobe, map controls, dock, wiring everything in `page.tsx` |
 
 Shared, locked at minute 0 (change only with the team's OK, in a small separate commit):
 

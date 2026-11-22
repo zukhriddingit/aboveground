@@ -1,7 +1,8 @@
 // The street opens over a broken stretch of subway and shows the real tunnel under it: tiled walls,
 // the station platform with its held train, steel columns, track, overhead wire or bare third rail,
 // and the work zone where the fault actually is (an interlocking past the platform, a junction,
-// a cracked rail between stations, or the disabled train itself), set up the way MBTA crews do it.
+// a cracked rail between stations, the disabled train itself, or a new elevator going in at the
+// platform), set up the way MBTA crews do it.
 //
 // Everything below the street is only visible through the hole: a depth-only "ground" mesh with the
 // hole cut out is drawn first, so the rest of the tunnel stays buried. Lengths along the track are
@@ -71,6 +72,9 @@ const WALK_LAT = 21;
 const PLATFORM_EDGE = 12;
 const WALK_INNER = 20.3;
 const PLATFORM_LAT = 16.5;
+/** Accessibility work: the new elevator's hoistway, against the wall of the right-hand platform. */
+const ACCESS_S = 20;
+const ACCESS_LAT = -(W - 2.6);
 
 const HOT = [new T.Color("#ffffff"), new T.Color("#ffd36b"), new T.Color("#ff9a2b"), new T.Color("#9fe7ff")];
 const ARC = [new T.Color("#ffffff"), new T.Color("#bfe6ff"), new T.Color("#7fc7ff")];
@@ -520,6 +524,37 @@ export class TunnelCutaway extends TrackCorridor {
         this.hazards.push(lamp);
       }
     }
+    if (this.fault === "access") {
+      // A new elevator going in at the back of the platform: a steel-framed glass hoistway up to the street,
+      // plywood hoarding round its foot, and new precast edge units stacked by the platform edge.
+      const y0 = this.platformY;
+      const frame: T.BufferGeometry[] = [];
+      for (const ds of [-2.4, 2.4]) for (const dl of [-2.2, 2.2]) frame.push(this.boxAt(ACCESS_S + ds, ACCESS_LAT + dl, y0 / 2, 0.3, -y0, 0.3));
+      for (let y = y0 + 3; y < -0.5; y += 3.5) {
+        for (const dl of [-2.2, 2.2]) frame.push(this.boxAt(ACCESS_S, ACCESS_LAT + dl, y, 4.8, 0.25, 0.3));
+      }
+      this.mesh(frame, this.surfaceMat({ color: "#3a3e44" }));
+      this.mesh(
+        [
+          this.boxAt(ACCESS_S, ACCESS_LAT + 2.2, y0 / 2, 4.6, -y0, 0.06),
+          this.boxAt(ACCESS_S + 2.4, ACCESS_LAT, y0 / 2, 0.06, -y0, 4.2),
+          this.boxAt(ACCESS_S - 2.4, ACCESS_LAT, y0 / 2, 0.06, -y0, 4.2),
+        ],
+        new T.MeshLambertMaterial({ color: "#a9cbe6", transparent: true, opacity: 0.22, depthWrite: false, side: T.DoubleSide }),
+      );
+      this.mesh(
+        [
+          this.boxAt(ACCESS_S, ACCESS_LAT + 3.4, y0 + 1.3, 7.4, 2.6, 0.2),
+          this.boxAt(ACCESS_S + 3.7, ACCESS_LAT + 1.6, y0 + 1.3, 0.2, 2.6, 3.6),
+          this.boxAt(ACCESS_S - 3.7, ACCESS_LAT + 1.6, y0 + 1.3, 0.2, 2.6, 3.6),
+        ],
+        this.surfaceMat({ color: "#d9d3c4" }),
+      );
+      const stack: T.BufferGeometry[] = [];
+      for (let k = 0; k < 3; k++) stack.push(this.boxAt(ACCESS_S - 10, -14.2, y0 + 0.45 + k * 0.95, 4.5, 0.9, 2.3));
+      this.mesh(stack, this.surfaceMat({ color: "#cfc9bd" }));
+      this.mesh([this.boxAt(ACCESS_S - 10, -13.4, y0 + 2 * 0.95 + 0.92, 4.4, 0.03, 1.8)], this.surfaceMat({ color: "#f2c200" }));
+    }
     return { arcLight, brokenWire };
   }
 
@@ -528,6 +563,7 @@ export class TunnelCutaway extends TrackCorridor {
     const f = this.faultS;
     const d = this.dir;
     const train = this.fault === "train";
+    const access = this.fault === "access";
     const p = this.sampleAt(f);
     const axis = new T.Vector3(p.tx * d, 0, p.tz * d);
     const side = new T.Vector3(-p.tz, 0, p.tx);
@@ -541,6 +577,10 @@ export class TunnelCutaway extends TrackCorridor {
       this.cabinet.group.localToWorld(this.focus.set(1.2, 1.98, 1.6));
     } else if (this.fault === "power") {
       this.focus.copy(this.arcLight!.position);
+    } else if (access) {
+      // Step-free work: the new platform edge, not the track.
+      this.at(this.sampleAt(ACCESS_S), ACCESS_LAT + 2.2, this.platformY, this.focus);
+      floor = this.platformY;
     } else {
       const s = this.fault === "track" ? f : f - (this.fault === "frozen" ? 8.6 : 16) * d;
       const machine = this.fault === "switch";
@@ -548,7 +588,8 @@ export class TunnelCutaway extends TrackCorridor {
     }
     if (this.fault === "track" || this.fault === "frozen") floor = RAIL - .45;
     stageCrew(this.crew, this.fault, this.focus, this.cabinet.group, axis, side, floor, FLOOR);
-    if (!train) {
+    // Station work needs no track protection: trains just run through without stopping.
+    if (!train && !access) {
       const ls = f - 30 * d;
       const pos = this.at(this.sampleAt(ls), this.onPlatform(ls) ? -13.8 : -17.4, this.onPlatform(ls) ? this.platformY : FLOOR);
       this.crew.add("lookout", pos, pos, this.at(this.sampleAt(ls - 25 * d), this.sideLat(ls), pos.y));

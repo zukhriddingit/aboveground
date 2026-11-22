@@ -5,7 +5,7 @@
 import type { StationId } from "@/types/tverse";
 import type { GameKind } from "./alertTranslator";
 
-export type FaultKind = "signal" | "track" | "switch" | "power" | "train" | "frozen";
+export type FaultKind = "signal" | "track" | "switch" | "power" | "train" | "frozen" | "access";
 
 /** Rapid-transit stations in a tunnel, where the street can open over the trouble. */
 const UNDERGROUND = new Set<string>([
@@ -43,11 +43,13 @@ export function faultForGame(game: GameKind): FaultKind {
       return "train";
     case "ICE_THAW":
       return "frozen";
+    case "ACCESS_UPGRADE":
+      return "access";
   }
 }
 
-/** Meters from the station along the line. */
-const METERS: Record<FaultKind, number> = { signal: 130, track: 170, switch: 120, power: 120, frozen: 120, train: 0 };
+/** Meters from the station along the line. Accessibility work is at the station itself. */
+const METERS: Record<FaultKind, number> = { signal: 130, track: 170, switch: 120, power: 120, frozen: 120, train: 0, access: 0 };
 
 /** Which way the trouble lies from each station: toward a neighbor, or away from it. */
 const DIRECTION: Partial<Record<StationId, { toward: StationId; away?: boolean; meters?: Partial<Record<FaultKind, number>> }>> = {
@@ -76,10 +78,13 @@ export function faultSite(stationId: StationId, kind: FaultKind) {
 export function faultPlace(kind: FaultKind, stationId: StationId, station: string) {
   if (isSurfaceStation(stationId)) {
     if (kind === "train") return `A disabled train is stopped at ${station}.`;
+    if (kind === "access") return `Crews are raising the platforms at ${station}; trains are skipping it.`;
     const where = stationId === "place-bucen" ? "in the median" : "at street level";
     return `Crews are on the tracks ${where} just past ${station}; trains are standing by.`;
   }
   switch (kind) {
+    case "access":
+      return `Crews are building elevators and raising the platforms at ${station}; trains are skipping it.`;
     case "train":
       return `A disabled train is blocking the platform at ${station}.`;
     case "switch":

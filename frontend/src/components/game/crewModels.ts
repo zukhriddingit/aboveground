@@ -447,6 +447,7 @@ const primary: Record<FaultKind, Tool> = {
   power: "stick",
   train: "hose",
   frozen: "torch",
+  access: "bar",
 };
 
 // One draw for the flexible lead. Its slack follows both gloves even during the approach.
