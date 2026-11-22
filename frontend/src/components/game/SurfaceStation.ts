@@ -259,12 +259,31 @@ export class SurfaceStation extends TrackCorridor {
       this.group.add(this.arcLight);
     }
     if (this.fault === "train") this.at(this.sampleAt(WAIT_S + 30), -TRACK, RAIL_Y + 4, this.focus);
+    if (this.fault === "access") {
+      // The near platform rebuilt 8 in above the rail (2 ft at this 3x section): new precast edge units with
+      // their yellow tactile strip, one gap still to fill, and more units stacked on the median.
+      const top = RAIL_Y + 0.61;
+      const edge: T.BufferGeometry[] = [];
+      const strip: T.BufferGeometry[] = [];
+      for (let s = -27; s <= 15; s += 6) {
+        if (s === 9) continue;
+        edge.push(this.boxAt(s, -TRACK - 5.35, top - 0.63, 5.9, 1.26, 2.3));
+        strip.push(this.boxAt(s, -TRACK - 5.1, top + 0.015, 5.8, 0.03, 1.8));
+      }
+      for (let k = 0; k < 3; k++) edge.push(this.boxAt(22, -16, 0.3 + 0.63 + k * 1.3, 5.6, 1.26, 2.3));
+      strip.push(this.boxAt(22, -15.75, 0.3 + 2 * 1.3 + 1.28, 5.5, 0.03, 1.8));
+      this.mesh(edge, lambert({ color: "#cfc9bd" }), this.group);
+      this.mesh(strip, lambert({ color: "#f2c200" }), this.group);
+      this.at(this.sampleAt(9), -TRACK - 5.2, top, this.focus);
+    }
     return cabinet;
   }
 
   private buildWorkZone() {
     const spots: Array<[number, number, number, number]> =
-      this.fault === "signal" || this.fault === "power"
+      this.fault === "access"
+        ? [[-6, -16, 6, -13.2], [20, -16.5, 12, -13.4]]
+        : this.fault === "signal" || this.fault === "power"
         ? [[-14, -14, 1, -(MEDIAN - 6.2)], [-10, -15, 5, -(MEDIAN - 6.6)]]
         : this.fault === "track"
           ? [[-14, -14, -2.5, -TRACK - 4.2], [-9, -15, 2.5, -TRACK - 4.4]]

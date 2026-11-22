@@ -1,13 +1,15 @@
 "use client";
 
 import { useEffect, useEffectEvent, useId, useState } from "react";
-import { Bot, CircleCheck, Clock3, ExternalLink, Eye, ShieldAlert, Users, X, Zap } from "lucide-react";
+import { Bot, CalendarClock, CircleCheck, Clock3, ExternalLink, Eye, ShieldAlert, Users, X, Zap } from "lucide-react";
 import type { Station, TranslatedAlert } from "@/types/tverse";
+import { AccessUpgradeGame } from "./AccessUpgradeGame";
 import { canPlay, gameFor, type GameKind } from "./alertTranslator";
 import { BreakerSequenceGame } from "./BreakerSequenceGame";
 import { GameStyles } from "./GameStyles";
 import { formatElapsed } from "./format";
 import { IceThawGame } from "./IceThawGame";
+import { closureReason, closureStatus, closureTiming, type LiveAlert } from "./mbtaV3";
 import type { MiniGameProps } from "./miniGame";
 import { REAL_REPAIRS } from "./realRepairs";
 import type { IncidentStats } from "./incidentSim";
@@ -24,12 +26,23 @@ const GAMES: Record<GameKind, { cta: string; done: string; Game: (p: MiniGamePro
   BREAKER_SEQUENCE: { cta: "Help Restore Power", done: "Power restored!", Game: BreakerSequenceGame },
   RESCUE_COUPLE: { cta: "Help Clear the Train", done: "Train towed clear!", Game: RescueCoupleGame },
   ICE_THAW: { cta: "Help Thaw the Switch", done: "Switch thawed!", Game: IceThawGame },
+  ACCESS_UPGRADE: { cta: "Help Make It Step-Free", done: "Station accessible!", Game: AccessUpgradeGame },
 };
 
 /** How long the "how long it really takes" card stays up before the repair plays. */
 const WON_HOLD_MS = 9000;
+/** Longer at a closed station: the card also says how long it stays closed in real life. */
+const WON_HOLD_CLOSURE_MS = 14000;
 
 type Step = "brief" | "game" | "won";
+
+/** A simulated repair staged from a live MBTA alert. */
+export interface ExploreInfo {
+  game: GameKind;
+  label: string;
+  /** The MBTA alert it was staged from. */
+  alert: LiveAlert;
+}
 
 export interface FixTheTModalProps {
   alert: TranslatedAlert | null;
@@ -41,7 +54,7 @@ export interface FixTheTModalProps {
   /** Name of the hat this fix unlocks, if any. */
   unlockName: string | null;
   /** Staged from a live MBTA alert: the puzzle illustrates a repair for the published cause; real service is untouched. */
-  explore?: { game: GameKind; label: string } | null;
+  explore?: ExploreInfo | null;
   onClose: () => void;
   onWin: (alert: TranslatedAlert) => void;
 }
@@ -59,15 +72,20 @@ function FixTheTDialog({ alert, station, stats, simulated, unlockName, explore, 
   const kind = explore?.game ?? gameFor(alert);
   const game = GAMES[kind];
   const real = REAL_REPAIRS[kind];
+  const place = station?.name ?? "The station";
+  const closure = explore?.alert.closure
+    ? { timing: closureTiming(explore.alert), reason: closureReason(explore.alert), status: closureStatus(explore.alert) }
+    : null;
+  const holdMs = closure ? WON_HOLD_CLOSURE_MS : WON_HOLD_MS;
 
   // The page re-renders every half second while this is open and hands in a fresh onWin each time,
   // so the timer must not depend on it.
   const continueToRepair = useEffectEvent(() => onWin(alert));
   useEffect(() => {
     if (step !== "won") return;
-    const timer = setTimeout(continueToRepair, WON_HOLD_MS);
+    const timer = setTimeout(continueToRepair, holdMs);
     return () => clearTimeout(timer);
-  }, [step]);
+  }, [step, holdMs]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -81,7 +99,7 @@ function FixTheTDialog({ alert, station, stats, simulated, unlockName, explore, 
   }, [step, onClose]);
 
   if (step === "game") {
-    return <game.Game onWin={() => setStep("won")} onExit={() => setStep("brief")} place={station?.name} />;
+    return <game.Game onWin={() => setStep("won")} onExit={() => setStep("brief")} place={station?.name} stationId={station?.id} line={station?.line} />;
   }
 
   return (
@@ -126,6 +144,17 @@ function FixTheTDialog({ alert, station, stats, simulated, unlockName, explore, 
               <p className="mb-1.5 text-[11px] font-semibold tracking-widest text-slate-500 uppercase">{explore ? "What the MBTA is reporting now" : "What the MBTA said"}</p>
               <p className="font-mono text-[13px] leading-relaxed text-slate-300">{alert.rawMbtaText}</p>
             </div>
+
+            {closure && (
+              <div className="rounded-xl border border-red-400/25 bg-red-500/[0.06] p-3">
+                <p className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold tracking-widest text-red-200 uppercase">
+                  <CalendarClock className="size-3.5" />
+                  How long it&apos;s out
+                  <span className="rounded-full bg-red-400/15 px-2 py-0.5 text-[11px] tracking-normal text-red-100 normal-case">{closure.timing.short}</span>
+                </p>
+                <p className="text-[14px] leading-relaxed text-slate-100">{closure.timing.long}</p>
+              </div>
+            )}
 
             <div className="rounded-xl border border-cyan-400/20 bg-cyan-400/5 p-3">
               <p className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold tracking-widest text-cyan-300 uppercase">
@@ -185,15 +214,35 @@ function FixTheTDialog({ alert, station, stats, simulated, unlockName, explore, 
                   {explore ? "Simulated repair complete" : game.done}
                 </h2>
                 <p className="text-sm text-slate-300">
-                  {explore ? "Real crews are still on it: the MBTA alert stays up until they clear it." : "Next, watch the crew finish it down in the tunnel."}
+                  {closure
+                    ? `In real life ${place} is still ${closure.status}.`
+                    : explore
+                      ? "Real crews are still on it: the MBTA alert stays up until they clear it."
+                      : "Next, watch the crew finish it down in the tunnel."}
                 </p>
               </div>
             </div>
 
+            {closure && (
+              <div className="rounded-xl border border-red-400/25 bg-red-500/[0.06] p-3.5">
+                <p className="mb-2 flex flex-wrap items-center gap-2 text-[11px] font-semibold tracking-widest text-red-200 uppercase">
+                  <CalendarClock className="size-3.5" />
+                  The real closure
+                  <span className="rounded-full bg-red-400/15 px-2 py-0.5 text-[11px] tracking-normal text-red-100 normal-case">{closure.timing.short}</span>
+                </p>
+                <p className="text-[14px] leading-relaxed font-medium text-white">
+                  {place} is still {closure.status}
+                  {closure.reason ? ` for ${closure.reason}` : ""}.
+                </p>
+                <p className="mt-1 text-[14px] leading-relaxed text-slate-100">{closure.timing.long}</p>
+                <p className="mt-2 text-[12px] leading-relaxed text-slate-400">The puzzle is one repair job; the closure covers the whole project.</p>
+              </div>
+            )}
+
             <div className="rounded-xl border border-amber-300/20 bg-amber-300/5 p-3.5">
               <p className="mb-2 flex flex-wrap items-center gap-2 text-[11px] font-semibold tracking-widest text-amber-200 uppercase">
                 <Clock3 className="size-3.5" />
-                How long it really takes
+                {closure ? "How long one repair like this takes" : "How long it really takes"}
                 <span className="rounded-full bg-amber-300/15 px-2 py-0.5 text-[11px] tracking-normal text-amber-100 normal-case">{real.typical}</span>
               </p>
               <p className="text-[14px] leading-relaxed text-slate-100">{real.detail}</p>
@@ -226,7 +275,7 @@ function FixTheTDialog({ alert, station, stats, simulated, unlockName, explore, 
               <span
                 aria-hidden
                 className="absolute inset-y-0 left-0 bg-emerald-200/60 [animation-fill-mode:forwards] [animation-name:fixt-fill] [animation-timing-function:linear]"
-                style={{ animationDuration: `${WON_HOLD_MS}ms` }}
+                style={{ animationDuration: `${holdMs}ms` }}
               />
               <Eye className="relative size-4" />
               <span className="relative">{explore ? "Close" : "Watch the crew fix it"}</span>
