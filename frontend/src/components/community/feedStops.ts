@@ -31,6 +31,7 @@ export const FEED_STOPS: FeedStop[] = [
   { id: "place-chncl", name: "Chinatown", lines: ["Orange"], lng: -71.062752, lat: 42.352547 },
   { id: "place-state", name: "State", lines: ["Orange", "Blue"], lng: -71.057598, lat: 42.358978 },
   { id: "place-aqucl", name: "Aquarium", lines: ["Blue"], lng: -71.051652, lat: 42.359784 },
+  { id: "place-aport", name: "Airport", lines: ["Blue"], lng: -71.030395, lat: 42.374262 },
 ];
 
 /** Stops per line, in the order a rider meets them on the MVP corridor. */
@@ -38,7 +39,7 @@ export const STOPS_BY_LINE: Record<TransitLine, StationId[]> = {
   Green: ["place-bucen", "place-kencl", "place-hymnl", "place-coecl", "place-boyls", "place-pktrm", "place-gover"],
   Red: ["place-harsq", "place-knncl", "place-chmnl", "place-pktrm", "place-dwnxg"],
   Orange: ["place-chncl", "place-dwnxg", "place-state"],
-  Blue: ["place-gover", "place-state", "place-aqucl"],
+  Blue: ["place-gover", "place-state", "place-aqucl", "place-aport"],
 };
 
 const BY_ID = new Map(FEED_STOPS.map((s) => [s.id, s]));

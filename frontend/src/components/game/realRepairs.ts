@@ -33,13 +33,9 @@ export const REAL_REPAIRS: Record<GameKind, RealRepair> = {
     typical: "About 45 minutes a weld",
     detail:
       "A two-person crew needs a little under 45 minutes for one thermite weld; the molten steel itself pours after 25 to 35 seconds in the crucible. Fixing a broken rail usually means two welds in an overnight window.",
-    examples: [
-      "Clearing every MBTA slow zone took 14 months: 221 days of work and 23 planned closures replaced over 250,000 feet of rail and lifted more than 220 speed restrictions by December 2024.",
-    ],
-    sources: [
-      { label: "Railway Age, May 2023", url: "https://www.railwayage.com/mw/welding-physics-and-cwr/" },
-      { label: "MBTA Track Improvement Program", url: "https://www.mbta.com/projects/track-improvement-program" },
-    ],
+    // No current, sourced MBTA case yet: the old slow-zone example described work finished in 2024.
+    examples: [],
+    sources: [{ label: "Railway Age, May 2023", url: "https://www.railwayage.com/mw/welding-physics-and-cwr/" }],
   },
   SWITCH_THROW: {
     typical: "Usually fixed overnight",

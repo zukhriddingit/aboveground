@@ -143,9 +143,13 @@ export function setForcedOffline(on: boolean) {
   if (!on) void flushPending();
 }
 
-export function noteServerSignals(list: StationSignals[], online = true) {
+/**
+ * Merge server signals in. `replace`: `list` is the full GET /api/reports/summary, so stops missing
+ * from it have no live reports any more (their > 20 min signals expired) and are dropped.
+ */
+export function noteServerSignals(list: StationSignals[], online = true, { replace = false } = {}) {
   setState((s) => {
-    const server = { ...s.server };
+    const server: QuickState["server"] = replace ? {} : { ...s.server };
     for (const sig of list) server[sig.stationId] = sig;
     return { server, online };
   });
@@ -157,7 +161,8 @@ export function noteServerOnline(online: boolean) {
 
 // ---- submit + flush ----
 
-export type SubmitResult = "sent" | "queued" | "cooldown";
+/** "rejected": the backend refused it with a 4xx (no retry, no XP). */
+export type SubmitResult = "sent" | "queued" | "cooldown" | "rejected";
 
 export interface QuickDraft {
   stationId: StationId;
@@ -205,7 +210,7 @@ export async function submitQuickReport(draft: QuickDraft, { ignoreCooldown = fa
     void flushPending(); // the backend is up: send anything left over from the tunnel
     return "sent";
   } catch (err) {
-    if (err instanceof ReportsApiError && err.status >= 400 && err.status < 500) return "sent"; // rejected: don't retry
+    if (err instanceof ReportsApiError && err.status >= 400 && err.status < 500) return "rejected"; // don't retry, don't award XP
     setState((s) => ({ pending: [...s.pending, item], online: false }));
     return "queued";
   }

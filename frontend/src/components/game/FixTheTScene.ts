@@ -9,6 +9,7 @@
 import * as T from "three";
 import type { CustomLayerInterface, CustomRenderMethodInput, GeoJSONSource, Map as MapLibreMap } from "maplibre-gl";
 import { LINE_COLORS, routeLine } from "@/lib/theme";
+import type { MapViewMode } from "@/components/map";
 import type { Station, StationId } from "@/types/tverse";
 import { Puffs, Sparks } from "./fx";
 import type { IncidentSim } from "./incidentSim";
@@ -22,6 +23,9 @@ const MAP_3D_LAYER = "tverse-3d";
 const TRACK_SOURCE = "fixt-incident-track";
 const TRACK_LAYER = "fixt-incident-track";
 const ALERT_Y = 215;
+const EMPTY = new Set<string>();
+/** How often the idle scene checks for a new incident, instead of a requestAnimationFrame loop. */
+const IDLE_CHECK_MS = 400;
 /** Give the camera time to arrive before the street opens. */
 const OPEN_DELAY_MS = 1500;
 /** Member 2's basemap source; its building footprints keep the cut to open street. */
@@ -112,7 +116,25 @@ class FixLayer implements CustomLayerInterface {
   private readonly fitted = new Set<TunnelCutaway>();
   private lastFrame = 0;
   private zs = 1;
+  /** Held or just-released trains on the map last frame (their rings pulse). */
+  private markersShowing = false;
+  /** false in the 2D view: nothing here draws, and nothing asks MapLibre for another frame. */
+  enabled = true;
   repair: RepairRun | null = null;
+
+  /** Anything on screen that animates: a cutaway or work zone, a repair, a particle burst or an incident. */
+  get active() {
+    return (
+      this.repair !== null ||
+      this.cutaways.size > 0 ||
+      this.surfaces.size > 0 ||
+      this.waves.length > 0 ||
+      this.markersShowing ||
+      this.sparks.active ||
+      this.puffs.active ||
+      this.sim.incidents.size > 0
+    );
+  }
 
   constructor(private readonly sim: IncidentSim, private readonly stationInfo: (id: StationId) => Station | null) {
     this.scene.add(this.sparks.points, this.puffs.points, this.emblem.group);
@@ -140,12 +162,17 @@ class FixLayer implements CustomLayerInterface {
   }
 
   render(_gl: WebGLRenderingContext | WebGL2RenderingContext, args: CustomRenderMethodInput) {
-    if (!this.renderer || !this.map) return;
+    if (!this.renderer || !this.map || !this.enabled) return;
     const matrix = args.defaultProjectionData.mainMatrix as unknown as ArrayLike<number>;
     if (!matrix || matrix.length !== 16) return;
     const now = performance.now();
     const dt = this.lastFrame ? Math.min(0.1, (now - this.lastFrame) / 1000) : 1 / 60;
     this.lastFrame = now;
+    if (!this.active) {
+      // Idle: no draw and no repaint request of our own; the map still renders us when it repaints.
+      this.sim.setHidden(EMPTY);
+      return;
+    }
     this.sim.tick(now);
     this.zs = zoomScale(this.map.getZoom());
 
@@ -160,7 +187,20 @@ class FixLayer implements CustomLayerInterface {
     this.camera.projectionMatrixInverse.copy(this.camera.projectionMatrix).invert();
     this.renderer.resetState();
     this.renderer.render(this.scene, this.camera);
-    this.map.triggerRepaint();
+    if (this.active) this.map.triggerRepaint();
+  }
+
+  /** Stop a repair that can't play out (the 3D view went away): fire its callbacks so the page moves on. */
+  finishRepair() {
+    const run = this.repair;
+    if (!run) return;
+    this.repair = null;
+    this.emblem.group.visible = false;
+    if (!run.restored) {
+      run.restored = true;
+      run.callbacks.onRestored();
+    }
+    run.callbacks.onDone();
   }
 
   // ------------------------------------------------------------ cutaways
@@ -310,6 +350,7 @@ class FixLayer implements CustomLayerInterface {
 
   private updateTrainMarkers(now: number) {
     const { held, released } = this.sim.markers(now);
+    this.markersShowing = held.length > 0 || released.length > 0;
     this.holdMat.opacity = 0.55 + 0.45 * Math.sin(now / 160);
     this.ensureRings(this.holdRings, held.length, () => this.holdMat);
     this.holdRings.forEach((ring, i) => {
@@ -479,8 +520,11 @@ class FixLayer implements CustomLayerInterface {
 export class FixTheTScene {
   private readonly layer: FixLayer;
   private frame = 0;
+  private idleTimer = 0;
+  private disposed = false;
   private lastSync = 0;
   private signature = "";
+  private mode: MapViewMode = "3d";
 
   constructor(
     private readonly map: MapLibreMap,
@@ -511,16 +555,73 @@ export class FixTheTScene {
       );
     }
     map.addLayer(this.layer, map.getLayer("station-names") ? "station-names" : undefined);
+    this.wake();
+  }
+
+  /**
+   * The broken-track line pulses on a requestAnimationFrame loop only while something is going on; when
+   * all is quiet it drops to a cheap timer that just watches for the next incident or repair.
+   */
+  private wake() {
+    if (this.disposed || this.frame) return;
+    window.clearTimeout(this.idleTimer);
+    this.idleTimer = 0;
     const loop = (t: number) => {
-      this.frame = requestAnimationFrame(loop);
       this.syncTrack(t);
+      if (this.disposed) return;
+      if (this.sim.incidents.size > 0 || this.signature || this.layer.repair) {
+        this.frame = requestAnimationFrame(loop);
+        return;
+      }
+      this.frame = 0;
+      this.idleTimer = window.setTimeout(() => this.watchIdle(), IDLE_CHECK_MS);
     };
     this.frame = requestAnimationFrame(loop);
+  }
+
+  private watchIdle() {
+    this.idleTimer = 0;
+    if (this.disposed) return;
+    if (this.sim.incidents.size > 0 || this.layer.repair) {
+      this.wake();
+      // The 3D effects layer only asks for frames while it's busy, so nudge it awake too.
+      if (this.mode === "3d") this.map.triggerRepaint();
+      return;
+    }
+    this.idleTimer = window.setTimeout(() => this.watchIdle(), IDLE_CHECK_MS);
+  }
+
+  /**
+   * Follow the page's 2D/3D switch. In 2D the cutaways, work zones and effects are hidden (no bleed into
+   * the flat map, no GPU work); a repair still playing is finished at once so the page isn't left waiting.
+   */
+  setViewMode(mode: MapViewMode) {
+    if (mode === this.mode) return;
+    this.mode = mode;
+    this.layer.enabled = mode === "3d";
+    try {
+      if (this.map.getLayer(this.layer.id)) this.map.setLayoutProperty(this.layer.id, "visibility", mode === "3d" ? "visible" : "none");
+    } catch {
+      // style mid-reload; `enabled` already keeps the layer from drawing
+    }
+    if (mode === "2d") {
+      // Trains hidden inside an open cutaway come back as ordinary map trains.
+      this.sim.setHidden(EMPTY);
+      this.layer.finishRepair();
+    } else {
+      this.map.triggerRepaint();
+    }
   }
 
   /** The crew fixes it in the tunnel (onRestored when the line is clear), then the street closes (onDone). */
   playRepair(stationId: StationId, callbacks: RepairCallbacks, fault: FaultKind = "signal") {
     this.layer.repair = { stationId, fault, start: performance.now(), begun: false, restored: false, closing: false, callbacks };
+    if (this.mode === "2d") {
+      this.layer.finishRepair();
+      return;
+    }
+    this.wake();
+    this.map.triggerRepaint();
   }
 
   get repairing() {
@@ -591,7 +692,10 @@ export class FixTheTScene {
   }
 
   dispose() {
+    this.disposed = true;
     cancelAnimationFrame(this.frame);
+    this.frame = 0;
+    window.clearTimeout(this.idleTimer);
     try {
       if (this.map.getLayer(this.layer.id)) this.map.removeLayer(this.layer.id);
       if (this.map.getLayer(TRACK_LAYER)) this.map.removeLayer(TRACK_LAYER);

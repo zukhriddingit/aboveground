@@ -33,8 +33,55 @@ export function branchLine(branch: string): TLine {
 
 const minutesUntil = (at: number, now: number) => Math.max(0, Math.round((at - now) / 60_000));
 
+const norm = (h: string) => h.replace(/\W/g, "").toLowerCase();
 /** Same-trip headsign check that tolerates "Medford/Tufts" vs "Medford / Tufts" and the like. */
-const sameHeadsign = (a: string, b: string) => a.replace(/\W/g, "").toLowerCase() === b.replace(/\W/g, "").toLowerCase();
+const sameHeadsign = (a: string, b: string) => norm(a) === norm(b);
+
+/**
+ * Eastbound Green Line stops a trip can be signed to, west to east. Downtown trips are normally signed Park
+ * Street, Government Center, North Station or Lechmere as well as Union Square or Medford/Tufts, so an
+ * eastbound train counts as long as it keeps going past the rider's stop.
+ */
+const GREEN_EAST_AT = new Map<string, number>(
+  [
+    ["Kenmore", 0],
+    ["Hynes", 1],
+    ["Copley", 2],
+    ["Arlington", 3],
+    ["Boylston", 4],
+    ["Park Street", 5],
+    ["Park St", 5],
+    ["Government Center", 6],
+    ["Govt Center", 6],
+    ["Haymarket", 7],
+    ["North Station", 8],
+    ["Science Park", 9],
+    ["Lechmere", 10],
+    ["Union Square", 11],
+    ["Medford/Tufts", 11],
+  ].map(([name, i]) => [norm(name as string), i as number]),
+);
+/** Where our Green Line stops sit on that list (BU Central is west of Kenmore). */
+const GREEN_STOP_AT: Partial<Record<StationId, number>> = {
+  "place-bucen": -1,
+  "place-kencl": 0,
+  "place-hymnl": 1,
+  "place-coecl": 2,
+  "place-boyls": 4,
+  "place-pktrm": 5,
+};
+
+/** Whether this trip serves a rider waiting at `stationId` for a full-route `row` train. */
+function goesFullRoute(stationId: StationId, row: { branch: string; directionId: 0 | 1; headsign: string }, p: Prediction): boolean {
+  if (row.branch === "Red") return true;
+  if (row.branch.startsWith("Red-")) return branchOf(p.route, p.headsign) === row.branch;
+  if (!p.headsign || sameHeadsign(p.headsign, row.headsign)) return true;
+  if (row.branch.startsWith("Green-") && row.directionId === 1) {
+    const ends = GREEN_EAST_AT.get(norm(p.headsign));
+    if (ends !== undefined) return ends > (GREEN_STOP_AT[stationId] ?? -Infinity);
+  }
+  return false;
+}
 
 export function computeBranchGaps(stationId: StationId, predictions: Prediction[], now = Date.now()): StationBranchInfo {
   const expected = STATION_BRANCHES[stationId] ?? [];
@@ -51,9 +98,9 @@ export function computeBranchGaps(stationId: StationId, predictions: Prediction[
       .filter((p) => p.directionId === row.directionId && (row.branch.startsWith("Red") ? p.route === "Red" : p.route === row.branch))
       .filter((p) => p.at === null || p.at >= now - 30_000)
       .sort((a, b) => (a.at ?? Infinity) - (b.at ?? Infinity));
-    // For Red Line branches, only that branch's trains count; elsewhere a train counts if it goes the full route.
-    const fullRoute = (p: Prediction) =>
-      row.branch === "Red" ? true : row.branch.startsWith("Red-") ? branchOf(p.route, p.headsign) === row.branch : !p.headsign || sameHeadsign(p.headsign, row.headsign);
+    // For Red Line branches, only that branch's trains count; elsewhere a train counts if it goes the full route
+    // (eastbound Green: anywhere past this stop).
+    const fullRoute = (p: Prediction) => goesFullRoute(stationId, row, p);
     const running = mine.filter((p) => p.at !== null && p.status !== "CANCELLED" && p.status !== "SKIPPED");
     const usable = running.filter(fullRoute);
     const headway = scheduledHeadway(row.branch, new Date(now));
@@ -110,4 +157,52 @@ export function computeBranchGaps(stationId: StationId, predictions: Prediction[
     }
   }
   return { gaps, nextUsable };
+}
+
+/**
+ * Self-check for the headsign rules: normal eastbound Green trips (Park Street, Government Center, North Station,
+ * Lechmere, Union Square, Medford/Tufts) must never read as a gap or a short-turn, while real short-turns still
+ * do. Returns the failures; development builds run it once and log any.
+ */
+export function branchGapSelfCheck(): string[] {
+  const now = Date.UTC(2026, 10, 18, 15, 0); // a Wednesday, 10 am in Boston (off-peak)
+  const train = (stationId: StationId, route: string, headsign: string, min: number, directionId: 0 | 1 = 1): Prediction => ({
+    stationId,
+    route,
+    directionId,
+    headsign,
+    at: now + min * 60_000,
+    status: "SCHEDULED",
+  });
+  const failures: string[] = [];
+  const expect = (label: string, ok: boolean) => {
+    if (!ok) failures.push(label);
+  };
+  const normalEast: Array<[StationId, string, string]> = [
+    ["place-bucen", "Green-B", "Park Street"],
+    ["place-bucen", "Green-B", "Government Center"],
+    ["place-boyls", "Green-E", "North Station"],
+    ["place-boyls", "Green-E", "Lechmere"],
+    ["place-boyls", "Green-E", "Government Center"],
+    ["place-coecl", "Green-E", "Medford/Tufts"],
+    ["place-pktrm", "Green-D", "North Station"],
+    ["place-pktrm", "Green-D", "Union Square"],
+    ["place-pktrm", "Green-E", "Lechmere"],
+  ];
+  for (const [stationId, route, headsign] of normalEast) {
+    const info = computeBranchGaps(stationId, [train(stationId, route, headsign, 3), train(stationId, route, headsign, 9)], now);
+    const row = info.gaps.find((g) => g.branch === route && g.directionId === 1);
+    expect(`${stationId} ${route} "${headsign}" counts as a normal train`, row?.nextArrivalMin === 3 && !row.isGap);
+    expect(`${stationId} ${route} "${headsign}" is not a short-turn`, info.nextUsable?.reason !== "TERMINATING");
+  }
+  const endsHere = computeBranchGaps("place-pktrm", [train("place-pktrm", "Green-E", "Park Street", 2), train("place-pktrm", "Green-E", "Medford/Tufts", 6)], now);
+  expect("a Park Street-signed E trip at Park Street is a short-turn", endsHere.nextUsable?.reason === "TERMINATING");
+  const westShort = computeBranchGaps("place-kencl", [train("place-kencl", "Green-D", "Kenmore", 2, 0), train("place-kencl", "Green-D", "Riverside", 7, 0)], now);
+  expect("a westbound Kenmore-signed D trip is a short-turn", westShort.nextUsable?.reason === "TERMINATING");
+  return failures;
+}
+
+if (process.env.NODE_ENV === "development" && typeof window !== "undefined") {
+  const failures = branchGapSelfCheck();
+  if (failures.length) console.warn("[branchGaps] self-check failed:", failures);
 }

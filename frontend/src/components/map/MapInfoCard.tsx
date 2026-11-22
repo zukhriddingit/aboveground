@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { Building2, X } from "lucide-react";
 import type { Crowdedness, PlannedClosure, QuickCheckKind, Station, StationSignals, TrainVehicle } from "@/types/tverse";
-import { CROWDEDNESS, LINE_COLORS, LINE_GLOW, routeLine } from "@/lib/theme";
+import { CROWDEDNESS, LINE_COLORS, routeLine } from "@/lib/theme";
+import { BUTTON, FOCUS, LABEL, MBTA_RED, PANEL } from "@/lib/ui";
 import { QuickCheckBar, StaleEtaBadge } from "@/components/quickcheck";
 import { BranchGapBadge, ClosureCard, NextUsableBadge } from "@/components/transit";
 import { pocketCityUrl } from "./pocketCities";
@@ -24,8 +25,7 @@ export function CrowdPill({ value }: { value: Crowdedness }) {
   const meta = CROWDEDNESS[value] ?? CROWDEDNESS.FEW_SEATS;
   return (
     <span
-      className="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-semibold"
-      style={{ background: `${meta.color}22`, color: meta.color, boxShadow: `inset 0 0 0 1px ${meta.color}55` }}
+      className="inline-flex items-center gap-1.5 rounded-md border border-white/12 bg-white/[0.04] px-2 py-0.5 text-[11px] font-semibold text-zinc-100"
     >
       <span className="h-1.5 w-1.5 rounded-full" style={{ background: meta.color }} />
       {meta.label}
@@ -33,19 +33,20 @@ export function CrowdPill({ value }: { value: Crowdedness }) {
   );
 }
 
+// Matte MBTA wayfinding panel (lib/ui PANEL); the line colour shows as a thin top rule, never a glow.
 function Shell({ accent, onClose, wide = false, children }: {
   accent: string; onClose: () => void; wide?: boolean; children: React.ReactNode;
 }) {
   return (
-    <div className={`relative mb-3 rounded-2xl border border-white/10 bg-slate-950/85 px-3.5 pb-3 pt-2.5 text-slate-100 shadow-2xl backdrop-blur-md ${
+    <div className={`${PANEL} relative mb-3 border-t-[3px] px-3.5 pb-3 pt-2.5 ${
       wide ? "w-[300px] max-w-[86vw]" : "min-w-[210px] max-w-[260px]"}`}
-      style={{ boxShadow: `0 10px 40px #0009, 0 0 0 1px ${accent}33, 0 0 24px ${accent}22` }}>
+      style={{ borderTopColor: accent }}>
       <button type="button" onClick={onClose} aria-label="Close"
-        className="absolute right-2 top-2 rounded-full p-1 text-slate-400 hover:bg-white/10 hover:text-white">
+        className={`absolute right-2 top-2 rounded-md p-1 text-zinc-400 hover:bg-white/10 hover:text-white ${FOCUS}`}>
         <X size={13} />
       </button>
       {children}
-      <span className="absolute -bottom-[7px] left-1/2 h-3 w-3 -translate-x-1/2 rotate-45 border-b border-r border-white/10 bg-slate-950/85" />
+      <span className="absolute -bottom-[7px] left-1/2 h-3 w-3 -translate-x-1/2 rotate-45 border-b border-r border-white/12 bg-zinc-950" />
     </div>
   );
 }
@@ -71,18 +72,18 @@ export function StationInfoCard({ station, onClose, onAlertClick, signals, onQui
   const left = useCountdown(Math.max(0, station.nextArrivalMin) * 60);
   const min = Math.floor(left / 60);
   const sec = Math.floor(left % 60).toString().padStart(2, "0");
-  const accent = station.hasActiveAlert ? "#ff2a3d" : LINE_GLOW[station.line];
+  const accent = station.hasActiveAlert ? MBTA_RED : LINE_COLORS[station.line];
   const stale = station.etaStatus === "UNVERIFIED" || !!signals?.staleEta;
   const gaps = (station.branchGaps ?? []).filter(g => g.isGap).slice(0, 2);
   return (
     <Shell accent={accent} onClose={onClose} wide>
       <div className="flex items-center gap-2 pr-5">
-        <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: LINE_COLORS[station.line], boxShadow: `0 0 8px ${LINE_GLOW[station.line]}` }} />
-        <span className="truncate text-sm font-bold tracking-tight">{station.name}</span>
+        <span className="h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-white/40" style={{ background: LINE_COLORS[station.line] }} />
+        <span className="truncate text-sm font-semibold tracking-tight text-white">{station.name}</span>
       </div>
       <div className="mt-2 flex items-end justify-between gap-3">
         <div>
-          <div className="text-[10px] uppercase tracking-[0.14em] text-slate-400">Next train</div>
+          <div className={LABEL}>Next train</div>
           <div className={`font-mono text-xl font-bold tabular-nums leading-tight ${stale ? "text-amber-200/80 line-through decoration-amber-400/60" : ""}`}>
             {left < 30 ? <span className={stale ? "" : "text-emerald-300"}>Arriving</span> : `${min}:${sec}`}
           </div>
@@ -97,7 +98,8 @@ export function StationInfoCard({ station, onClose, onAlertClick, signals, onQui
       )}
       {station.hasActiveAlert && (
         <button type="button" onClick={() => onAlertClick?.(station)}
-          className="mt-2.5 w-full rounded-xl bg-red-500/90 px-3 py-1.5 text-xs font-bold text-white shadow-[0_0_18px_#ff2a3d88] hover:bg-red-500">
+          className={`mt-2.5 w-full rounded-lg px-3 py-2 text-xs font-semibold text-white transition hover:brightness-110 ${FOCUS}`}
+          style={{ background: MBTA_RED }}>
           See what crews are fixing
         </button>
       )}
@@ -110,7 +112,7 @@ export function StationInfoCard({ station, onClose, onAlertClick, signals, onQui
       )}
       {onStreetView && pocketCityUrl(station.id) && (
         <button type="button" onClick={() => onStreetView(station)}
-          className="mt-2.5 flex w-full items-center justify-center gap-1.5 rounded-xl border border-white/12 bg-white/[0.06] px-3 py-1.5 text-xs font-semibold text-zinc-100 hover:bg-white/[0.12]">
+          className={`${BUTTON} ${FOCUS} mt-2.5 w-full px-3 py-2 text-xs font-semibold`}>
           <Building2 size={13} />
           Street view · see the block around the station
         </button>
@@ -125,13 +127,13 @@ export function TrainInfoCard({ train, onClose }: { train: TrainVehicle; onClose
   const line = routeLine(train.route);
   const heading = COMPASS[Math.round((((train.bearing % 360) + 360) % 360) / 45) % 8];
   return (
-    <Shell accent={LINE_GLOW[line]} onClose={onClose}>
+    <Shell accent={LINE_COLORS[line]} onClose={onClose}>
       <div className="flex items-center gap-2 pr-5">
-        <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: LINE_COLORS[line], boxShadow: `0 0 8px ${LINE_GLOW[line]}` }} />
-        <span className="truncate text-sm font-bold tracking-tight">{ROUTE_NAMES[train.route] ?? train.route}</span>
+        <span className="h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-white/40" style={{ background: LINE_COLORS[line] }} />
+        <span className="truncate text-sm font-semibold tracking-tight text-white">{ROUTE_NAMES[train.route] ?? train.route}</span>
       </div>
       <div className="mt-2 flex items-center justify-between gap-3">
-        <span className="text-xs text-slate-300">Heading {heading}</span>
+        <span className="text-xs text-zinc-300">Heading {heading}</span>
         <CrowdPill value={train.crowdedness} />
       </div>
     </Shell>

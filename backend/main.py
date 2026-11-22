@@ -30,8 +30,24 @@ if str(HERE) not in sys.path:
     sys.path.insert(0, str(HERE))
 
 
+def _env_value(raw: str) -> str:
+    """The value part of KEY=VALUE: quotes removed (a quoted value keeps a literal `#`), and an unquoted
+    value loses a trailing ` # comment`, so `WORLD_LIVE=0 # mock trains` reads as "0"."""
+    value = raw.strip()
+    if value[:1] in ("'", '"'):
+        end = value.find(value[0], 1)
+        if end > 0:  # "quoted # value"  # optional comment after the closing quote
+            return value[1:end]
+    if value.startswith("#"):
+        return ""  # KEY=   # only a comment
+    for i, ch in enumerate(value):
+        if ch == "#" and value[i - 1] in " \t":
+            return value[:i].rstrip()
+    return value
+
+
 def load_env_files(*paths: Path) -> list[str]:
-    """Minimal .env reader (KEY=VALUE, `export` and quotes allowed). Never overrides the real environment.
+    """Minimal .env reader (KEY=VALUE, `export`, quotes and ` # comments` allowed). Never overrides the real environment.
     Returns the names it set (never the values)."""
     loaded: list[str] = []
     for path in paths:
@@ -44,9 +60,7 @@ def load_env_files(*paths: Path) -> list[str]:
             if not line or line.startswith("#") or "=" not in line:
                 continue
             key, value = line.removeprefix("export ").split("=", 1)
-            key, value = key.strip(), value.strip()
-            if len(value) >= 2 and value[0] == value[-1] and value[0] in "'\"":
-                value = value[1:-1]
+            key, value = key.strip(), _env_value(value)
             if key and key not in os.environ:
                 os.environ[key] = value
                 loaded.append(key)

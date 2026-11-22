@@ -86,6 +86,23 @@ const VIEW_KEY = "tverse-map-view";
 const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? "").replace(/\/$/, "");
 const SOURCE_LABEL: Record<FeedSource, string> = { backend: "Backend", live: "MBTA", sim: "Simulated" };
 
+// localStorage can throw (private windows, blocked site data): every access goes through these.
+function readStorage(key: string): string | null {
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+function writeStorage(key: string, value: string | null) {
+  try {
+    if (value === null) window.localStorage.removeItem(key);
+    else window.localStorage.setItem(key, value);
+  } catch {
+    // storage blocked: the choice just won't stick
+  }
+}
+
 interface Staged {
   live: LiveAlert;
   alert: TranslatedAlert;
@@ -125,7 +142,7 @@ export default function Home() {
   // Read lazily: the toggle only renders inside the alerts panel, which starts closed, so SSR never shows it.
   const [notifySupported] = useState(() => typeof window !== "undefined" && "Notification" in window);
   const [notifyOn, setNotifyOn] = useState(
-    () => typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted" && window.localStorage.getItem(NOTIFY_KEY) === "1",
+    () => typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted" && readStorage(NOTIFY_KEY) === "1",
   );
 
   // Rank perks that live outside the HUD (the T-Feed rider badge needs Line Scout).
@@ -200,6 +217,7 @@ export default function Home() {
 
   const openStopFeed = useCallback((id: StationId) => {
     setFeedStation(id);
+    setAlertsOpen(false);
     setFeedOpen(true);
     flyToFeedStop(map.current, id, world.stations);
   }, [world.stations]);
@@ -265,12 +283,19 @@ export default function Home() {
 
   const changeView = useCallback((mode: MapViewMode) => {
     setView(mode);
-    try {
-      window.localStorage.setItem(VIEW_KEY, mode);
-    } catch {
-      // private windows may block storage; the choice just won't stick
-    }
+    writeStorage(VIEW_KEY, mode);
   }, []);
+
+  // Fix the T's 3D layer (cutaways, effects) follows the 2D/3D switch. The scene loads after the map, so wait for it.
+  useEffect(() => {
+    if (scene.current) return scene.current.setViewMode(view);
+    const timer = window.setInterval(() => {
+      if (!scene.current) return;
+      scene.current.setViewMode(view);
+      window.clearInterval(timer);
+    }, 250);
+    return () => window.clearInterval(timer);
+  }, [view]);
 
   // The map keeps the overview north-up in 2D.
   const recenter = useCallback(() => map.current?.resetView(), []);
@@ -317,18 +342,37 @@ export default function Home() {
     [],
   );
 
+  /** The pending walk-in timer: cancelled when the delay card closes or the map goes 2D, so it never hijacks the screen later. */
+  const walkInTimer = useRef<number | undefined>(undefined);
+  const cancelWalkIn = useCallback(() => {
+    window.clearTimeout(walkInTimer.current);
+    walkInTimer.current = undefined;
+  }, []);
+
   /** Once the street over a station has opened, drop the camera in onto the platform. */
   const walkInWhenOpen = useCallback(
     (id: StationId) => {
+      cancelWalkIn();
       const giveUp = Date.now() + 10000;
       const attempt = () => {
-        if (scene.current?.isTunnelOpen(id)) window.setTimeout(() => enterTunnel(id), 900);
-        else if (Date.now() < giveUp) window.setTimeout(attempt, 300);
+        if (scene.current?.isTunnelOpen(id)) {
+          walkInTimer.current = window.setTimeout(() => {
+            walkInTimer.current = undefined;
+            enterTunnel(id);
+          }, 900);
+        } else if (Date.now() < giveUp) walkInTimer.current = window.setTimeout(attempt, 300);
+        else walkInTimer.current = undefined;
       };
-      window.setTimeout(attempt, 1800);
+      walkInTimer.current = window.setTimeout(attempt, 1800);
     },
-    [enterTunnel],
+    [cancelWalkIn, enterTunnel],
   );
+
+  // The platform walk-in only exists in the 3D world.
+  useEffect(() => {
+    if (view === "2d") cancelWalkIn();
+  }, [view, cancelWalkIn]);
+  useEffect(() => cancelWalkIn, [cancelWalkIn]);
 
   /** "Explore a simulated repair" for a live alert: the tunnel opens, but the real trains keep moving. */
   const exploreLive = useCallback(
@@ -359,20 +403,17 @@ export default function Home() {
   );
 
   const closeFix = useCallback(() => {
+    cancelWalkIn();
     if (explore && fixAlert?.id === explore.id && !repairing) {
       sim.cancelIncident(explore.id);
       setExplore(null);
       void exitTunnel();
     }
     setFixAlert(null);
-  }, [exitTunnel, explore, fixAlert, repairing, sim]);
+  }, [cancelWalkIn, exitTunnel, explore, fixAlert, repairing, sim]);
 
   const onReady = useCallback(() => {
-    try {
-      if (window.localStorage.getItem(VIEW_KEY) === "2d") setView("2d");
-    } catch {
-      // storage blocked: start in 3D
-    }
+    if (readStorage(VIEW_KEY) === "2d") setView("2d");
     void import("@/components/game/FixTheTScene").then(({ FixTheTScene }) => {
       const m = map.current?.getMap();
       if (m && !scene.current) {
@@ -528,7 +569,7 @@ export default function Home() {
 
   const toggleNotify = useCallback(async () => {
     if (notifyOn) {
-      window.localStorage.removeItem(NOTIFY_KEY);
+      writeStorage(NOTIFY_KEY, null);
       setNotifyOn(false);
       return;
     }
@@ -537,7 +578,7 @@ export default function Home() {
       push("Notifications are blocked", { description: "Allow them for this site in your browser settings to get closure alerts." });
       return;
     }
-    window.localStorage.setItem(NOTIFY_KEY, "1");
+    writeStorage(NOTIFY_KEY, "1");
     setNotifyOn(true);
   }, [notifyOn, push]);
 
@@ -870,7 +911,10 @@ export default function Home() {
                 unread={feedOpen ? 0 : feed.unread}
                 live={feed.online}
                 active={feedOpen}
-                onClick={() => setFeedOpen((o) => !o)}
+                onClick={() => {
+                  if (!feedOpen) setAlertsOpen(false);
+                  setFeedOpen(!feedOpen);
+                }}
               />
             }
           />
@@ -885,6 +929,7 @@ export default function Home() {
         onStationChange={setFeedStation}
         onJumpToStation={(id) => flyToFeedStop(map.current, id, world.stations)}
         onPointsAwarded={(n) => earn(n)}
+        signals={signals}
       />
 
       <FixTheTModal
@@ -903,8 +948,11 @@ export default function Home() {
         onClose={() => setPosting(false)}
         onSubmit={addStory}
         stations={stations}
+        defaultStationId={nextStation}
         onPosted={(draft) => {
-          push("Story posted", { tone: "success", description: `Live on ${stationById(draft.stationId)?.name ?? "the map"}.` });
+          // Stories share the T-Feed XP loop: +25 XP per post.
+          earn(XP_REWARDS.post);
+          push(`Story posted · +${XP_REWARDS.post} XP`, { tone: "success", description: `Live on ${stationById(draft.stationId)?.name ?? "the map"}.` });
           if (!layers.stories) setLayers((l) => ({ ...l, stories: true }));
           map.current?.flyToStation(draft.stationId, { zoom: 16 });
         }}

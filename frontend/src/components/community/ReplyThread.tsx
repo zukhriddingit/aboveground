@@ -64,7 +64,7 @@ export function ReplyThread({ post, now, onReply, onLikeReply, onPointsAwarded }
                 </div>
                 <p className="mt-0.5 break-words text-[13px] leading-snug text-white/85">
                   {r.replyToAuthor && (
-                    <span className="mr-1 font-semibold" style={{ color: glow }}>
+                    <span className="mr-1 font-semibold text-white">
                       {authorLabel(r.replyToAuthor)}
                     </span>
                   )}
@@ -107,8 +107,7 @@ export function ReplyThread({ post, now, onReply, onLikeReply, onPointsAwarded }
           <IdentityChip label="as" />
           {replyTo && (
             <span
-              className="flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold"
-              style={{ color: glow, background: `${glow}1f`, boxShadow: `inset 0 0 0 1px ${glow}55` }}
+              className="flex items-center gap-1 rounded-md border border-white/12 bg-white/[.05] px-2.5 py-1 text-[11px] font-semibold text-zinc-100"
             >
               Replying to {authorLabel(replyTo)}
               <button type="button" onClick={() => setReplyTo(null)} aria-label="Cancel reply" className="ml-0.5 text-white/60 hover:text-white">
@@ -136,8 +135,7 @@ export function ReplyThread({ post, now, onReply, onLikeReply, onPointsAwarded }
           <button
             type="submit"
             disabled={!text.trim()}
-            className="rounded-full px-4 py-2.5 text-sm font-bold text-black transition active:scale-95 disabled:opacity-35"
-            style={{ background: glow }}
+            className="rounded-full bg-white px-4 py-2.5 text-sm font-semibold text-zinc-950 transition hover:bg-zinc-200 active:scale-95 disabled:opacity-35 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
           >
             Send
           </button>

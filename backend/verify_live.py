@@ -69,6 +69,9 @@ def _key_set(*names: str) -> bool:
         try:
             for line in path.read_text(encoding="utf-8").splitlines():
                 key, _, value = line.strip().removeprefix("export ").partition("=")
+                value = value.strip()
+                if value[:1] not in ("'", '"'):
+                    value = "" if value.startswith("#") else value.split(" #")[0].split("\t#")[0]
                 if key.strip() in names and value.strip().strip("'\""):
                     return True
         except OSError:
@@ -144,6 +147,10 @@ def check_core(base: str, write: bool) -> None:
     status, stories, t = call(base, "GET", "/api/stories")
     ok = status == 200 and isinstance(stories, list) and len(stories) > 0
     report("PASS" if ok else "FAIL", "GET /api/stories", f"{len(stories) if isinstance(stories, list) else 0} stories ({t * 1000:.0f} ms)")
+    if ok:
+        seeds = [s for s in stories if s.get("id") in {f"s{i}" for i in range(1, 9)}]
+        inline = len(seeds) == 8 and all(str(s.get("imageUrl", "")).startswith("data:image/svg+xml") for s in seeds)
+        report("PASS" if inline else "FAIL", "seeded stories use inline art", f"{sum(str(s.get('imageUrl', '')).startswith('data:') for s in seeds)}/8 inline SVG scenes")
 
     status, posts, t = call(base, "GET", "/api/community/posts")
     ok = status == 200 and isinstance(posts, list) and len(posts) > 0
@@ -173,6 +180,18 @@ def check_core(base: str, write: bool) -> None:
     status, saved, _ = call(base, "POST", "/api/community/posts", post)
     ok = status == 200 and isinstance(saved, dict) and saved.get("author") == "Anonymous Rider"
     report("PASS" if ok else "FAIL", "POST /api/community/posts", f"author kept as {saved.get('author')!r}" if isinstance(saved, dict) else f"HTTP {status}")
+
+    status, saved, _ = call(base, "POST", "/api/community/posts", {**post, "line": "Blue", "stationId": "place-aport", "stationName": None})
+    ok = status == 200 and isinstance(saved, dict) and saved.get("stationName") == "Airport"
+    report("PASS" if ok else "FAIL", "POST T-Feed post at Airport", f"HTTP {status}, stationName {saved.get('stationName') if isinstance(saved, dict) else saved}")
+
+    status, res, _ = call(base, "POST", "/api/stories", {**story, "caption": "   \t  "})
+    report("PASS" if status == 422 else "FAIL", "POST story, blank caption -> 422", f"HTTP {status}")
+
+    live = {"stationId": "place-pktrm", "rawMbtaText": "Red Line: Delays due to police activity at Park Street.", "estimatedFixMin": 0}
+    status, res, t = call(base, "POST", "/api/ai/translate-alert", live, timeout=10)
+    ok = status == 200 and isinstance(res, dict) and res.get("source") in ("gemini", "claude", "fallback")
+    report("PASS" if ok else "FAIL", "translate-alert estimatedFixMin 0", f"HTTP {status}, {res.get('source') if isinstance(res, dict) else res} in {t:.2f} s")
 
     status, trig, t = call(base, "POST", "/api/alerts/trigger", {"stationId": "place-kencl"})
     alert = trig.get("alert") if isinstance(trig, dict) else None
@@ -221,6 +240,117 @@ def check_ai(base: str, expect: str, label: str) -> None:
             report("FAIL", f"[{label}] {name}", f"expected the fallback, got {source}")
         else:
             report("PASS", f"[{label}] {name}", f"{source} in {t:.2f} s · {text}…")
+
+
+def check_units() -> None:
+    """In-process checks of the parsing/classification rules (no server, no network, no AI call)."""
+    if str(HERE) not in sys.path:
+        sys.path.insert(0, str(HERE))
+    # The routers load their data files on import: point them at a temp folder, never your data files.
+    tmp = tempfile.mkdtemp(prefix="aboveground-units-")
+    for var, name in (("COMMUNITY_DATA_FILE", "community"), ("REPORTS_DATA_FILE", "reports"), ("STORIES_DATA_FILE", "stories")):
+        os.environ[var] = f"{tmp}/{name}.json"
+    import asyncio
+
+    import ai_translator as ai
+    import world
+    from main import load_env_files
+    from pydantic import ValidationError
+    from stories import NewStationStory
+
+    # .env values with inline comments; quoted values keep a literal '#'.
+    names = {"VERIFY_ENV_LIVE": "0", "VERIFY_ENV_AI_OFF": "1", "VERIFY_ENV_PROVIDER": "claude", "VERIFY_ENV_QUOTED": "a # b", "VERIFY_ENV_HASH": "x#y"}
+    with tempfile.TemporaryDirectory() as d:
+        path = Path(d) / ".env"
+        path.write_text(
+            "VERIFY_ENV_LIVE=0 # mock trains only\nexport VERIFY_ENV_AI_OFF=1   # templates\nVERIFY_ENV_PROVIDER=claude # interim\n"
+            'VERIFY_ENV_QUOTED="a # b"  # kept\nVERIFY_ENV_HASH=x#y\n',
+            encoding="utf-8",
+        )
+        for n in names:
+            os.environ.pop(n, None)
+        load_env_files(path)
+        got = {n: os.environ.pop(n, None) for n in names}
+    report("PASS" if got == names else "FAIL", "unit: .env inline comments", "all parsed" if got == names else f"got {got}")
+
+    # _RULES precedence: Harvard's disabled train beats "signal"; Chinatown's track problem beats "shuttle".
+    cases = {
+        world._DEMO_RAW["place-harsq"]: ("DISABLED_TRAIN", "TRACK_WELD"),
+        world._DEMO_RAW["place-chncl"]: ("TRACK", "TRACK_WELD"),
+        world._DEMO_RAW["place-boyls"]: ("SIGNAL", "WIRE_MATCH"),
+        "Orange Line: Shuttle buses replace service for scheduled maintenance.": ("PLANNED_WORK", "TRACK_WELD"),
+        "Green Line: Shuttle buses replace service due to a disabled train.": ("DISABLED_TRAIN", "TRACK_WELD"),
+        "Red Line: Delays due to police activity and a disabled train.": ("EMERGENCY", "WIRE_MATCH"),
+    }
+    bad = [(raw, world.classify(raw)) for raw, (cat, game) in cases.items()
+           if world.classify(raw) != cat or world._TEMPLATES[world.classify(raw)][3] != game]
+    report("PASS" if not bad else "FAIL", "unit: _RULES precedence", f"{len(cases)} cases" if not bad else f"{bad}")
+
+    # The MBTA text is classified before the station's demo scenario.
+    wire_at_boylston = ai.fallback_alert("place-boyls", raw_text="Delays due to an overhead wire problem near Boylston.")
+    demo_at_boylston = ai.fallback_alert("place-boyls", raw_text="Delays due to police activity at Boylston.")
+    explicit = ai.fallback_alert("place-boyls", raw_text="overhead wire", disruption="TRACK_PROBLEM_SHUTTLE")
+    ok = (wire_at_boylston["disruption"] == "OVERHEAD_WIRE_INSPECTION" and demo_at_boylston["disruption"] == "SIGNAL_MODERNIZATION"
+          and explicit["disruption"] == "TRACK_PROBLEM_SHUTTLE")
+    report("PASS" if ok else "FAIL", "unit: _classify before station", f"{wire_at_boylston['disruption']}, {demo_at_boylston['disruption']}, {explicit['disruption']}")
+
+    # A live alert outside the 4 scenarios: the AI prompt gets neutral context, never our signal-relay ops notes.
+    prompts: list[str] = []
+    real_generate = ai.generate_text
+
+    async def capture(prompt: str, system: str, **_: Any) -> tuple[Optional[str], str]:
+        prompts.append(prompt)
+        return None, "fallback"
+
+    ai.generate_text = capture  # type: ignore[assignment]
+    try:
+        asyncio.run(ai.translate_alert("place-boyls", raw_text="Green Line: Delays due to a medical emergency at Boylston.", fix_min=0))
+        asyncio.run(ai.translate_alert("place-boyls", raw_text="Green Line: Delays due to a signal problem at Boylston."))
+    finally:
+        ai.generate_text = real_generate  # type: ignore[assignment]
+    neutral = "relay" not in prompts[0] and "ops notes" not in prompts[0]
+    scenario = "ops notes" in prompts[1]
+    report("PASS" if neutral and scenario else "FAIL", "unit: neutral prompt for live alerts", f"neutral: {neutral}, scenario notes kept: {scenario}")
+
+    # The AI cache never grows past CACHE_MAX.
+    saved_cache = dict(ai._cache)
+    try:
+        for i in range(ai.CACHE_MAX + 60):
+            ai._cache_put(f"verify|{i}", "x" * 30)
+        size, newest = len(ai._cache), f"verify|{ai.CACHE_MAX + 59}" in ai._cache
+    finally:
+        ai._cache.clear()
+        ai._cache.update(saved_cache)
+    report("PASS" if size <= ai.CACHE_MAX and newest else "FAIL", "unit: AI cache cap", f"{size} entries (cap {ai.CACHE_MAX})")
+
+    # Line vibe: a Red Line tap at Park Street (a Green/Red transfer) counts for Red only.
+    import ai_routes
+    import reports
+
+    seen: dict[str, dict[str, int]] = {}
+    real_recent, real_summary = reports.recent_reports, ai.line_vibe_summary
+
+    async def vibe_capture(line: str, captions: list[str], counts: dict[str, int]) -> dict[str, Any]:
+        seen[line] = counts
+        return {"line": line, "text": "-", "source": "fallback"}
+
+    reports.recent_reports = lambda *a, **k: [  # type: ignore[assignment]
+        {"line": "Red", "stationId": "place-pktrm", "kind": "PACKED"}, {"stationId": "place-pktrm", "kind": "STALE_ETA"},
+    ]
+    ai.line_vibe_summary = vibe_capture  # type: ignore[assignment]
+    try:
+        for line in ("Green", "Red"):
+            asyncio.run(ai_routes.line_vibe(line))  # type: ignore[arg-type]
+    finally:
+        reports.recent_reports, ai.line_vibe_summary = real_recent, real_summary  # type: ignore[assignment]
+    ok = seen.get("Green") == {"STALE_ETA": 1} and seen.get("Red") == {"PACKED": 1}
+    report("PASS" if ok else "FAIL", "unit: line vibe at transfer stops", f"Green {seen.get('Green')}, Red {seen.get('Red')}")
+
+    try:
+        NewStationStory.model_validate({"stationId": "place-kencl", "category": "VIBES", "author": "a", "caption": "  ", "imageUrl": "https://x"})
+        report("FAIL", "unit: blank story caption", "accepted")
+    except ValidationError:
+        report("PASS", "unit: blank story caption", "rejected")
 
 
 def main() -> int:
@@ -277,6 +407,10 @@ def main() -> int:
             finally:
                 server.stop()
             print()
+
+    print("--- unit checks ---")
+    check_units()
+    print()
 
     fails = sum(1 for lvl, _, _ in results if lvl == "FAIL")
     warns = sum(1 for lvl, _, _ in results if lvl == "WARN")

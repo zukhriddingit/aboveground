@@ -6,7 +6,7 @@ import { CreatePostModal } from "./CreatePostModal";
 import { LINE_COLORS } from "@/lib/theme";
 import { FOCUS } from "@/lib/ui";
 import { LINES, isNarrowScreen, lineColor, selectPosts, useNow, type FeedSort, type LineFilter } from "./feedMeta";
-import { QuickCheckBar, useStationSignals } from "@/components/quickcheck";
+import { QuickCheckBar, useStationSignals, type StationSignalsResult } from "@/components/quickcheck";
 import { FEED_STOPS, STOPS_BY_LINE, primaryLine, stopName } from "./feedStops";
 import { FeedStyles } from "./FeedStyles";
 import { FeedToaster } from "./FeedToaster";
@@ -27,12 +27,25 @@ export interface CommunityDrawerProps {
   onStationChange?: (stationId: StationId | null) => void;
   /** A post's 📍 station tag was tapped: fly the 3D camera there (see flyToFeedStop). */
   onJumpToStation?: (stationId: StationId) => void;
-  /** XP: +25 for a post, +5 for a reply, +10 per Quick-Check tap. */
+  /** XP: +25 XP for a post, +5 XP for a reply, +10 XP per Quick-Check tap. */
   onPointsAwarded?: (points: number, line: TransitLine) => void;
+  /** The page's useStationSignals() result, so the drawer doesn't poll the summary a second time. */
+  signals?: StationSignalsResult;
 }
 
 /** T-Feed: right-side drawer on desktop (slides in), full-screen sheet on phones. Picking a line shows its Line Pulse. */
-export function CommunityDrawer({
+export function CommunityDrawer(props: CommunityDrawerProps) {
+  if (props.signals) return <Drawer {...props} signals={props.signals} />;
+  return <DrawerWithOwnSignals {...props} />;
+}
+
+/** Standalone use (dev pages): the drawer polls Quick-Check signals itself while it's open. */
+function DrawerWithOwnSignals(props: CommunityDrawerProps) {
+  const signals = useStationSignals({ pollMs: props.open ? 15_000 : 0 });
+  return <Drawer {...props} signals={signals} />;
+}
+
+function Drawer({
   open,
   onClose,
   feed,
@@ -40,7 +53,8 @@ export function CommunityDrawer({
   onStationChange,
   onJumpToStation,
   onPointsAwarded,
-}: CommunityDrawerProps) {
+  signals,
+}: CommunityDrawerProps & { signals: StationSignalsResult }) {
   const now = useNow();
   const [line, setLine] = useState<LineFilter>("ALL");
   const [sort, setSort] = useState<FeedSort>("latest");
@@ -52,10 +66,13 @@ export function CommunityDrawer({
   // Quick-Check strip: the drawer's station filter, else a small picker (defaults to the line's first stop).
   const [qcPick, setQcPick] = useState<StationId | null>(null);
   const [qcOpen, setQcOpen] = useState(true);
-  const qcStation: StationId = station ?? qcPick ?? (line !== "ALL" ? STOPS_BY_LINE[line][0] : "place-pktrm");
-  const qcLine = line !== "ALL" && STOPS_BY_LINE[line].includes(qcStation) ? line : primaryLine(qcStation);
   const qcStops = line === "ALL" ? FEED_STOPS : FEED_STOPS.filter((s) => s.lines.includes(line));
-  const signals = useStationSignals({ pollMs: open ? 15_000 : 0 });
+  // A pick from another line tab isn't in this tab's list: fall back to a stop the select can show.
+  const inQcStops = (id: StationId | null): id is StationId => !!id && qcStops.some((s) => s.id === id);
+  const qcDefault: StationId = line !== "ALL" ? STOPS_BY_LINE[line][0] : "place-pktrm";
+  const qcStation: StationId =
+    station ?? (inQcStops(qcPick) ? qcPick : inQcStops(qcDefault) ? qcDefault : (qcStops[0]?.id ?? "place-pktrm"));
+  const qcLine = line !== "ALL" && STOPS_BY_LINE[line].includes(qcStation) ? line : primaryLine(qcStation);
 
   // Mount the list on first open (SSR renders an empty shell), keep it afterwards for the slide-out.
   const [mounted, setMounted] = useState(open);
@@ -102,7 +119,7 @@ export function CommunityDrawer({
         aria-label="T-Feed"
         aria-hidden={!open}
         inert={!open}
-        className={`fixed inset-0 z-[56] flex flex-col overflow-hidden border-white/12 bg-zinc-950/92 text-white shadow-[0_20px_50px_rgba(0,0,0,.55)] backdrop-blur-xl transition-[transform,opacity] duration-300 ease-[cubic-bezier(.2,.9,.3,1)] sm:inset-auto sm:bottom-3 sm:right-3 sm:top-3 sm:w-[420px] sm:max-w-[95vw] sm:rounded-2xl sm:border ${
+        className={`fixed inset-0 z-[56] flex flex-col overflow-hidden border-white/12 bg-zinc-950/92 text-white shadow-[0_20px_50px_rgba(0,0,0,.55)] backdrop-blur-xl transition-[transform,opacity] duration-300 ease-[cubic-bezier(.2,.9,.3,1)] sm:inset-auto sm:bottom-24 sm:right-3 sm:top-3 sm:w-[420px] sm:max-w-[95vw] sm:rounded-2xl sm:border ${
           open ? "translate-x-0 translate-y-0 opacity-100" : "pointer-events-none translate-y-full opacity-0 sm:translate-x-[calc(100%+1.5rem)] sm:translate-y-0"
         }`}
       >
@@ -200,7 +217,7 @@ export function CommunityDrawer({
           </div>
         </header>
 
-        {/* 1-tap Quick-Check for one stop (zero typing, +10 each, queues offline) */}
+        {/* 1-tap Quick-Check for one stop (zero typing, +10 XP per tap, queues offline) */}
         <div className="shrink-0 border-b border-white/12 px-4 py-2.5">
           <div className="mb-1.5 flex items-center gap-2">
             <button
@@ -219,16 +236,16 @@ export function CommunityDrawer({
                 aria-label="Quick-Check station"
                 value={qcStation}
                 onChange={(e) => setQcPick(e.target.value as StationId)}
-                className="min-w-0 max-w-[60%] truncate rounded-full bg-white/[.07] px-2 py-1 text-[11px] font-bold text-white outline-none ring-1 ring-white/15 focus:ring-white/40"
+                className="min-w-0 max-w-[60%] truncate rounded-md border border-white/12 bg-white/[.05] px-2 py-1 text-[11px] font-semibold text-white outline-none focus:border-white/40"
               >
                 {qcStops.map((s) => (
-                  <option key={s.id} value={s.id} className="bg-slate-900">
+                  <option key={s.id} value={s.id} className="bg-zinc-900">
                     {s.name}
                   </option>
                 ))}
               </select>
             )}
-            <span className="ml-auto hidden whitespace-nowrap text-[10px] text-white/35 sm:inline">1 tap · no typing</span>
+            <span className="ml-auto hidden whitespace-nowrap text-[10px] text-zinc-500 sm:inline">1 tap · no typing</span>
           </div>
           {qcOpen && (
             <QuickCheckBar

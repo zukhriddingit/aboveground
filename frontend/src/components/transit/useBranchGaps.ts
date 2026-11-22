@@ -7,7 +7,10 @@ import { MOCK_PLANNED_CLOSURES, mockBranchInfo } from "./mockTransit";
 import { fetchPredictions, type Prediction } from "./predictions";
 
 export interface UseBranchGapsOptions {
-  /** Poll MBTA /predictions this often. Default 30 s (20 req/min without a key). 0 = once. */
+  /**
+   * Poll MBTA /predictions this often. Default 45 s: without a key the 20 req/min limit is per IP, and
+   * game/useLiveMbta polls /predictions too. Pauses while the tab is hidden. 0 = once.
+   */
   pollMs?: number;
   /** false = mock data only (no network). Default true. */
   live?: boolean;
@@ -25,7 +28,7 @@ export interface BranchGapsResult {
  * Branch gaps + next usable train for every station, from live MBTA predictions; falls back to
  * realistic mock gaps when the API fails, times out, or returns nothing (e.g. overnight).
  */
-export function useBranchGaps(stations: Pick<Station, "id">[], { pollMs = 30_000, live = true }: UseBranchGapsOptions = {}): BranchGapsResult {
+export function useBranchGaps(stations: Pick<Station, "id">[], { pollMs = 45_000, live = true }: UseBranchGapsOptions = {}): BranchGapsResult {
   const ids = useMemo(() => [...new Set(stations.map((s) => s.id))].sort(), [stations]);
   const idsKey = ids.join(",");
   const [data, setData] = useState<{ predictions: Prediction[] | null; at: number } | null>(null);
@@ -33,18 +36,44 @@ export function useBranchGaps(stations: Pick<Station, "id">[], { pollMs = 30_000
   useEffect(() => {
     if (!live) return;
     let alive = true;
-    const controller = new AbortController();
-    const run = () => {
-      fetchPredictions(idsKey ? (idsKey.split(",") as StationId[]) : [], controller.signal)
-        .then((predictions) => alive && setData({ predictions: predictions.length ? predictions : null, at: Date.now() }))
-        .catch(() => alive && setData({ predictions: null, at: Date.now() }));
+    let timer = 0;
+    let controller: AbortController | null = null;
+    let lastStart = 0;
+    const stationIds = idsKey ? (idsKey.split(",") as StationId[]) : [];
+    const schedule = (ms: number) => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(run, ms);
     };
-    run();
-    const timer = pollMs ? window.setInterval(run, pollMs) : undefined;
+    const run = async () => {
+      window.clearTimeout(timer);
+      // Hidden tab: no request; visibilitychange restarts the loop.
+      if (document.hidden) return;
+      controller?.abort();
+      const mine = new AbortController();
+      controller = mine;
+      lastStart = Date.now();
+      try {
+        const predictions = await fetchPredictions(stationIds, mine.signal);
+        if (alive && !mine.signal.aborted) setData({ predictions: predictions.length ? predictions : null, at: Date.now() });
+      } catch {
+        if (alive && !mine.signal.aborted) setData({ predictions: null, at: Date.now() });
+      }
+      if (alive && pollMs && controller === mine) schedule(pollMs);
+    };
+    const onVisibility = () => {
+      if (document.hidden || (!pollMs && lastStart)) return;
+      // Back in view: poll now if the last one is stale, else wait out the rest of the interval.
+      const wait = lastStart + pollMs - Date.now();
+      if (wait > 0) schedule(wait);
+      else void run();
+    };
+    void run();
+    document.addEventListener("visibilitychange", onVisibility);
     return () => {
       alive = false;
-      controller.abort();
-      window.clearInterval(timer);
+      controller?.abort();
+      window.clearTimeout(timer);
+      document.removeEventListener("visibilitychange", onVisibility);
     };
   }, [idsKey, pollMs, live]);
 

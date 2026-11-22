@@ -78,7 +78,8 @@ export function useStationSignals({ pollMs = 15_000, mockWhenOffline = true }: U
       fetchQuickSummary(undefined, controller.signal).then((data) => {
         if (!alive) return;
         if (data) {
-          noteServerSignals(data.stations, true);
+          // The full summary: replace, so stops whose reports expired (> 20 min) clear.
+          noteServerSignals(data.stations, true, { replace: true });
           void flushPending();
         } else noteServerOnline(false);
       });

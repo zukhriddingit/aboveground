@@ -1,8 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Footprints, Landmark, RotateCcw, Volume2, VolumeX, X } from "lucide-react";
 import type { Station } from "@/types/tverse";
 import { LINE_COLORS } from "@/lib/theme";
+import { FOCUS, LABEL, PANEL } from "@/lib/ui";
 import { AiSourceTag, useStationNarration } from "@/components/ai";
 import { landmarkFor } from "./storyData";
 import { StoryStyles } from "./StoryStyles";
@@ -17,6 +19,9 @@ export interface TouristNarratorCardProps {
 }
 
 const synth = () => (typeof window !== "undefined" && "speechSynthesis" in window ? window.speechSynthesis : null);
+
+/** macOS Chrome and Safari drop an utterance queued in the same tick as cancel(); wait this long. */
+const SPEAK_AFTER_CANCEL_MS = 60;
 
 function pickVoice(): SpeechSynthesisVoice | undefined {
   const voices = synth()?.getVoices() ?? [];
@@ -56,6 +61,9 @@ export function TouristNarratorCard({ touristMode, station, autoHideMs = 7000, o
   const [muted, setMuted] = useState(false);
   const [speaking, setSpeaking] = useState(false);
   const hideTimer = useRef<number | undefined>(undefined);
+  const speakTimer = useRef<number | undefined>(undefined);
+  /** The utterance being spoken. Held here so Chromium doesn't garbage-collect it mid-sentence (and drop onend). */
+  const utterance = useRef<SpeechSynthesisUtterance | null>(null);
   const mutedRef = useRef(muted);
   useEffect(() => {
     mutedRef.current = muted;
@@ -69,11 +77,21 @@ export function TouristNarratorCard({ touristMode, station, autoHideMs = 7000, o
     return () => window.clearTimeout(t);
   }, [key]);
 
-  // A new approach (or Tourist Mode turned back on) shows the card again.
+  // A new approach (or Tourist Mode turned back on) shows the card again and waits for the AI text
+  // afresh; Tourist Mode off (or the station clearing) stops the speaking indicator.
   if (key !== prevKey) {
     setPrevKey(key);
     setHiddenKey(null);
+    setGraceKey(null);
+    setSpeaking(false);
   }
+
+  /** Stop whatever is queued or speaking. Callbacks from the cancelled utterance are ignored. */
+  const stopSpeech = useCallback(() => {
+    window.clearTimeout(speakTimer.current);
+    utterance.current = null;
+    synth()?.cancel();
+  }, []);
 
   const hide = useCallback(
     (k: string) => {
@@ -94,28 +112,35 @@ export function TouristNarratorCard({ touristMode, station, autoHideMs = 7000, o
   const speak = useCallback(() => {
     const s = synth();
     if (!s || !landmark || !key) return;
-    s.cancel();
-    const { title, text } = spoken.current;
-    const u = new SpeechSynthesisUtterance(`${title || landmark.title}. ${text || landmark.fact}`);
-    const v = pickVoice();
-    if (v) u.voice = v;
-    u.rate = 1.03;
-    u.pitch = 1.05;
-    u.onstart = () => {
-      setSpeaking(true);
-      window.clearTimeout(hideTimer.current);
-    };
-    u.onend = u.onerror = () => {
-      setSpeaking(false);
-      scheduleHide(key, autoHideMs);
-    };
-    s.speak(u);
-  }, [landmark, key, autoHideMs, scheduleHide]);
+    stopSpeech();
+    speakTimer.current = window.setTimeout(() => {
+      const { title, text } = spoken.current;
+      const u = new SpeechSynthesisUtterance(`${title || landmark.title}. ${text || landmark.fact}`);
+      const v = pickVoice();
+      if (v) u.voice = v;
+      u.rate = 1.03;
+      u.pitch = 1.05;
+      u.onstart = () => {
+        if (utterance.current !== u) return;
+        setSpeaking(true);
+        window.clearTimeout(hideTimer.current);
+      };
+      u.onend = u.onerror = () => {
+        // A cancelled utterance reports "interrupted"/"canceled" late; only the current one counts.
+        if (utterance.current !== u) return;
+        utterance.current = null;
+        setSpeaking(false);
+        scheduleHide(key, autoHideMs);
+      };
+      utterance.current = u;
+      s.speak(u);
+    }, SPEAK_AFTER_CANCEL_MS);
+  }, [landmark, key, autoHideMs, scheduleHide, stopSpeech]);
 
   // Narrate whenever we approach a new station in Tourist Mode.
   useEffect(() => {
     if (!key) {
-      synth()?.cancel();
+      stopSpeech();
       return;
     }
     if (readyKey !== key) return;
@@ -132,23 +157,25 @@ export function TouristNarratorCard({ touristMode, station, autoHideMs = 7000, o
   useEffect(
     () => () => {
       window.clearTimeout(hideTimer.current);
-      synth()?.cancel();
+      stopSpeech();
     },
-    [],
+    [stopSpeech],
   );
 
   if (!key || hiddenKey === key || !station || !landmark) return null;
 
   const toggleMute = () => {
     if (!muted) {
-      synth()?.cancel();
+      stopSpeech();
+      setSpeaking(false);
       scheduleHide(key, autoHideMs);
     }
     setMuted(!muted);
   };
 
   const dismiss = () => {
-    synth()?.cancel();
+    stopSpeech();
+    setSpeaking(false);
     window.clearTimeout(hideTimer.current);
     hide(key);
   };
@@ -161,20 +188,13 @@ export function TouristNarratorCard({ touristMode, station, autoHideMs = 7000, o
       aria-live="polite"
     >
       <StoryStyles />
-      <div className="relative overflow-hidden rounded-2xl border border-amber-300/40 bg-slate-950/80 p-4 text-white shadow-[0_10px_40px_rgba(255,190,60,.25)] backdrop-blur-md">
-        <div className="pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full bg-amber-400/25 blur-2xl" />
+      <div className={`${PANEL} border-t-[3px] p-4`} style={{ borderTopColor: LINE_COLORS[station.line] }}>
         <div className="flex items-start gap-3">
-          <div className="relative flex h-11 w-11 shrink-0 items-center justify-center">
-            <span
-              className="absolute inset-0 rounded-full bg-amber-400/40"
-              style={{ animation: "tv-pulse-ring 1.6s ease-out infinite" }}
-            />
-            <span className="relative flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br from-amber-300 to-orange-500 text-xl shadow-lg">
-              🏛️
-            </span>
-          </div>
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-white/12 bg-white/[0.05] text-zinc-100">
+            <Landmark className="size-5" />
+          </span>
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-amber-300/90">
+            <div className={`${LABEL} flex items-center gap-2`}>
               <span className="h-2 w-2 rounded-full" style={{ background: LINE_COLORS[station.line] }} />
               Arriving · {station.name}
               {speaking && (
@@ -182,21 +202,22 @@ export function TouristNarratorCard({ touristMode, station, autoHideMs = 7000, o
                   {[0, 1, 2, 3].map((i) => (
                     <span
                       key={i}
-                      className="w-[3px] origin-bottom rounded-full bg-amber-300"
+                      className="w-[3px] origin-bottom rounded-full bg-white/80"
                       style={{ height: "100%", animation: `tv-eq .8s ${i * 0.12}s ease-in-out infinite` }}
                     />
                   ))}
                 </span>
               )}
             </div>
-            <h3 className="mt-0.5 flex items-center gap-2 text-base font-bold leading-tight">
+            <h3 className="mt-0.5 flex items-center gap-2 text-base font-semibold leading-tight text-white">
               {narration.title || landmark.title}
               {narration.source !== "fallback" && <AiSourceTag source={narration.source} />}
             </h3>
-            <p className="mt-1 text-[13px] leading-snug text-white/80">{narration.text || landmark.fact}</p>
+            <p className="mt-1 text-[13px] leading-snug text-zinc-300">{narration.text || landmark.fact}</p>
             <div className="mt-3 flex items-center gap-2">
-              <span className="rounded-full bg-amber-300 px-2.5 py-1 text-[11px] font-bold text-black">
-                🚶 {landmark.walkMin} min walk
+              <span className="inline-flex items-center gap-1 rounded-md border border-white/12 bg-white/[0.05] px-2 py-1 text-[11px] font-semibold text-zinc-100">
+                <Footprints className="size-3.5" />
+                {landmark.walkMin} min walk
               </span>
               <div className="ml-auto flex gap-1.5">
                 <IconBtn
@@ -206,13 +227,13 @@ export function TouristNarratorCard({ touristMode, station, autoHideMs = 7000, o
                     speak();
                   }}
                 >
-                  ↻
+                  <RotateCcw className="size-4" />
                 </IconBtn>
                 <IconBtn label={muted ? "Unmute narration" : "Mute narration"} onClick={toggleMute}>
-                  {muted ? "🔇" : "🔊"}
+                  {muted ? <VolumeX className="size-4" /> : <Volume2 className="size-4" />}
                 </IconBtn>
                 <IconBtn label="Dismiss" onClick={dismiss}>
-                  ✕
+                  <X className="size-4" />
                 </IconBtn>
               </div>
             </div>
@@ -230,7 +251,7 @@ function IconBtn({ label, onClick, children }: { label: string; onClick: () => v
       aria-label={label}
       title={label}
       onClick={onClick}
-      className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full bg-white/10 text-sm transition hover:bg-white/20 active:scale-95"
+      className={`flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg border border-white/12 bg-white/[0.05] text-zinc-100 transition hover:bg-white/[0.1] active:scale-95 ${FOCUS}`}
     >
       {children}
     </button>

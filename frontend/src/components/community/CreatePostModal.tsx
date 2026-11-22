@@ -202,14 +202,13 @@ function Composer({ onClose, onSubmit, onPointsAwarded, onPosted, defaultLine, d
           ) : (
             <div
               className="rounded-2xl border-2 border-dashed p-3 transition"
-              style={{ borderColor: dragging ? glow : "rgba(255,255,255,.14)", background: dragging ? `${glow}14` : "rgba(255,255,255,.02)" }}
+              style={{ borderColor: dragging ? "#ffffff" : "rgba(255,255,255,.12)", background: dragging ? "rgba(255,255,255,.06)" : "rgba(255,255,255,.02)" }}
             >
               <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
                   onClick={() => cameraRef.current?.click()}
-                  className="flex h-20 flex-col items-center justify-center gap-0.5 rounded-xl text-sm font-bold text-black shadow-lg transition active:scale-[.97]"
-                  style={{ background: `linear-gradient(135deg, ${glow}, ${color})` }}
+                  className="flex h-20 flex-col items-center justify-center gap-0.5 rounded-lg bg-white text-sm font-semibold text-zinc-950 transition hover:bg-zinc-200 active:scale-[.97] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
                 >
                   <span className="text-2xl">📸</span>
                   Camera
@@ -217,7 +216,7 @@ function Composer({ onClose, onSubmit, onPointsAwarded, onPosted, defaultLine, d
                 <button
                   type="button"
                   onClick={() => galleryRef.current?.click()}
-                  className="flex h-20 flex-col items-center justify-center gap-0.5 rounded-xl bg-white/[.07] text-sm font-semibold ring-1 ring-white/15 transition hover:bg-white/[.12] active:scale-[.97]"
+                  className="flex h-20 flex-col items-center justify-center gap-0.5 rounded-lg border border-white/12 bg-white/[.05] text-sm font-semibold transition hover:bg-white/[.1] active:scale-[.97] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
                 >
                   <span className="text-2xl">🖼️</span>
                   Upload
@@ -246,7 +245,7 @@ function Composer({ onClose, onSubmit, onPointsAwarded, onPosted, defaultLine, d
                 style={
                   active
                     ? { background: lineColor(l), color: "#fff" }
-                    : { background: "rgba(255,255,255,.05)", color: lineGlow(l), boxShadow: `inset 0 0 0 1px ${lineGlow(l)}44` }
+                    : { background: "rgba(255,255,255,.05)", color: "rgba(255,255,255,.8)", boxShadow: `inset 0 0 0 1px rgba(255,255,255,.12), inset 3px 0 0 ${lineColor(l)}` }
                 }
               >
                 {l}

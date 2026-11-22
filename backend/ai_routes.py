@@ -45,7 +45,7 @@ class TranslateAlertRequest(_Camel):
     line: Optional[TLine] = None
     branch: Optional[str] = Field(None, max_length=24)
     raw_mbta_text: Optional[str] = Field(None, max_length=1200)
-    estimated_fix_min: Optional[int] = Field(None, ge=1, le=600)
+    estimated_fix_min: Optional[int] = Field(None, ge=0, le=600)  # 0 = live MBTA / planned work, no estimate
     repair_kind: Optional[RepairKind] = None
     disruption: Optional[DisruptionKind] = None
 
@@ -130,7 +130,8 @@ async def line_vibe(line: TLine = Query("Green")) -> dict[str, Any]:
         import reports
 
         for r in reports.recent_reports():
-            if r.get("line") == line or ai.STATION_LINES.get(r.get("stationId", "")) == line:
+            # A report's own line wins, so a transfer-station tap (Park St: Green + Red) counts once.
+            if (r.get("line") or ai.STATION_LINES.get(r.get("stationId", ""))) == line:
                 counts[r["kind"]] = counts.get(r["kind"], 0) + 1
     except Exception:
         pass
