@@ -1,36 +1,68 @@
-// Walk-in view of an opened tunnel. MapLibre's camera can't go below the street, so this is a second
-// Three.js renderer with an eye-level camera that draws the same Fix the T scene (the live cutaway,
-// trains, crew, sparks). The camera drops in through the opening, lands at the platform end nearest
-// the fault, and you can walk on along the safety walk to the work zone.
+// Eye-level camera sharing the live cutaway with the map. Motion is integrated in
+// distance along the corridor, so every input follows the same floor and bounds.
 import * as T from "three";
 import type { TunnelCutaway } from "./TunnelCutaway";
 import { clamp, easeInOut } from "./trackGeo";
 
-/** Eye height above the floor: 1.8 m at the cutaway's 3x scale. */
-const EYE = 5.6;
+const EYE = 5.4;
 const INTRO_MS = 3400;
 const WALK_SPEED = 14;
+const TAU = 2 * Math.PI;
+const keys = new Set(["w", "s", "a", "d", "arrowup", "arrowdown", "arrowleft", "arrowright"]);
+const damp = (rate: number, dt: number) => -Math.expm1(-rate * dt);
+const pitchLimit = (a: number) => clamp(a, -1.12, 1.04);
+const angleDelta = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
+
+interface Finger {
+  id: number;
+  x: number;
+  y: number;
+  downX: number;
+  downY: number;
+  time: number;
+  tap: boolean;
+}
 
 export class TunnelView {
   private readonly renderer: T.WebGLRenderer;
-  private readonly camera = new T.PerspectiveCamera(64, 1, 0.3, 4000);
-  private readonly fog = new T.Fog("#07080d", 80, 360);
+  private readonly camera = new T.PerspectiveCamera(64, 1, 0.22, 1600);
+  private readonly fog = new T.Fog("#111620", 70, 270);
   private readonly resize: ResizeObserver;
+  private readonly listeners = new AbortController();
+  private readonly reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
   private readonly started = performance.now();
+  private intro = true;
   private frame = 0;
   private last = 0;
   private s: number;
-  /** Look direction relative to the track heading, radians. */
-  private yaw = 0.08;
-  private pitch = -0.08;
-  private drag: { x: number; y: number; yaw: number; pitch: number } | null = null;
-  private keys = new Set<string>();
+  private destination: number;
+  private navigating = false;
+  private velocity = 0;
   private walking = 0;
-  private lookTarget: T.Vector3 | null = null;
-  private readonly pos = new T.Vector3();
-  private readonly target = new T.Vector3();
+  private step = 0;
+  private yaw: number;
+  private targetYaw: number;
+  private pitch = -0.08;
+  private targetPitch = -0.08;
+  private turnSpeed = 0;
+  private coastYaw = 0;
+  private coastPitch = 0;
+  private first: Finger | null = null;
+  private second: Finger | null = null;
+  private tapTime = -Infinity;
+  private tapX = 0;
+  private tapY = 0;
+  private watching = false;
+  private readonly held = new Set<string>();
+  private readonly focus = new T.Vector3();
+  private readonly eye = new T.Vector3();
+  private readonly aim = new T.Vector3();
+  private readonly offset = new T.Vector3();
   private readonly v = new T.Vector3();
-  private readonly v2 = new T.Vector3();
+  private readonly stand = { lat: 0, y: 0 };
+  private readonly ray = new T.Raycaster();
+  private readonly ndc = new T.Vector2();
+  private readonly facing: 1 | -1;
 
   constructor(
     private readonly host: HTMLElement,
@@ -38,154 +70,297 @@ export class TunnelView {
     private readonly cut: TunnelCutaway,
   ) {
     const start = cut.walkStart;
-    this.s = start.s;
-    this.yaw = start.facing > 0 ? 0.08 : Math.PI + 0.08;
+    this.s = this.destination = start.s;
+    this.facing = start.facing;
+    this.yaw = this.targetYaw = start.facing > 0 ? -0.08 : Math.PI + 0.08;
     this.renderer = new T.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.6));
     this.renderer.outputColorSpace = T.SRGBColorSpace;
     this.renderer.toneMapping = T.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.15;
-    this.renderer.setClearColor("#0b1026");
+    this.renderer.setClearColor("#111620");
     const canvas = this.renderer.domElement;
     canvas.style.cssText = "position:absolute;inset:0;width:100%;height:100%;touch-action:none;cursor:grab";
-    canvas.setAttribute("aria-label", "View from inside the tunnel. Drag to look around; walk along the platform and safety walk.");
+    canvas.setAttribute(
+      "aria-label",
+      "Tunnel view. Drag to look. Walk with W and S, arrows, scroll, or two fingers. Double-tap or double-click the walkway to move there.",
+    );
     host.appendChild(canvas);
-
     this.resize = new ResizeObserver(() => this.fit());
     this.resize.observe(host);
     this.fit();
-
-    canvas.addEventListener("pointerdown", this.onDown);
-    window.addEventListener("pointermove", this.onMove);
-    window.addEventListener("pointerup", this.onUp);
-    canvas.addEventListener("wheel", this.onWheel, { passive: false });
-    window.addEventListener("keydown", this.onKey);
-    window.addEventListener("keyup", this.onKeyUp);
+    this.placeCamera(this.started, 0);
+    const options = { signal: this.listeners.signal };
+    canvas.addEventListener("pointerdown", this.onDown, options);
+    canvas.addEventListener("pointermove", this.onMove, options);
+    canvas.addEventListener("pointerup", this.onUp, options);
+    canvas.addEventListener("pointercancel", this.onCancel, options);
+    canvas.addEventListener("lostpointercapture", this.onCancel, options);
+    canvas.addEventListener("wheel", this.onWheel, { ...options, passive: false });
+    canvas.addEventListener("dblclick", this.onDoubleClick, options);
+    window.addEventListener("keydown", this.onKey, options);
+    window.addEventListener("keyup", this.onKeyUp, options);
+    window.addEventListener("blur", this.onBlur, options);
     this.frame = requestAnimationFrame(this.loop);
   }
 
-  /** Hold to walk along the platform and safety walk: -1 back, 1 forward, 0 stop. */
   walk(dir: -1 | 0 | 1) {
+    if (dir) this.takeControl(true);
     this.walking = dir;
   }
 
-  /** Turn to face a point (eases over; any drag takes over again). */
+  /** Guide the repair reveal to an overlooking spot on the same walk. */
   lookAt(point: T.Vector3) {
-    this.lookTarget = point.clone();
+    this.takeControl(true);
+    this.focus.copy(point);
+    this.focus.y += 1.22;
+    this.watching = true;
+    const s = this.cut.stationAt(point);
+    if (Math.abs(s - this.s) > 15) this.goTo(s - 9 * this.facing);
   }
 
   dispose() {
     cancelAnimationFrame(this.frame);
+    this.listeners.abort();
     this.resize.disconnect();
-    const canvas = this.renderer.domElement;
-    canvas.removeEventListener("pointerdown", this.onDown);
-    window.removeEventListener("pointermove", this.onMove);
-    window.removeEventListener("pointerup", this.onUp);
-    canvas.removeEventListener("wheel", this.onWheel);
-    window.removeEventListener("keydown", this.onKey);
-    window.removeEventListener("keyup", this.onKeyUp);
     this.renderer.dispose();
     this.renderer.forceContextLoss();
-    canvas.remove();
+    this.renderer.domElement.remove();
   }
 
   private fit() {
-    const w = Math.max(1, this.host.clientWidth);
-    const h = Math.max(1, this.host.clientHeight);
+    const w = Math.max(1, this.host.clientWidth),
+      h = Math.max(1, this.host.clientHeight);
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / h;
     this.camera.fov = w < h ? 78 : 64;
     this.camera.updateProjectionMatrix();
   }
 
+  private takeControl(stopTravel: boolean) {
+    if (this.intro) {
+      // Carry the *displayed* camera transform into the interactive frame, including
+      // its height above the platform. The residual drop settles while input takes over.
+      this.intro = false;
+      this.offset.subVectors(this.camera.position, this.eye);
+      this.camera.getWorldDirection(this.v);
+      this.yaw = this.targetYaw = Math.atan2(this.v.z, this.v.x) - this.cut.angleAt(this.s);
+      this.pitch = Math.asin(clamp(this.v.y, -1, 1));
+      this.targetPitch = -0.08;
+    }
+    if (stopTravel || this.watching) this.navigating = false;
+    this.watching = false;
+    this.coastYaw = this.coastPitch = 0;
+  }
+
+  private goTo(s: number) {
+    const range = this.cut.walkRange;
+    this.destination = clamp(s, range[0], range[1]);
+    this.navigating = true;
+  }
+
+  private scroll(distance: number) {
+    this.goTo((this.navigating ? this.destination : this.s) + distance * (Math.cos(this.yaw) >= 0 ? 1 : -1));
+  }
+
   private onDown = (e: PointerEvent) => {
-    this.drag = { x: e.clientX, y: e.clientY, yaw: this.yaw, pitch: this.pitch };
-    this.lookTarget = null;
-    this.renderer.domElement.style.cursor = "grabbing";
+    if (e.button !== 0 || this.second) return;
+    this.takeControl(true);
+    const finger = {
+      id: e.pointerId,
+      x: e.clientX,
+      y: e.clientY,
+      downX: e.clientX,
+      downY: e.clientY,
+      time: e.timeStamp,
+      tap: true,
+    };
+    if (this.first) {
+      this.second = finger;
+      this.first.tap = finger.tap = false;
+      this.tapTime = -Infinity;
+    } else this.first = finger;
+    const canvas = this.renderer.domElement;
+    canvas.setPointerCapture(e.pointerId);
+    canvas.style.cursor = "grabbing";
   };
 
   private onMove = (e: PointerEvent) => {
-    if (!this.drag) return;
-    this.yaw = this.drag.yaw - (e.clientX - this.drag.x) * 0.005;
-    this.pitch = clamp(this.drag.pitch - (e.clientY - this.drag.y) * 0.004, -1.1, 0.95);
+    const finger = this.first?.id === e.pointerId ? this.first : this.second?.id === e.pointerId ? this.second : null;
+    if (!finger) return;
+    const dx = e.clientX - finger.x,
+      dy = e.clientY - finger.y;
+    if (Math.hypot(e.clientX - finger.downX, e.clientY - finger.downY) > 7) finger.tap = false;
+    const other = this.second && (finger === this.first ? this.second : this.first);
+    if (other) {
+      const spread =
+        Math.hypot(e.clientX - other.x, e.clientY - other.y) - Math.hypot(finger.x - other.x, finger.y - other.y);
+      this.scroll(spread * 0.1 - dy * 0.062);
+    } else {
+      const dt = clamp((e.timeStamp - finger.time) / 1000, 0.008, 0.08);
+      this.targetYaw -= dx * 0.0046;
+      this.targetPitch = pitchLimit(this.targetPitch - dy * 0.0039);
+      this.coastYaw = clamp((-dx * 0.0046) / dt, -2.5, 2.5);
+      this.coastPitch = clamp((-dy * 0.0039) / dt, -2, 2);
+    }
+    finger.x = e.clientX;
+    finger.y = e.clientY;
+    finger.time = e.timeStamp;
   };
 
-  private onUp = () => {
-    this.drag = null;
+  private release(id: number) {
+    if (this.first?.id === id) {
+      this.first = this.second;
+      this.second = null;
+    } else if (this.second?.id === id) this.second = null;
+    if (!this.first) this.renderer.domElement.style.cursor = "grab";
+  }
+
+  private onUp = (e: PointerEvent) => {
+    const finger = this.first?.id === e.pointerId ? this.first : this.second?.id === e.pointerId ? this.second : null;
+    if (!finger) return;
+    if (e.timeStamp - finger.time > 85) this.coastYaw = this.coastPitch = 0;
+    if (e.pointerType === "touch" && finger.tap) {
+      if (e.timeStamp - this.tapTime < 340 && Math.hypot(e.clientX - this.tapX, e.clientY - this.tapY) < 24) {
+        this.pickWalk(e.clientX, e.clientY);
+        this.tapTime = -Infinity;
+      } else {
+        this.tapTime = e.timeStamp;
+        this.tapX = e.clientX;
+        this.tapY = e.clientY;
+      }
+    }
+    this.release(e.pointerId);
+  };
+
+  private onCancel = (e: PointerEvent) => {
+    if (this.first?.id !== e.pointerId && this.second?.id !== e.pointerId) return;
+    this.coastYaw = this.coastPitch = 0;
+    this.release(e.pointerId);
+  };
+
+  private onBlur = () => {
+    this.held.clear();
+    this.walking = 0;
+    this.first = this.second = null;
+    this.coastYaw = this.coastPitch = 0;
+    this.tapTime = -Infinity;
     this.renderer.domElement.style.cursor = "grab";
   };
 
   private onWheel = (e: WheelEvent) => {
     e.preventDefault();
-    this.s += -e.deltaY * 0.04 * Math.sign(Math.cos(this.yaw) || 1);
+    this.takeControl(false);
+    const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? this.host.clientHeight : 1;
+    this.scroll(-e.deltaY * unit * 0.052);
   };
+
+  private onDoubleClick = (e: MouseEvent) => this.pickWalk(e.clientX, e.clientY);
+
+  private pickWalk(x: number, y: number) {
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    this.ndc.set(((x - rect.left) / rect.width) * 2 - 1, 1 - ((y - rect.top) / rect.height) * 2);
+    this.camera.updateMatrixWorld();
+    this.ray.setFromCamera(this.ndc, this.camera);
+    const s = this.cut.walkHit(this.ray);
+    if (s !== null) {
+      this.takeControl(true);
+      this.goTo(s);
+    }
+  }
 
   private onKey = (e: KeyboardEvent) => {
-    if ((e.target as HTMLElement | null)?.closest?.("input, textarea, select, [contenteditable]")) return;
-    const k = e.key.toLowerCase();
-    if (["w", "s", "a", "d", "arrowup", "arrowdown", "arrowleft", "arrowright"].includes(k)) {
-      this.keys.add(k);
-      this.lookTarget = null;
-      e.preventDefault();
-    }
+    if (
+      e.ctrlKey ||
+      e.metaKey ||
+      e.altKey ||
+      e.shiftKey ||
+      (e.target as HTMLElement | null)?.closest?.("input,textarea,select,[contenteditable=true]")
+    )
+      return;
+    const key = e.key.toLowerCase();
+    if (!keys.has(key)) return;
+    e.preventDefault();
+    this.takeControl(true);
+    this.held.add(key);
+  };
+  private onKeyUp = (e: KeyboardEvent) => {
+    this.held.delete(e.key.toLowerCase());
   };
 
-  private onKeyUp = (e: KeyboardEvent) => {
-    this.keys.delete(e.key.toLowerCase());
-  };
+  private placeCamera(now: number, dt: number) {
+    const stand = this.cut.walkAt(this.s, this.stand);
+    const bob = this.reduced.matches
+      ? 0
+      : Math.sin(this.step) * 0.068 * Math.min(1, Math.abs(this.velocity) / WALK_SPEED);
+    this.cut.worldAt(this.s, stand.lat, stand.y + EYE + bob, this.eye);
+    const trackAngle = this.cut.angleAt(this.s);
+    if (this.watching) {
+      this.v.subVectors(this.focus, this.eye);
+      this.targetYaw = this.yaw + angleDelta(Math.atan2(this.v.z, this.v.x) - trackAngle - this.yaw);
+      this.targetPitch = pitchLimit(Math.atan2(this.v.y, Math.hypot(this.v.x, this.v.z)));
+    }
+    const k = damp(this.watching ? 4.2 : 13, dt);
+    this.yaw += angleDelta(this.targetYaw - this.yaw) * k;
+    this.pitch += (this.targetPitch - this.pitch) * k;
+    const angle = trackAngle + this.yaw;
+    this.aim.set(Math.cos(angle) * Math.cos(this.pitch), Math.sin(this.pitch), Math.sin(angle) * Math.cos(this.pitch));
+    if (this.intro) {
+      const u = easeInOut((now - this.started) / INTRO_MS);
+      this.cut.worldAt(this.s - 30 * this.facing, 0, 190, this.camera.position).lerp(this.eye, u);
+      this.cut.worldAt(this.s + 25 * this.facing, stand.lat * 0.4, stand.y, this.v);
+      this.aim.multiplyScalar(50).add(this.eye);
+      this.camera.lookAt(this.v.lerp(this.aim, u));
+      if (u >= 1) this.intro = false;
+    } else {
+      this.offset.multiplyScalar(Math.exp(-3.3 * dt));
+      this.camera.position.copy(this.eye).add(this.offset);
+      this.camera.lookAt(this.aim.add(this.camera.position));
+    }
+  }
 
   private loop = (now: number) => {
     this.frame = requestAnimationFrame(this.loop);
-    const dt = this.last ? Math.min(0.1, (now - this.last) / 1000) : 1 / 60;
+    const dt = this.last ? Math.min(0.08, (now - this.last) / 1000) : 0;
     this.last = now;
-    const cut = this.cut;
-    const [from, to] = cut.walkRange;
-
-    const fwd = (this.keys.has("w") || this.keys.has("arrowup") ? 1 : 0) - (this.keys.has("s") || this.keys.has("arrowdown") ? 1 : 0) + this.walking;
-    const turn = (this.keys.has("a") || this.keys.has("arrowleft") ? 1 : 0) - (this.keys.has("d") || this.keys.has("arrowright") ? 1 : 0);
-    this.yaw -= turn * dt * 1.4;
-    this.s += fwd * WALK_SPEED * dt * Math.sign(Math.cos(this.yaw) || 1);
-    this.s = clamp(this.s, from, to);
-    const stand = cut.walkAt(this.s);
-
-    cut.worldAt(this.s, stand.lat, stand.y + EYE, this.pos);
-
-    if (this.lookTarget) {
-      this.v.subVectors(this.lookTarget, this.pos);
-      const wantYaw = Math.atan2(this.v.z, this.v.x) - cut.angleAt(this.s);
-      const wantPitch = Math.atan2(this.v.y, Math.hypot(this.v.x, this.v.z));
-      let d = ((wantYaw - this.yaw + Math.PI) % (Math.PI * 2)) - Math.PI;
-      if (d < -Math.PI) d += Math.PI * 2;
-      const k = 1 - Math.exp(-dt * 2.5);
-      this.yaw += d * k;
-      this.pitch += (clamp(wantPitch, -1.1, 0.95) - this.pitch) * k;
+    const left = this.held.has("a") || this.held.has("arrowleft");
+    const right = this.held.has("d") || this.held.has("arrowright");
+    this.turnSpeed += ((Number(right) - Number(left)) * 1.55 - this.turnSpeed) * damp(8, dt);
+    this.targetYaw += this.turnSpeed * dt;
+    if (!this.first) {
+      const drag = damp(10, dt);
+      this.targetYaw += (this.coastYaw * drag) / 10;
+      this.targetPitch = pitchLimit(this.targetPitch + (this.coastPitch * drag) / 10);
+      this.coastYaw *= 1 - drag;
+      this.coastPitch *= 1 - drag;
     }
-
-    const heading = cut.angleAt(this.s) + this.yaw;
-    this.target.set(
-      this.pos.x + Math.cos(heading) * Math.cos(this.pitch) * 50,
-      this.pos.y + Math.sin(this.pitch) * 50,
-      this.pos.z + Math.sin(heading) * Math.cos(this.pitch) * 50,
-    );
-
-    // Drop in through the opening: start high over the street looking down, land at the platform end.
-    const intro = easeInOut((now - this.started) / INTRO_MS);
-    if (intro < 1) {
-      const facing = Math.sign(Math.cos(this.yaw)) || 1;
-      const above = cut.worldAt(this.s - 30 * facing, 0, 190, this.v2);
-      const fromTarget = cut.worldAt(this.s + 25 * facing, stand.lat * 0.4, stand.y, this.v);
-      this.camera.position.lerpVectors(above, this.pos, intro);
-      this.camera.lookAt(fromTarget.lerp(this.target, intro));
-    } else {
-      this.camera.position.copy(this.pos);
-      this.camera.lookAt(this.target);
+    const fwd = Number(this.held.has("w") || this.held.has("arrowup"));
+    const back = Number(this.held.has("s") || this.held.has("arrowdown"));
+    const distance = this.destination - this.s;
+    const speedLimit = this.watching ? 52 : 26;
+    const wish = this.navigating
+      ? clamp(distance * 2.4, -speedLimit, speedLimit)
+      : clamp(fwd - back + this.walking, -1, 1) * WALK_SPEED * (Math.cos(this.yaw) >= 0 ? 1 : -1);
+    this.velocity += (wish - this.velocity) * damp(9, dt);
+    const prev = this.s;
+    const range = this.cut.walkRange;
+    this.s = clamp(this.s + this.velocity * dt, range[0], range[1]);
+    if (this.navigating && (Math.abs(distance) < 0.012 || (this.destination - this.s) * distance < 0)) {
+      this.s = this.destination;
+      this.navigating = false;
+      this.velocity = 0;
     }
-
+    if (this.s === range[0] || this.s === range[1]) this.velocity = 0;
+    this.step += (Math.abs(this.s - prev) * TAU) / 4.3;
+    this.placeCamera(now, dt);
     const prevFog = this.scene.fog;
     this.scene.fog = this.fog;
-    cut.showStreet(true);
-    this.renderer.render(this.scene, this.camera);
-    cut.showStreet(false);
-    this.scene.fog = prevFog;
+    this.cut.showStreet(true);
+    try {
+      this.renderer.render(this.scene, this.camera);
+    } finally {
+      this.cut.showStreet(false);
+      this.scene.fog = prevFog;
+    }
   };
 }

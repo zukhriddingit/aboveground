@@ -7,6 +7,7 @@
 // a protected work zone and the crew. Fixing it plays the repair down there, then the trains pull out
 // and the street closes again. Surface stops get the same work zone down the median (SurfaceStation).
 import * as T from "three";
+import { RESTORE_AT as FIXED_AT } from "./repairCrew";
 import type { CustomLayerInterface, CustomRenderMethodInput, GeoJSONSource, Map as MapLibreMap } from "maplibre-gl";
 import { LINE_COLORS, routeLine } from "@/lib/theme";
 import type { MapViewMode } from "@/components/map";
@@ -37,9 +38,7 @@ const WELD = [new T.Color("#ffffff"), new T.Color("#cfe9ff"), new T.Color("#ffd3
 const RESTORE = [GREEN, new T.Color("#ffffff"), new T.Color("#9fffd0")];
 
 /** Repair timeline, seconds after the crew starts. */
-const WELD_START = 1.3;
-const FIXED_AT = 3.6;
-const CLOSE_AT = 8.6;
+const CLOSE_AT = FIXED_AT + 4;
 
 export interface RepairCallbacks {
   /** Fires when the fix lands: clear the alert and release the trains here. */
@@ -89,6 +88,7 @@ interface RepairRun {
   restored: boolean;
   closing: boolean;
   callbacks: RepairCallbacks;
+  xz: XZ | null;
 }
 
 class FixLayer implements CustomLayerInterface {
@@ -107,13 +107,19 @@ class FixLayer implements CustomLayerInterface {
   private readonly holdMat = additive(AMBER, 0.9);
   private readonly holdRings: T.Mesh[] = [];
   private readonly flashRings: T.Mesh[] = [];
+  private readonly markerBuffer: ReturnType<IncidentSim["markers"]> = { held: [], released: [] };
+  private readonly frameTrains: CutawayTrain[] = [];
+  private readonly collectTrain = (t: CutawayTrain) => { this.frameTrains.push(t); };
+  private readonly hidden = new Set<string>();
+  private readonly busyStations = new Set<StationId>();
+  private readonly effects = { sparks: this.sparks, puffs: this.puffs };
   private readonly waves: Array<{ mesh: T.Mesh; start: number; x: number; z: number; radius: number }> = [];
   readonly cutaways = new Map<StationId, TunnelCutaway>();
   /** Work zones at street-level stops, while something's broken there. */
   readonly surfaces = new Map<StationId, SurfaceStation>();
   /** Stations where the street can't open (surface stops, or buildings over the whole tunnel). */
   private readonly noCut = new Set<StationId>();
-  private readonly fitted = new Set<TunnelCutaway>();
+  private readonly fitted = new WeakSet<TunnelCutaway>();
   private lastFrame = 0;
   private zs = 1;
   /** Held or just-released trains on the map last frame (their rings pulse). */
@@ -183,7 +189,7 @@ class FixLayer implements CustomLayerInterface {
     this.sparks.update(dt, 42);
     this.puffs.update(dt, this.map.getPixelRatio?.() ?? window.devicePixelRatio);
 
-    this.camera.projectionMatrix.fromArray(Array.from(matrix)).multiply(FIX_MODEL_MATRIX);
+    this.camera.projectionMatrix.fromArray(matrix).multiply(FIX_MODEL_MATRIX);
     this.camera.projectionMatrixInverse.copy(this.camera.projectionMatrix).invert();
     this.renderer.resetState();
     this.renderer.render(this.scene, this.camera);
@@ -257,18 +263,22 @@ class FixLayer implements CustomLayerInterface {
   }
 
   private updateCutaways(now: number, dt: number) {
+    this.busyStations.clear();
+    if (this.repair) this.busyStations.add(this.repair.stationId);
     for (const incident of this.sim.incidents.values()) {
+      if (incident.status === "active") this.busyStations.add(incident.stationId);
       if (incident.status === "active" && !this.cutaways.has(incident.stationId)) {
         this.ensureCutaway(incident.stationId, now + OPEN_DELAY_MS, incident.fault);
       }
       if (incident.status === "active" && SURFACE_STATIONS.has(incident.stationId)) this.ensureSurface(incident.stationId, incident.fault)?.setIncident(now);
     }
-    const trains: CutawayTrain[] = [];
-    this.sim.forEachTrain((t) => trains.push(t));
-    const hidden = new Set<string>();
+    const trains = this.frameTrains, hidden = this.hidden;
+    trains.length = 0;
+    hidden.clear();
+    this.sim.forEachTrain(this.collectTrain);
     for (const [id, st] of this.surfaces) {
-      for (const trainId of st.update(now, dt, trains, { sparks: this.sparks, puffs: this.puffs })) hidden.add(trainId);
-      const busy = this.repair?.stationId === id || [...this.sim.incidents.values()].some((i) => i.stationId === id && i.status === "active");
+      for (const trainId of st.update(now, dt, trains, this.effects)) hidden.add(trainId);
+      const busy = this.busyStations.has(id);
       if (!busy) st.clear(now);
       if (!busy && st.isClear(now)) {
         st.dispose();
@@ -285,9 +295,9 @@ class FixLayer implements CustomLayerInterface {
           continue;
         }
       }
-      const busy = this.repair?.stationId === id || [...this.sim.incidents.values()].some((i) => i.stationId === id && i.status === "active");
+      const busy = this.busyStations.has(id);
       if (!busy) cut.close(now);
-      for (const trainId of cut.update(now, dt, trains, { sparks: this.sparks, puffs: this.puffs })) hidden.add(trainId);
+      for (const trainId of cut.update(now, dt, trains, this.effects)) hidden.add(trainId);
       if (cut.isClosed(now) && this.repair?.stationId !== id) {
         cut.dispose();
         this.cutaways.delete(id);
@@ -339,9 +349,9 @@ class FixLayer implements CustomLayerInterface {
 
   // ------------------------------------------------------------ markers on the street
 
-  private ensureRings(pool: T.Mesh[], count: number, material: () => T.Material) {
+  private ensureRings(pool: T.Mesh[], count: number, shared?: T.Material) {
     while (pool.length < count) {
-      const mesh = new T.Mesh(this.ringGeo, material());
+      const mesh = new T.Mesh(this.ringGeo, shared ?? additive(GREEN, 1));
       mesh.frustumCulled = false;
       this.scene.add(mesh);
       pool.push(mesh);
@@ -349,25 +359,27 @@ class FixLayer implements CustomLayerInterface {
   }
 
   private updateTrainMarkers(now: number) {
-    const { held, released } = this.sim.markers(now);
+    const { held, released } = this.sim.markers(now, this.markerBuffer);
     this.markersShowing = held.length > 0 || released.length > 0;
     this.holdMat.opacity = 0.55 + 0.45 * Math.sin(now / 160);
-    this.ensureRings(this.holdRings, held.length, () => this.holdMat);
-    this.holdRings.forEach((ring, i) => {
+    this.ensureRings(this.holdRings, held.length, this.holdMat);
+    for (let i = 0; i < this.holdRings.length; i++) {
+      const ring = this.holdRings[i];
       ring.visible = i < held.length;
-      if (!ring.visible) return;
+      if (!ring.visible) continue;
       ring.position.set(held[i].x, 3 * this.zs, held[i].z);
       ring.scale.setScalar(30 * this.zs);
-    });
-    this.ensureRings(this.flashRings, released.length, () => additive(GREEN, 1));
-    this.flashRings.forEach((ring, i) => {
+    }
+    this.ensureRings(this.flashRings, released.length);
+    for (let i = 0; i < this.flashRings.length; i++) {
+      const ring = this.flashRings[i];
       ring.visible = i < released.length;
-      if (!ring.visible) return;
+      if (!ring.visible) continue;
       const age = released[i].age / 1400;
       ring.position.set(released[i].x, 3 * this.zs, released[i].z);
       ring.scale.setScalar((30 + age * 70) * this.zs);
       (ring.material as T.MeshBasicMaterial).opacity = 1 - age;
-    });
+    }
   }
 
   private spawnWave(x: number, z: number, radius: number, now: number) {
@@ -402,7 +414,7 @@ class FixLayer implements CustomLayerInterface {
       this.emblem.group.visible = false;
       return;
     }
-    const xz = this.sim.stationXZ(run.stationId);
+    const xz = run.xz;
     if (!xz) {
       this.repair = null;
       run.callbacks.onRestored();
@@ -415,24 +427,18 @@ class FixLayer implements CustomLayerInterface {
       return;
     }
     const current = this.cutaways.get(run.stationId);
-    const opened = run.closing && current ? { cut: current, created: false } : this.ensureCutaway(run.stationId, now, run.fault);
-    if (!opened) {
+    const opened = current && (run.closing || current.opening) ? null : this.ensureCutaway(run.stationId, now, run.fault);
+    const cut = opened?.cut ?? current;
+    if (!cut) {
       this.streetRepair(run, xz, now);
       return;
     }
-    const cut = opened.cut;
-    if (opened.created) run.start = now + cut.openRemaining(now);
+    if (opened?.created) run.start = now + cut.openRemaining(now);
     const t = (now - run.start) / 1000;
     if (t < 0) return;
     if (!run.begun) {
       run.begun = true;
       cut.beginRepair(now);
-    }
-
-    if (t > WELD_START && t < FIXED_AT) {
-      const p = cut.weldPoint();
-      this.sparks.emit(p.x, p.y, p.z, 9, WELD, 22, 1.1, cut.floorY);
-      if (Math.random() < 0.3) this.puffs.emit(p.x, p.y, p.z, new T.Color("#9a978f"), 30, 3, 1, 1.4);
     }
 
     if (t >= FIXED_AT && !run.restored) {
@@ -481,10 +487,6 @@ class FixLayer implements CustomLayerInterface {
     if (!run.begun) {
       run.begun = true;
       st.beginRepair(now);
-    }
-    if (t > WELD_START && t < FIXED_AT) {
-      const p = st.weldPoint();
-      this.sparks.emit(p.x, p.y, p.z, 9, WELD, 22, 1.1, st.floorY);
     }
     if (t >= FIXED_AT && !run.restored) {
       st.restore(now);
@@ -615,7 +617,7 @@ export class FixTheTScene {
 
   /** The crew fixes it in the tunnel (onRestored when the line is clear), then the street closes (onDone). */
   playRepair(stationId: StationId, callbacks: RepairCallbacks, fault: FaultKind = "signal") {
-    this.layer.repair = { stationId, fault, start: performance.now(), begun: false, restored: false, closing: false, callbacks };
+    this.layer.repair = { stationId, fault, start: performance.now(), begun: false, restored: false, closing: false, callbacks, xz: this.sim.stationXZ(stationId) };
     if (this.mode === "2d") {
       this.layer.finishRepair();
       return;
@@ -636,7 +638,7 @@ export class FixTheTScene {
   /** Walk into the opened station: an eye-level view rendered into `host`. null if it isn't open. */
   enterTunnel(stationId: StationId, host: HTMLElement): TunnelView | null {
     const cut = this.layer.cutaways.get(stationId);
-    if (!cut?.isOpen) return null;
+    if (this.mode === "2d" || !cut?.isOpen) return null;
     return new TunnelView(host, this.layer.scene, cut);
   }
 

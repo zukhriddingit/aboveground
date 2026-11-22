@@ -101,9 +101,38 @@ buildings swapped for flat footprints, which is also lighter on slow devices. Th
 
    After a win the card says how long that repair really takes on the T, with a real MBTA example and its
    source (`realRepairs.ts`), then plays the 3D repair after 9 seconds or when you tap "Watch the crew fix it".
-5. **Repair.** The crew works at the fault, the signal turns green, the trains pull out, the street closes,
-   then the camera flies to the avatar and the new hat pops on. `TunnelView` drops you on the platform end
-   facing the work zone and lets you walk the safety walk out to it.
+5. **Watch the repair.** Two workers turn toward their marks, walk to the equipment and settle into
+   their working stances. Their gait places each boot along the path according to distance traveled.
+   The lookout watches the approach with a lantern and radio. At the all-clear the crew stands and
+   signals the train, the trains pull out and the street closes.
+
+| Repair | What to watch at the work site |
+| --- | --- |
+| Signal relay | A kneeling technician probes the open case with a meter, removes and seats a relay, then tests again. A partner records the readings on a clipboard. |
+| Thermite weld | The lead preheats the rail ends. The partner seats the crucible on the mold and lifts it clear. The grinder then throws filings from its wheel as it dresses the joint. |
+| Switch | The lead plants the tip of a switch bar at the machine, shifts weight and pushes and pulls with both hands. The partner checks the throw and radios the result. |
+| Power | After the arcing stops, one worker reaches the dropped contact wire or the third rail with an insulated stick. The partner operates the feeder cabinet levers in sequence. |
+| Disabled train | One worker guides the movement with hand signals. The other kneels at the inter-car air connections and seats the hose, which departs with the consist. |
+| Frozen switch | A worker sweeps the propane burner along the iced point while a partner scrapes. The ice recedes as they work. |
+
+### Walking the tunnel
+
+The camera descends to the platform end nearest the fault. The rider-side path bends toward the
+wall and follows a concrete ramp onto the narrower safety walk. When the repair starts, the view
+turns toward the crew and, if needed, travels to a nearby spot overlooking the job. Any navigation
+input takes over from the arrival or repair camera.
+
+| Input | Action |
+| --- | --- |
+| Drag with the mouse or one finger | Look around. The view eases toward the drag and coasts briefly on release. |
+| W / S, up / down arrows, or the two walk buttons | Hold to accelerate along the path. Release to slow to a stop. |
+| A / D or left / right arrows | Turn with eased angular speed. |
+| Wheel, trackpad, two-finger vertical drag or pinch | Adjust the walking destination along the path. |
+| Double-click or double-tap the platform or safety walk | Walk to the selected spot within the accessible range. |
+
+Walking adds a small distance-driven head bob. The system reduced-motion preference disables it.
+The tunnel camera shares the live geometry and effects with the map. Its listeners and renderer
+are released when the rider leaves.
 
 ## Files
 
@@ -115,7 +144,8 @@ buildings swapped for flat footprints, which is also lighter on slow devices. Th
 | `FixTheTScene.ts` | Second Three.js layer + MapLibre line layer, attached with `TVerseMapHandle.getMap()`; repair timeline |
 | `faults.ts` | Problem type → fault kind, how far down the line and in which direction it is staged, toast copy |
 | `TrackCorridor.ts`, `TunnelCutaway.ts`, `SurfaceStation.ts` | Geometry along the real track; the opened tunnel; the street-level work zone |
-| `TunnelView.ts` | Walk-in view: a second renderer with an eye-level camera on the platform |
+| `TunnelView.ts` | Walk-in renderer, camera guidance, pointer gestures and keyboard navigation |
+| `crewModels.ts`, `repairCrew.ts` | Shared rounded figure and tool geometry, joint rig, foot placement, two-hand tool poses and fault-specific cues |
 | `tunnelModels.ts`, `tunnelTextures.ts`, `fx.ts` | MBTA fleets, crew, signal, cabinet, work-zone props; canvas textures; sparks and smoke |
 | `FixTheTModal.tsx` + six `*Game.tsx` | Delay card and the mini-games (loaded on demand, like `FixTheTScene`) |
 | `realRepairs.ts` | How long each kind of repair really takes, with sources |
@@ -124,7 +154,7 @@ buildings swapped for flat footprints, which is also lighter on slow devices. Th
 
 ## Swapping in Blender models
 
-Every model in `tunnelModels.ts` is built in code and can be replaced with a glTF loaded through
+Every model in `tunnelModels.ts` and `crewModels.ts` is built in code and can be replaced with a glTF loaded through
 `three/addons/loaders/GLTFLoader.js`, as long as it keeps the same conventions:
 
 - Cross-section at **3x** real size, lengths at **1.5x** (`LENGTH_SCALE`), so a 22 m Type 9 is ~33 m long.
@@ -139,8 +169,10 @@ Type 8 + Type 8 two-car sets; Red Line CRRC, 1800 or 1700 series six-car sets; O
 0700 series. Each has its own livery, door layout and an amber destination sign (`trainSign`).
 
 Station dimensions (all in `TunnelCutaway.ts`): walls at ±22.5 m, floor at -19.5 m, rail top at -18.6 m,
-tracks at ±6 m, roof slab underside at -6.6 m, platforms ±10.5 → ±22.5 m for 50 m (Green) or 95 m (Red,
-Orange, Blue) either side of the station.
+tracks at ±6 m, platforms from ±10.5 to ±22.5 m for 50 m (Green) or 95 m (Red, Orange, Blue)
+either side of the station. The heavy-rail soffit is at -6.6 m. The Green Line soffit is at -2.7 m
+to clear the pantograph and wire. The work towers light the ballasted track bed. Cables and tool
+bags sit beside the work and the roof shoulders cover the pedestrian walks.
 
 ## Notes for the team
 

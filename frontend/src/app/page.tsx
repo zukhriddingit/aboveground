@@ -370,8 +370,11 @@ export default function Home() {
 
   // The platform walk-in only exists in the 3D world.
   useEffect(() => {
-    if (view === "2d") cancelWalkIn();
-  }, [view, cancelWalkIn]);
+    if (view === "2d") {
+      cancelWalkIn();
+      void exitTunnel();
+    }
+  }, [view, cancelWalkIn, exitTunnel]);
   useEffect(() => cancelWalkIn, [cancelWalkIn]);
 
   /** "Explore a simulated repair" for a live alert: the tunnel opens, but the real trains keep moving. */
@@ -567,6 +570,16 @@ export default function Home() {
     [awardFix, exitTunnel, progress.equipped, push, sim, stationById, viewTunnel],
   );
 
+  // Development only: __winFix() wins the open repair step, to check the crew's repair without playing it.
+  useEffect(() => {
+    if (process.env.NODE_ENV === "production" || !fixAlert) return;
+    const w = window as unknown as { __winFix?: () => void };
+    w.__winFix = () => void handleWin(fixAlert);
+    return () => {
+      delete w.__winFix;
+    };
+  }, [fixAlert, handleWin]);
+
   const toggleNotify = useCallback(async () => {
     if (notifyOn) {
       writeStorage(NOTIFY_KEY, null);
@@ -741,7 +754,7 @@ export default function Home() {
         <div className="pointer-events-none absolute inset-x-0 bottom-[10.5rem] z-30 flex justify-center px-3">
           <div className={`${PANEL} pointer-events-auto flex items-center gap-1.5 p-1.5 pl-3 text-xs text-zinc-200`}>
             <span className="mr-1 hidden sm:inline">
-              On the platform at <span className="font-semibold text-white">{shortName(stationById(inside) ?? { id: inside, name: "the station" })}</span> · drag to look around
+              On the platform at <span className="font-semibold text-white">{shortName(stationById(inside) ?? { id: inside, name: "the station" })}</span> · drag to look · double-click the walk to move
             </span>
             {([-1, 1] as const).map((dir) => (
               <button
