@@ -21,6 +21,7 @@ export {
   featuredStationFor,
   isServiceAlert,
   scenarioFor,
+  alertForStoppedTrain,
   whenLabel,
   type Arrival,
   type LiveAlert,

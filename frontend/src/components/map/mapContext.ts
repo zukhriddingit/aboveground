@@ -1,9 +1,11 @@
 "use client";
 import { createContext } from "react";
-import type { ScreenPoint } from "./types";
+import type { MapLayerVisibility, MapViewMode, ScreenPoint } from "./types";
 
-/** Lets <MapAnchor> follow the 3D camera: subscribe() fires once per rendered frame. */
+/** Lets MapAnchor follow the active camera on each rendered frame. */
 export interface MapOverlay {
+  viewMode: MapViewMode;
+  visibleLayers: MapLayerVisibility;
   subscribe(listener: () => void): () => void;
   project(lng: number, lat: number, altitude?: number): ScreenPoint | null;
 }
@@ -12,8 +14,8 @@ export const MapOverlayContext = createContext<MapOverlay | null>(null);
 
 type Projector = (lng: number, lat: number, altitude?: number) => ScreenPoint | null;
 
-/** One per TVerseMap. The 3D layer calls emit() after each frame. */
-export class OverlayHub implements MapOverlay {
+/** One per TVerseMap. MapLibre emits render events in both views. */
+export class OverlayHub {
   private readonly listeners = new Set<() => void>();
   private projector: Projector | null = null;
 

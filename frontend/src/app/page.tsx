@@ -4,7 +4,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { ChevronLeft, ChevronRight, LogOut } from "lucide-react";
-import type { TVerseMapHandle } from "@/components/map";
+import type { MapLayerVisibility, MapViewMode, TVerseMapHandle } from "@/components/map";
+
+const ALL_LAYERS: MapLayerVisibility = { trains: true, stories: true, alerts: true, shuttles: true, tourist: true };
 import {
   PostStoryModal,
   StationStoryBubbles,
@@ -27,6 +29,7 @@ import {
   gameFor,
   isServiceAlert,
   scenarioFor,
+  alertForStoppedTrain,
   shortName,
   translateForGame,
   translateLocally,
@@ -68,8 +71,6 @@ const flagKey = (id: StationId) => `flag:${id}`;
 const liveKey = (alert: LiveAlert) => `live-${alert.id}`;
 const NOTIFY_KEY = "tverse-notify-closures";
 const VIEW_KEY = "tverse-map-view";
-const FLAT_FOOTPRINTS = 0.85;
-const FOOTPRINT_OPACITY = ["interpolate", ["linear"], ["zoom"], 12, 0.5, 14.5, 0.85, 15.2, 0] as unknown as number;
 
 interface Staged {
   live: LiveAlert;
@@ -109,7 +110,7 @@ export default function Home() {
   const staged = useMemo(() => {
     const out = new Map<string, Staged>();
     for (const a of live.alerts) {
-      const scenario = isServiceAlert(a) ? scenarioFor(a.cause) : null;
+      const scenario = isServiceAlert(a) ? scenarioFor(a.cause, a.header) : null;
       if (!scenario) continue;
       const station = featuredStationFor(a, world.stations, live.index, false);
       if (!station) continue;
@@ -144,6 +145,10 @@ export default function Home() {
   const [simulating, setSimulating] = useState(false);
   const [viewer, setViewer] = useState<StationStory[] | null>(null);
   const [posting, setPosting] = useState(false);
+  /** 2D: a flat, north-up map without 3D buildings (lighter); 3D: the tilted city. */
+  const [view, setView] = useState<MapViewMode>("3d");
+  /** Map layers the rider has switched on (the HUD's Layers popover sets these). */
+  const [layers, setLayers] = useState<MapLayerVisibility>(ALL_LAYERS);
   /** Station whose platform we're standing on (walk-in view), if any. */
   const [inside, setInside] = useState<StationId | null>(null);
   const tunnelHost = useRef<HTMLDivElement>(null);
@@ -183,6 +188,7 @@ export default function Home() {
 
   /** Look down into the opened street at a station (falls back to a plain fly-to). */
   const viewTunnel = useCallback((id: StationId, duration = 1800) => {
+    setView("3d");
     const view = scene.current?.cutawayView(id);
     if (view) map.current?.flyTo(view.center[0], view.center[1], { zoom: view.zoom, pitch: view.pitch, bearing: view.bearing, duration });
     else map.current?.flyToStation(id, { zoom: 16, pitch: 62, duration });
@@ -232,43 +238,15 @@ export default function Home() {
     [showOnMap],
   );
 
-  /** 2D: a flat, north-up map without 3D buildings (lighter); 3D: the tilted city. */
-  const [view, setView] = useState<"3d" | "2d">("3d");
-  const applyView = useCallback((mode: "3d" | "2d") => {
-    const m = map.current?.getMap();
-    if (!m) return;
-    const flat = mode === "2d";
-    for (const id of ["buildings", "buildings-skyline"]) if (m.getLayer(id)) m.setLayoutProperty(id, "visibility", flat ? "none" : "visible");
-    if (m.getLayer("building-footprints")) {
-      m.setLayerZoomRange("building-footprints", 12, flat ? 24 : 15.2);
-      m.setPaintProperty("building-footprints", "fill-opacity", flat ? FLAT_FOOTPRINTS : FOOTPRINT_OPACITY);
-    }
-    if (flat) {
-      m.dragRotate.disable();
-      m.touchZoomRotate.disableRotation();
-      m.touchPitch.disable();
-      m.keyboard.disableRotation();
-      m.easeTo({ pitch: 0, bearing: 0, duration: 700 });
-      m.once("moveend", () => m.setMaxPitch(0));
-    } else {
-      m.setMaxPitch(80);
-      m.dragRotate.enable();
-      m.touchZoomRotate.enableRotation();
-      m.touchPitch.enable();
-      m.keyboard.enableRotation();
-      m.easeTo({ pitch: 60, bearing: -15, duration: 700 });
-    }
-  }, []);
   const toggleView = useCallback(() => {
     const next = view === "3d" ? "2d" : "3d";
     setView(next);
-    applyView(next);
     try {
       window.localStorage.setItem(VIEW_KEY, next);
     } catch {
       // private windows may block storage; the choice just won't stick
     }
-  }, [applyView, view]);
+  }, [view]);
 
   useEffect(
     () => () => {
@@ -318,7 +296,7 @@ export default function Home() {
   /** "Explore a simulated repair" for a live alert: the tunnel opens, but the real trains keep moving. */
   const exploreLive = useCallback(
     (a: LiveAlert) => {
-      const scenario = scenarioFor(a.cause);
+      const scenario = scenarioFor(a.cause, a.header);
       const station = featuredStationFor(a, stationsRef.current, live.index);
       if (!scenario || !station || repairing) return;
       const busy = simAlerts.find((s) => s.stationId === station.id);
@@ -353,9 +331,10 @@ export default function Home() {
   }, [exitTunnel, explore, fixAlert, repairing, sim]);
 
   const onReady = useCallback(() => {
-    if (window.localStorage.getItem(VIEW_KEY) === "2d") {
-      setView("2d");
-      applyView("2d");
+    try {
+      if (window.localStorage.getItem(VIEW_KEY) === "2d") setView("2d");
+    } catch {
+      // storage blocked: start in 3D
     }
     void import("@/components/game/FixTheTScene").then(({ FixTheTScene }) => {
       const m = map.current?.getMap();
@@ -363,7 +342,7 @@ export default function Home() {
         scene.current = new FixTheTScene(m, sim, (id) => stationsRef.current.find((s) => s.id === id) ?? null);
       }
     });
-  }, [applyView, sim]);
+  }, [sim]);
 
   const simulateDelay = useCallback(async () => {
     const station = stationById(delayStation);
@@ -540,6 +519,8 @@ export default function Home() {
         stations={stations}
         linesGeoJson={world.linesGeoJson}
         touristMode={touristMode}
+        viewMode={view}
+        visibleLayers={layers}
         demoRideActive={riding}
         avatarHat={hatHold ?? progress.equipped}
         onReady={onReady}
@@ -564,16 +545,18 @@ export default function Home() {
         quickCheckSignals={signals}
         onQuickCheckPoints={(n) => addPoints(n)}
       >
-        <FeedStopPins posts={feed.posts} stations={world.stations} onOpenStop={openStopFeed} />
-        <StationStoryBubbles
-          stations={stations}
-          storiesByStation={storiesByStation}
-          onOpenStation={(id, stories) => {
-            map.current?.flyToStation(id, { zoom: 16 });
-            setViewer(stories);
-          }}
-        />
-        {alerts.map((alert) => {
+        {layers.stories && <FeedStopPins posts={feed.posts} stations={world.stations} onOpenStop={openStopFeed} />}
+        {layers.stories && (
+          <StationStoryBubbles
+            stations={stations}
+            storiesByStation={storiesByStation}
+            onOpenStation={(id, stories) => {
+              map.current?.flyToStation(id, { zoom: 16 });
+              setViewer(stories);
+            }}
+          />
+        )}
+        {layers.alerts && alerts.map((alert) => {
           const station = stationById(alert.stationId);
           if (!station) return null;
           return (
@@ -589,7 +572,10 @@ export default function Home() {
             />
           );
         })}
-        <ClosureMarkers closures={live.closures} getZoom={() => map.current?.getMap()?.getZoom() ?? 14} onOpen={showAlertDetails} />
+        {layers.alerts && (
+          <ClosureMarkers closures={live.closures} getZoom={() => map.current?.getMap()?.getZoom() ?? 14} onOpen={showAlertDetails} />
+        )}
+        {layers.alerts && (
         <LiveMarkers
           alerts={[...liveOnly].flatMap(([id, alert]) => {
             const station = stationById(id);
@@ -599,11 +585,15 @@ export default function Home() {
           getZoom={() => map.current?.getMap()?.getZoom() ?? 14}
           onOpenAlert={showAlertDetails}
           onOpenTrain={(train) => {
+            // A train standing still near a modeled station opens the disabled-train rescue walkthrough.
+            const rescue = alertForStoppedTrain(train, stationsRef.current);
+            if (rescue && !repairing) return exploreLive(rescue);
             setAlertFocus(null);
             setAlertsOpen(true);
             map.current?.flyTo(train.lng, train.lat, { zoom: 15.8, pitch: 55, duration: 1600 });
           }}
         />
+        )}
       </FixTheTMap>
 
       <div
@@ -677,7 +667,7 @@ export default function Home() {
           focusId={alertFocus}
           stationName={(id) => live.index?.stations.get(id)?.name ?? null}
           onShowOnMap={showOnMap}
-          exploreLabel={(a) => (scenarioFor(a.cause) && featuredStationFor(a, stations, live.index) ? scenarioFor(a.cause)!.label : null)}
+          exploreLabel={(a) => (scenarioFor(a.cause, a.header) && featuredStationFor(a, stations, live.index) ? scenarioFor(a.cause, a.header)!.label : null)}
           onExplore={exploreLive}
           notify={{ supported: notifySupported, on: notifyOn, toggle: () => void toggleNotify() }}
           events={live.events}

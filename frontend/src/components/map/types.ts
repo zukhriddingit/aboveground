@@ -4,7 +4,29 @@ import type { Map as MapLibreMap } from "maplibre-gl";
 import type { AvatarHat, QuickCheckKind, Station, StationId, TLinesGeoJson, TrainVehicle } from "@/types/tverse";
 import type { StationSignalsResult } from "@/components/quickcheck";
 
+export type MapViewMode = "2d" | "3d";
+
+export interface MapLayerVisibility {
+  trains: boolean;
+  stories: boolean;
+  alerts: boolean;
+  shuttles: boolean;
+  tourist: boolean;
+}
+
+export function resolveMapLayers({
+  trains = true, stories = true, alerts = true, shuttles = true, tourist = true,
+}: Partial<MapLayerVisibility> = {}): MapLayerVisibility {
+  return { trains, stories, alerts, shuttles, tourist };
+}
+
+export const DEFAULT_MAP_LAYERS = resolveMapLayers();
+
 export interface TVerseMapProps {
+  /** Defaults to the pitched dusk view. */
+  viewMode?: MapViewMode;
+  /** Omitted flags are visible. Tourist landmarks also require touristMode. */
+  visibleLayers?: Partial<MapLayerVisibility>;
   ref?: Ref<TVerseMapHandle>;
   stations: Station[];
   vehicles: TrainVehicle[];

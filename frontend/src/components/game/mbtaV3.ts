@@ -325,10 +325,74 @@ const SCENARIOS: Array<[RegExp, GameKind, string]> = [
   [/TRACK|RAIL_DEFECT|TIE_REPLACEMENT|MAINTENANCE|SPEED_RESTRICTION/, "TRACK_WELD", "track repair"],
 ];
 
-/** The simulated repair that illustrates the MBTA's published cause, or null when there's nothing to fix by hand. */
-export function scenarioFor(cause: string): { game: GameKind; label: string } | null {
+/**
+ * Only when the MBTA left the cause blank (UNKNOWN_CAUSE / OTHER_CAUSE): the repair its own wording names
+ * outright, e.g. "due to a signal problem", "overhead wire", "a disabled train". Planned shuttle diversions are
+ * almost always for track or signal work, so a bare "shuttle buses" reads as planned track work.
+ */
+const TEXT_SCENARIOS: Array<[RegExp, GameKind, string]> = [
+  [/\bsignal (problem|issue|repair|work|failure)s?\b/i, "WIRE_MATCH", "signal repair"],
+  [/\bswitch (problem|issue|repair|failure)s?\b/i, "SWITCH_THROW", "switch repair"],
+  [/\b(power (problem|issue|outage)|overhead wire|catenary|downed (wire|cable))s?\b/i, "BREAKER_SEQUENCE", "power repair"],
+  [/\b(disabled|stalled|broken[- ]down) (train|trolley|vehicle)s?\b|\bmechanical (problem|issue)s?\b/i, "RESCUE_COUPLE", "disabled-train rescue"],
+  [/\b(frozen|icy) switch(es)?\b|\bslippery rail\b/i, "ICE_THAW", "frozen-switch thaw"],
+  [/\b(track (problem|issue|work|repair)|broken rail|rail (defect|replacement))s?\b/i, "TRACK_WELD", "track repair"],
+  [/\bshuttle bus(es)?\b/i, "TRACK_WELD", "planned track work"],
+];
+
+/**
+ * The simulated repair that illustrates the MBTA's published cause, or null when there's nothing to fix by hand.
+ * The cause always wins; `text` (the alert's own header) is only read when the cause is blank.
+ */
+export function scenarioFor(cause: string, text?: string | null): { game: GameKind; label: string } | null {
   for (const [re, game, label] of SCENARIOS) if (re.test(cause)) return { game, label };
+  if (text && (cause === "UNKNOWN_CAUSE" || cause === "OTHER_CAUSE" || !cause)) {
+    for (const [re, game, label] of TEXT_SCENARIOS) if (re.test(text)) return { game, label };
+  }
   return null;
+}
+
+const ROUTE_NAMES: Record<string, string> = {
+  "Green-B": "Green Line B", "Green-C": "Green Line C", "Green-D": "Green Line D", "Green-E": "Green Line E",
+  Red: "Red Line", Mattapan: "Mattapan", Orange: "Orange Line", Blue: "Blue Line",
+};
+
+/**
+ * A train that has stood still between stations, as an alert-shaped "explore" target: it stages a simulated
+ * disabled-train rescue at the featured station on its line nearest to it (within 1.5 km), so tapping a stopped
+ * train opens the same behind-the-scenes repair as a live alert. Null when no featured station is close.
+ */
+export function alertForStoppedTrain(
+  train: StoppedTrain & { near?: string | null },
+  featured: Station[],
+  now = Date.now(),
+): LiveAlert | null {
+  const line = routeLine(train.route);
+  const meters = (s: Station) => Math.hypot((s.lng - train.lng) * 82_000, (s.lat - train.lat) * 111_000);
+  const onLine = featured.filter((s) => s.line === line);
+  if (!onLine.length) return null;
+  const nearest = onLine.reduce((best, s) => (meters(s) < meters(best) ? s : best));
+  if (meters(nearest) > NEAREST_MAX_METERS) return null;
+  const minutes = Math.max(3, Math.round((now - train.since) / 60_000));
+  const name = ROUTE_NAMES[train.route] ?? train.route;
+  const header = `A ${name} train has been standing still for ${minutes} min near ${nearest.name}.`;
+  return {
+    id: `stopped-${train.id}`,
+    effect: "DELAY",
+    cause: "DISABLED_TRAIN",
+    header,
+    shortHeader: header,
+    description: null,
+    severity: 3,
+    lifecycle: "NEW",
+    timeframe: null,
+    url: null,
+    updatedAt: now,
+    periods: [{ start: train.since, end: null }],
+    routes: [train.route],
+    stations: [nearest.id],
+    closure: false,
+  };
 }
 
 const NEAREST_MAX_METERS = 1500;
