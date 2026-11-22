@@ -314,6 +314,126 @@ export function whenLabel(alert: LiveAlert, now = Date.now()) {
   return `Until ${end.toLocaleString(undefined, sameDay ? { hour: "numeric", minute: "2-digit" } : { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}`;
 }
 
+// ---------------------------------------------------------------- how long a closure lasts
+
+const HOUR_MS = 60 * 60_000;
+const YEAR_MS = 365.25 * DAY_MS;
+const PERMANENT = /\bpermanently closed\b|\bclosed permanently\b/i;
+/** "expected to reopen in 2029", "reopens by spring 2027", "will reopen in late 2028". */
+const REOPEN = /\breopen\w*\s+(?:in|by|during)\s+((?:the\s+)?(?:early|mid|late)?\s*(?:spring|summer|fall|autumn|winter)?\s*(?:of\s+)?(20\d\d))\b/i;
+/** Where MBTA headers say why: "to allow for switch and rail upgrades", "closed for major accessibility upgrades". */
+const REASONS = [
+  /\bto allow for ([^.,;]+)/i,
+  /\bwhile ([^.,;]+?) (?:are|is) (?:being )?(?:done|made|completed|underway)/i,
+  /\bclosed for ([^.,;]+)/i,
+  /\bdue to (?:an? |the )?([^.,;]+)/i,
+];
+
+const upperFirst = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+const plural = (n: number, unit: string) => `${n} ${unit}${n === 1 ? "" : "s"}`;
+
+/** A rough length of time: "5 hours", "18 days", "6 weeks", "5 months", "about 2.5 years". */
+function spanLabel(ms: number) {
+  const hours = Math.round(ms / HOUR_MS);
+  if (hours < 24) return plural(Math.max(1, hours), "hour");
+  const days = ms / DAY_MS;
+  if (days < 31) return plural(Math.max(1, Math.round(days)), "day");
+  if (days < 60) return plural(Math.round(days / 7), "week");
+  if (days < 548) return plural(Math.round(days / 30.44), "month");
+  return `about ${Math.round((ms / YEAR_MS) * 2) / 2} years`;
+}
+
+/** MBTA service days are Boston days, wherever the viewer is. */
+const BOSTON = "America/New_York";
+const dayKey = (ms: number) => new Date(ms).toLocaleDateString("en-CA", { timeZone: BOSTON });
+
+function dateLabel(ms: number, now: number) {
+  const sameYear = dayKey(ms).slice(0, 4) === dayKey(now).slice(0, 4);
+  return new Date(ms).toLocaleDateString(undefined, { timeZone: BOSTON, month: "short", day: "numeric", year: sameYear ? undefined : "numeric" });
+}
+
+const monthYear = (ms: number) => new Date(ms).toLocaleDateString(undefined, { timeZone: BOSTON, month: "long", year: "numeric" });
+
+/** When it started: the day for recent work ("Nov 16"), the month and year for a long one ("June 2026"). */
+function sinceLabel(ms: number, now: number) {
+  return now - ms > 180 * DAY_MS ? monthYear(ms) : dateLabel(ms, now);
+}
+
+/** "Through today", "Through tomorrow" or "Through Dec 10", for the last day of service changes. */
+function throughLabel(lastDay: number, now: number) {
+  if (dayKey(lastDay) === dayKey(now)) return "Through today";
+  if (dayKey(lastDay) === dayKey(now + DAY_MS)) return "Through tomorrow";
+  return `Through ${dateLabel(lastDay, now)}`;
+}
+
+/** How far off a reopening year is: "within about a year", "2 to 3 years from now". */
+function yearsAway(year: number, now: number) {
+  const thisYear = new Date(now).getFullYear();
+  if (year < thisYear) return null;
+  if (year === thisYear) return "later this year";
+  const lo = Math.round((Date.UTC(year, 0, 1) - now) / YEAR_MS);
+  const hi = Math.round((Date.UTC(year + 1, 0, 1) - now) / YEAR_MS);
+  if (lo <= 0) return hi <= 1 ? "within about a year" : `within ${hi} years`;
+  return lo === hi ? `about ${plural(lo, "year")} from now` : `${lo} to ${hi} years from now`;
+}
+
+export interface ClosureTiming {
+  /** A few words for the map and lists: "Until 2029", "Through December 10", "Permanently closed". */
+  short: string;
+  /** For cards: when it reopens, how far off that is, and how long it has been out. */
+  long: string;
+}
+
+/**
+ * How long a closure or suspension lasts. The MBTA's active period has an end date for planned work; long
+ * projects are often published as ongoing with the reopening only in the text ("expected to reopen in 2029").
+ */
+export function closureTiming(
+  alert: Pick<LiveAlert, "effect" | "header" | "description" | "timeframe" | "periods">,
+  now = Date.now(),
+): ClosureTiming {
+  const text = `${alert.header} ${alert.description ?? ""}`;
+  if (PERMANENT.test(text)) return { short: "Permanently closed", long: "Permanently closed: the MBTA isn't reopening it." };
+  const period = alert.periods.find((p) => p.start <= now && (p.end === null || now < p.end)) ?? null;
+  const out = alert.effect === "SHUTTLE" ? "Shuttle buses" : alert.effect === "SUSPENSION" ? "No trains" : "Closed";
+  const soFar = period ? ` ${out} since ${sinceLabel(period.start, now)} (${spanLabel(now - period.start)} so far).` : "";
+  if (period?.end) {
+    // Service days run past midnight, so an end at 3 AM means "through the day before".
+    const lastDay = period.end - 4 * HOUR_MS;
+    const through = /^(through|until|thru)\b/i.test(alert.timeframe ?? "") ? upperFirst(alert.timeframe!) : throughLabel(lastDay, now);
+    // "Through today" already says how long; a countdown only helps further out.
+    const soon = dayKey(lastDay) === dayKey(now) || dayKey(lastDay) === dayKey(now + DAY_MS);
+    return { short: through, long: `${through}${soon ? "" : `, ${spanLabel(period.end - now)} from now`}.${soFar}` };
+  }
+  const reopen = text.match(REOPEN);
+  if (reopen) {
+    const when = reopen[1].trim();
+    const year = Number(reopen[2]);
+    const away = yearsAway(year, now);
+    // Only the year is known, so the whole closure is counted to the middle of it.
+    const total = period && year >= new Date(now).getFullYear() ? spanLabel(Date.UTC(year, 6, 1) - period.start) : null;
+    const since = period ? ` ${out} since ${monthYear(period.start)}${total ? `, ${total} in all` : ""}.` : "";
+    return { short: `Until ${when}`, long: `Expected to reopen in ${when}${away ? `, ${away}` : ""}.${since}` };
+  }
+  return { short: "Until further notice", long: `Until further notice: the MBTA hasn't said when it reopens.${soFar}` };
+}
+
+/** Finishes "Symphony is still …": "closed", "skipped by trains", "served by shuttle buses", "without train service". */
+export function closureStatus(alert: Pick<LiveAlert, "effect" | "header">) {
+  if (alert.effect === "SHUTTLE") return "served by shuttle buses";
+  if (alert.effect === "SUSPENSION") return "without train service";
+  return /not stopping|bypass/i.test(alert.header) ? "skipped by trains" : "closed";
+}
+
+/** Why the MBTA says it's closed, in its own words ("major accessibility upgrades"), or null. */
+export function closureReason(alert: Pick<LiveAlert, "header">): string | null {
+  for (const re of REASONS) {
+    const m = alert.header.match(re);
+    if (m) return m[1].trim();
+  }
+  return null;
+}
+
 // ---------------------------------------------------------------- the tunnel game, from the published cause
 
 const SCENARIOS: Array<[RegExp, GameKind, string]> = [
@@ -333,6 +453,7 @@ export function scenarioFor(cause: string): { game: GameKind; label: string } | 
 
 /** The same repairs, from the alert's own wording ("to allow for switch and rail upgrades"). */
 const TEXT_SCENARIOS: Array<[RegExp, GameKind, string]> = [
+  [/accessib|elevator|wheelchair|step-free|raised platform/i, "ACCESS_UPGRADE", "station accessibility upgrade"],
   [/\bsignal/i, "WIRE_MATCH", "signal repair"],
   [/\bswitch/i, "SWITCH_THROW", "switch repair"],
   [/\bpower\b|electrical|overhead wire/i, "BREAKER_SEQUENCE", "power repair"],

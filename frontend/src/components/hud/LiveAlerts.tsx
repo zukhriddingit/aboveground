@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Bell, BellOff, ChevronDown, Clock3, ExternalLink, Info, Loader2, MapPin, TriangleAlert, Wrench, X } from "lucide-react";
-import { causeLabel, describeEvent, effectLabel, whenLabel, type LiveAlert, type LiveEvent } from "@/components/game";
+import { causeLabel, closureTiming, describeEvent, effectLabel, whenLabel, type LiveAlert, type LiveEvent } from "@/components/game";
 import { BUTTON, BUTTON_PRIMARY, CONTROL, CONTROL_ACTIVE, FOCUS, LABEL, MBTA_RED, PANEL } from "@/lib/ui";
 import { LineBullet } from "./LineBullet";
 
@@ -243,7 +243,8 @@ function AlertCard({
 }: { alert: LiveAlert; expandedByDefault: boolean } & LiveAlertsPanelProps) {
   const [expanded, setExpanded] = useState(expandedByDefault);
   const names = alert.stations.map(stationName).filter((n): n is string => !!n);
-  const when = whenLabel(alert);
+  // A closure says how long it's out ("Expected to reopen in 2029, 2 to 3 years from now"), not just "Ongoing".
+  const when = alert.closure ? closureTiming(alert).long : whenLabel(alert);
   const cause = causeLabel(alert.cause);
   const explore = exploreLabel(alert);
   const Icon = alert.closure ? X : alert.effect === "DELAY" ? Clock3 : Info;
@@ -271,8 +272,8 @@ function AlertCard({
       <p className="leading-snug text-zinc-100">{alert.header}</p>
       <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-zinc-400">
         {when && (
-          <span className="inline-flex items-center gap-1">
-            <Clock3 className="size-3" />
+          <span className={`inline-flex items-start gap-1 ${alert.closure ? "text-zinc-200" : ""}`}>
+            <Clock3 className="mt-px size-3 shrink-0" />
             {when}
           </span>
         )}
