@@ -15,6 +15,7 @@ import MapAnchor from "./MapAnchor";
 import { MapOverlayContext, OverlayHub } from "./mapContext";
 import { StationInfoCard, TrainInfoCard } from "./MapInfoCard";
 import { PocketCityOverlay } from "./PocketCityOverlay";
+import { POCKET_CITIES } from "./pocketCities";
 import { pickFlat, registerTransitIcons, setFlatStations, setFlatTrains } from "./flatTransit";
 import { createMapStyle, setBasemapMode, setTransitVisibility, WINDOW_IMAGES, windowTexture } from "./mapStyle";
 import { DemoRide, RIDE_COORDS, RIDE_STOPS } from "./rideRoute";
@@ -165,6 +166,8 @@ export default function TVerseMap(props: TVerseMapProps) {
   const [info, setInfo] = useState<Info>(null);
   /** Station whose Pocket City "Street view" is open over the map. */
   const [streetView, setStreetView] = useState<StationId | null>(null);
+  /** The camera before Street view, to fly back to when the diorama closes. */
+  const streetCam = useRef<{ center: [number, number]; zoom: number; pitch: number; bearing: number } | null>(null);
 
   useEffect(() => {
     latest.current = props;
@@ -546,7 +549,17 @@ export default function TVerseMap(props: TVerseMapProps) {
                 onAlertClick={s => { setInfo(null); latest.current.onAlertClick?.(s); }}
                 signals={props.quickCheckSignals?.get(infoStation.id)}
                 onQuickCheckPoints={(points, kind) => latest.current.onQuickCheckPoints?.(points, kind)}
-                onStreetView={s => { setInfo(null); setStreetView(s.id); }}
+                onStreetView={s => {
+                  setInfo(null);
+                  const m = mapRef.current, city = POCKET_CITIES[s.id];
+                  if (m && city) {
+                    const c = m.getCenter();
+                    streetCam.current = { center: [c.lng, c.lat], zoom: m.getZoom(), pitch: m.getPitch(), bearing: m.getBearing() };
+                    // Fly down to the block at the diorama's own heading, so the fade into the miniature reads as one move.
+                    m.flyTo({ center: [city.lon, city.lat], zoom: 17.4, pitch: 58, bearing: city.bearing, duration: 1500, ...northUp(latest.current.viewMode) });
+                  }
+                  setStreetView(s.id);
+                }}
                 onShowPickup={pickup => {
                   setInfo(null);
                   ride.gesture();
@@ -564,7 +577,14 @@ export default function TVerseMap(props: TVerseMapProps) {
           )}
         </div>
       </MapOverlayContext.Provider>
-      {streetView && <PocketCityOverlay stationId={streetView} onClose={() => setStreetView(null)} />}
+      {streetView && (
+        <PocketCityOverlay stationId={streetView} onClose={() => {
+          setStreetView(null);
+          const m = mapRef.current, cam = streetCam.current;
+          streetCam.current = null;
+          if (m && cam) m.flyTo({ ...cam, duration: 1300, ...northUp(latest.current.viewMode) });
+        }} />
+      )}
     </div>
   );
 }

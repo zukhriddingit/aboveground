@@ -42,3 +42,16 @@ Night toggle under the season buttons. Live reads the latest observation at Loga
 Service (api.weather.gov), falls back to Open-Meteo, and turns night on after sunset. Pages also take
 `?weather=live|clear|drizzle|rain|snow|heavysnow|fog` and `&night=1` or `&night=0`; the app's Street view opens with
 `?weather=live`.
+
+Then the in-app look (also skips pages that already have it):
+
+```bash
+python3 add_embed.py ../../frontend/public/pocket/copley.html
+```
+
+With `?embed=1` a page drops its header and paper and sits like a model on a dark table, with the season and weather
+controls in the app's matte panels. Every page also posts `{type: "pocket-city:ready", angle}` to its parent with its
+first frame (`angle`: where north points on screen). The app's Street view flies the map down to the block at the
+matching bearing (`bearing = -angle`, stored per station in `frontend/src/components/map/pocketCities.ts` with the
+plot's centre), waits for that message, then fades the diorama in; its header switches between the In-app and Original
+looks.
