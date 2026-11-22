@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { POINTS_PER_FIX } from "@/components/game/FixTheTModal";
+import { POINTS_PER_FIX } from "@/components/game/points";
 import type { AvatarHat } from "@/types/tverse";
 
 export const HAT_ORDER: Exclude<AvatarHat, "none">[] = ["dunkin_hat", "trolley_helmet", "sox_cap"];
