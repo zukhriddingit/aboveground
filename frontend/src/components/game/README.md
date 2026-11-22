@@ -71,8 +71,19 @@ alert stays up until the MBTA clears it.
    Member 2's station model, with a train held short of it.
 3. **Trains hold.** `IncidentSim` sits between the train feed and `<TVerseMap vehicles>`: trains approaching the
    broken station queue up and stop, with amber rings, and the track segment pulses red.
-4. **Fix it.** `FixTheTModal` picks one of six puzzles from what broke: wire match (signals), weld (track),
-   switch throw, breaker sequence (power), couple and tow (disabled train) or ice thaw (frozen switch).
+4. **Fix it.** `FixTheTModal` picks one of six puzzles from what broke, each modeled on the real job:
+
+   | Puzzle | What you do |
+   | --- | --- |
+   | Signal (wire match) | Land each tagged field wire (1TR, 2TR, HR, DR) on its relay's terminal post in a relay case; the relay picks up and the signal clears |
+   | Track (weld) | A thermite weld: preheat the rail ends to about 1,000 °C, tap the crucible when the steel is ready, grind the collar flush |
+   | Switch | Throw the switches on the model board so the trolley reaches its destination, twice |
+   | Power (breakers) | Close the substation's feeder breakers in the dispatcher's order; the voltmeter climbs to 600 V DC |
+   | Disabled train | Couple the rescue train, connect the air line and charge the brake pipe to 90 psi, then tow |
+   | Frozen switch | Torch the ice wedged between the switch point and the stock rail until the point closes |
+
+   After a win the card says how long that repair really takes on the T, with a real MBTA example and its
+   source (`realRepairs.ts`), then plays the 3D repair after 9 seconds or when you tap "Watch the crew fix it".
 5. **Repair.** The crew works at the fault, the signal turns green, the trains pull out, the street closes,
    then the camera flies to the avatar and the new hat pops on. `TunnelView` drops you on the platform end
    facing the work zone and lets you walk the safety walk out to it.
@@ -89,7 +100,8 @@ alert stays up until the MBTA clears it.
 | `TrackCorridor.ts`, `TunnelCutaway.ts`, `SurfaceStation.ts` | Geometry along the real track; the opened tunnel; the street-level work zone |
 | `TunnelView.ts` | Walk-in view: a second renderer with an eye-level camera on the platform |
 | `tunnelModels.ts`, `tunnelTextures.ts`, `fx.ts` | MBTA fleets, crew, signal, cabinet, work-zone props; canvas textures; sparks and smoke |
-| `FixTheTModal.tsx` + six `*Game.tsx` | Delay card and the mini-games |
+| `FixTheTModal.tsx` + six `*Game.tsx` | Delay card and the mini-games (loaded on demand, like `FixTheTScene`) |
+| `realRepairs.ts` | How long each kind of repair really takes, with sources |
 | `useWorldFeed.ts` | `/api/world` → live MBTA vehicles → simulated fleet; `triggerDelay()` |
 | `alertTranslator.ts` | Plain-English copy for simulated delays and how each repair works |
 

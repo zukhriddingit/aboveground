@@ -3,22 +3,51 @@
 import { useEffect, useRef, useState } from "react";
 import { TimerBar, useCountdown } from "./useCountdown";
 
-const BREAKERS = 6;
+// A traction power substation's DC switchgear: each feeder breaker sends 600 V to one stretch of
+// third rail or trolley wire. After a trip, the dispatcher's sequence brings sections back one at a
+// time; the line voltmeter climbs as each one closes.
+const FEEDERS = ["Boylston", "Park St", "Tie bkr", "Copley", "Hynes", "Kenmore"];
 const ROUND_LENGTHS = [3, 4];
-const STEP_MS = 620;
+const STEP_MS = 650;
 const WRONG_PENALTY_MS = 1500;
+const LINE_VOLTS = 600;
 
-// Distinct breakers per round, so every correct flip can stay up and lit.
+// Distinct breakers per round, so every correct flip can stay closed and lit.
 function sequence(n: number) {
   const out: number[] = [];
   while (out.length < n) {
-    const k = Math.floor(Math.random() * BREAKERS);
+    const k = Math.floor(Math.random() * FEEDERS.length);
     if (!out.includes(k)) out.push(k);
   }
   return out;
 }
 
-/** Power problems: watch the feeder sequence light up, then flip the breakers in the same order. */
+function Voltmeter({ volts, tripped }: { volts: number; tripped: boolean }) {
+  const k = Math.min(1, volts / LINE_VOLTS);
+  const a = Math.PI * (1 - k);
+  return (
+    <svg viewBox="0 0 120 70" className="h-16 w-28" aria-hidden>
+      <path d="M 10 62 A 50 50 0 0 1 110 62" fill="none" stroke="#2a3140" strokeWidth={8} strokeLinecap="round" />
+      <path d="M 85 18 A 50 50 0 0 1 110 62" fill="none" stroke="#38ff9c" strokeWidth={8} strokeLinecap="round" opacity={0.45} />
+      {[0, 0.25, 0.5, 0.75, 1].map((t) => (
+        <line key={t} x1={60 + Math.cos(Math.PI * (1 - t)) * 40} y1={62 - Math.sin(Math.PI * (1 - t)) * 40} x2={60 + Math.cos(Math.PI * (1 - t)) * 46} y2={62 - Math.sin(Math.PI * (1 - t)) * 46} stroke="#64748b" strokeWidth={1.5} />
+      ))}
+      <line
+        x1={60}
+        y1={62}
+        x2={60 + Math.cos(a) * 42}
+        y2={62 - Math.sin(a) * 42}
+        stroke={tripped ? "#ff3b30" : "#f8fafc"}
+        strokeWidth={2.5}
+        strokeLinecap="round"
+        style={{ transition: "all 380ms cubic-bezier(.3,1.4,.5,1)" }}
+      />
+      <circle cx={60} cy={62} r={4} fill="#cbd5e1" />
+    </svg>
+  );
+}
+
+/** Power problems: watch the restoration sequence, then close the feeder breakers in the same order. */
 export function BreakerSequenceGame({
   durationMs = 24000,
   onWin,
@@ -48,7 +77,7 @@ export function BreakerSequenceGame({
 
   useEffect(() => {
     if (!won) return;
-    const t = setTimeout(() => finish.current.onWin(finish.current.remaining), 450);
+    const t = setTimeout(() => finish.current.onWin(finish.current.remaining), 900);
     return () => clearTimeout(t);
   }, [won]);
 
@@ -76,52 +105,74 @@ export function BreakerSequenceGame({
     if (seq[next.length - 1] !== k) {
       penalize(WRONG_PENALTY_MS);
       setFault(true);
-      setTimeout(() => setFault(false), 450);
+      setTimeout(() => setFault(false), 500);
       setReplay((r) => r + 1);
       return;
     }
+    navigator.vibrate?.(20);
     setInput(next);
-    if (next.length === seq.length) setTimeout(() => setRound((r) => r + 1), 350);
+    if (next.length === seq.length) setTimeout(() => setRound((r) => r + 1), 450);
   };
 
   const seq = seqs[Math.min(round, ROUND_LENGTHS.length - 1)];
+  const totalSteps = ROUND_LENGTHS.reduce((a, b) => a + b, 0);
+  const doneSteps = ROUND_LENGTHS.slice(0, Math.min(round, ROUND_LENGTHS.length)).reduce((a, b) => a + b, 0) + (won ? 0 : phase === "repeat" ? input.length : 0);
+  const volts = fault ? 0 : Math.round((doneSteps / totalSteps) * LINE_VOLTS);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <TimerBar remaining={remaining} total={durationMs} />
-      <div className={`rounded-xl border border-amber-400/20 bg-[linear-gradient(180deg,#1b1f2e,#0b0e1a)] p-4 ${fault ? "animate-[fixt-shake_0.4s_ease-in-out]" : ""}`}>
-        <div className="mb-3 flex items-center justify-between font-mono text-[11px] tracking-widest">
-          <span className="text-amber-200/80">{`FEEDER PANEL · ROUND ${Math.min(round + 1, ROUND_LENGTHS.length)}/${ROUND_LENGTHS.length}`}</span>
-          <span className={phase === "watch" ? "text-cyan-300" : "text-emerald-300"} aria-live="polite">
-            {won ? "POWER ON" : phase === "watch" ? "WATCH…" : `REPEAT ${input.length}/${seq.length}`}
-          </span>
+      <div className={`rounded-xl border border-slate-600/50 bg-[linear-gradient(180deg,#2a3038,#171b21)] p-3 ${fault ? "animate-[fixt-shake_0.4s_ease-in-out]" : ""}`}>
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <div className="font-mono text-[10px] leading-relaxed tracking-widest">
+            <p className="text-slate-300">SUBSTATION · DC FEEDERS</p>
+            <p className={fault ? "text-red-400" : won ? "text-emerald-300" : phase === "watch" ? "text-cyan-300" : "text-amber-200"} aria-live="polite">
+              {fault ? "FEEDER TRIPPED · WATCH AGAIN" : won ? "LINE ENERGIZED" : phase === "watch" ? `ROUND ${round + 1}/2 · WATCH THE ORDER` : `CLOSE ${input.length}/${seq.length}`}
+            </p>
+          </div>
+          <div className="flex flex-col items-center rounded-lg bg-black/40 px-2 pt-1 pb-0.5">
+            <Voltmeter volts={volts} tripped={fault} />
+            <span className={`font-mono text-[10px] tabular-nums ${volts >= LINE_VOLTS ? "text-emerald-300" : "text-slate-300"}`}>{volts} V DC</span>
+          </div>
         </div>
-        <div className="grid grid-cols-3 gap-3">
-          {Array.from({ length: BREAKERS }).map((_, k) => {
-            const on = lit === k;
-            const done = phase === "repeat" && input.includes(k);
+        <div className="grid grid-cols-3 gap-2">
+          {FEEDERS.map((name, k) => {
+            const cue = lit === k;
+            const closed = won || (phase === "repeat" && input.includes(k));
             return (
               <button
-                key={k}
+                key={name}
                 type="button"
                 onClick={() => flip(k)}
                 disabled={phase !== "repeat" || won}
-                aria-label={`Breaker F${k + 1}`}
-                className={`relative flex h-24 flex-col items-center justify-between rounded-lg border p-2 transition ${
-                  on ? "border-cyan-300 bg-cyan-400/20 shadow-[0_0_24px_rgba(34,211,238,0.6)]" : done ? "border-emerald-300 bg-emerald-400/15" : "border-white/10 bg-black/40 hover:bg-white/5"
+                aria-label={`Feeder breaker ${k + 1}, ${name}, ${closed ? "closed" : "open"}`}
+                className={`relative flex h-28 flex-col items-center justify-between rounded-lg border bg-[linear-gradient(180deg,#3a414b,#262b33)] px-1.5 pt-1.5 pb-1 transition ${
+                  cue ? "border-amber-300 shadow-[0_0_22px_rgba(255,190,60,0.55)]" : closed ? "border-emerald-400/70" : "border-black/40 hover:border-white/20"
                 } disabled:cursor-default focus-visible:outline-2 focus-visible:outline-cyan-300`}
               >
-                <span className={`size-2.5 rounded-full ${on ? "bg-cyan-300" : done || won ? "bg-emerald-400" : "bg-red-500/70"}`} />
-                <span className="relative h-10 w-5 rounded bg-slate-800 ring-1 ring-white/10">
-                  <span className={`absolute left-0.5 h-4 w-4 rounded-sm bg-slate-200 transition-all ${on || done || won ? "top-0.5" : "bottom-0.5"}`} />
+                <span className="flex w-full items-center justify-between">
+                  <span className={`size-2.5 rounded-full ${cue ? "bg-amber-300 shadow-[0_0_8px_#fcd34d]" : "bg-amber-900/60"}`} />
+                  <span className={`size-2.5 rounded-full ${closed ? "bg-red-500 shadow-[0_0_8px_#ef4444]" : "bg-red-950"}`} />
+                  <span className={`size-2.5 rounded-full ${closed ? "bg-emerald-950" : "bg-emerald-400/80"}`} />
                 </span>
-                <span className="font-mono text-[10px] text-slate-400">F{k + 1}</span>
+                <span className="relative h-12 w-9 rounded-md bg-[#11151a] ring-1 ring-black/60">
+                  <span
+                    className={`absolute left-1/2 h-6 w-3 -translate-x-1/2 rounded-sm transition-all duration-200 ${closed ? "top-0.5 bg-red-600" : "bottom-0.5 bg-slate-300"}`}
+                  />
+                </span>
+                <span className={`rounded px-1 font-mono text-[9px] font-bold ${closed ? "bg-red-600/90 text-white" : "bg-emerald-700/80 text-emerald-50"}`}>{closed ? "CLOSED" : "OPEN"}</span>
+                <span className="w-full truncate text-center font-mono text-[9px] text-slate-300">
+                  F{k + 1} {name}
+                </span>
               </button>
             );
           })}
         </div>
       </div>
-      <p className="text-center text-xs text-slate-400">Watch which feeders light up, then flip them in the same order. A wrong breaker costs time.</p>
+      <p className="text-center text-xs text-slate-400">
+        Watch which feeder lamps light up, then close those breakers in the same order. The voltmeter climbs to 600 V as each section comes back; a wrong breaker
+        trips the feeder and costs time.
+      </p>
     </div>
   );
 }
