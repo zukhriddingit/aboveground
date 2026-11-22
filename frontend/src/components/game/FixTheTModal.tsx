@@ -28,7 +28,7 @@ const GAMES: Record<GameKind, { title: string; hint: string; cta: string; done: 
   },
   TRACK_WELD: {
     title: "Thermite-weld the broken rail",
-    hint: "Preheat the rail ends, pour the molten steel, then grind the weld flush.",
+    hint: "Preheat the rail ends, pour the molten steel, grind the weld flush, then let it cool before trains cross.",
     cta: "Help Weld the Track",
     done: "Track welded!",
     fail: "The joint cracked again.",
@@ -245,7 +245,13 @@ function FixTheTDialog({ alert, station, stats, simulated, unlockName, explore, 
                 <span className="rounded-full bg-amber-300/15 px-2 py-0.5 text-[11px] tracking-normal text-amber-100 normal-case">{real.typical}</span>
               </p>
               <p className="text-[14px] leading-relaxed text-slate-100">{real.detail}</p>
-              <p className="mt-2 rounded-lg bg-black/30 p-2.5 text-[13px] leading-relaxed text-slate-300">{real.example}</p>
+              <ul className="mt-2 space-y-1.5">
+                {real.examples.map((example) => (
+                  <li key={example} className="rounded-lg bg-black/30 p-2.5 text-[13px] leading-relaxed text-slate-300">
+                    {example}
+                  </li>
+                ))}
+              </ul>
               <p className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-slate-400">
                 Sources:
                 {real.sources.map((src) => (

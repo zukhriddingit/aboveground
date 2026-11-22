@@ -12,12 +12,14 @@ export { useWorldFeed, triggerDelay, type WorldFeed } from "./useWorldFeed";
 export { canPlay, demoAlert, gameFor, shortName, translateForGame, translateLocally, DEMO_RAW_TEXT } from "./alertTranslator";
 export { faultForGame, faultPlace, type FaultKind } from "./faults";
 export { ClosureMarkers } from "./ClosureMarkers";
-export { useLiveMbta, type ClosureSite, type LiveMbta } from "./useLiveMbta";
+export { LiveMarkers } from "./LiveMarkers";
+export { describeEvent, useLiveMbta, type ClosureSite, type LiveEvent, type LiveMbta, type StoppedNear } from "./useLiveMbta";
 export {
   causeLabel,
   countdownLabel,
   effectLabel,
   featuredStationFor,
+  isServiceAlert,
   scenarioFor,
   whenLabel,
   type Arrival,

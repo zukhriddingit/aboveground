@@ -55,14 +55,17 @@ export async function fetchVehicles(signal?: AbortSignal, now = Date.now()): Pro
     bearing: number | null;
     occupancy_status: string | null;
     updated_at: string | null;
-  }>(`/vehicles?filter[route]=${MAP_ROUTES.join(",")}&fields[vehicle]=latitude,longitude,bearing,occupancy_status,updated_at`, signal);
+    current_status: string | null;
+  }>(`/vehicles?filter[route]=${MAP_ROUTES.join(",")}&fields[vehicle]=latitude,longitude,bearing,occupancy_status,updated_at,current_status`, signal);
   const out: TrainVehicle[] = [];
+  const seen: Array<Omit<TrackedTrain, "since">> = [];
   for (const r of doc.data) {
     const route = r.relationships?.route?.data?.id;
-    const { latitude: lat, longitude: lng, bearing, occupancy_status, updated_at } = r.attributes;
+    const { latitude: lat, longitude: lng, bearing, occupancy_status, updated_at, current_status } = r.attributes;
     if (!route || typeof lat !== "number" || typeof lng !== "number") continue;
     const updated = time(updated_at);
     if (Number.isFinite(updated) && now - updated > STALE_VEHICLE_MS) continue;
+    seen.push({ id: r.id, route, lat, lng, status: current_status ?? "", stopId: r.relationships?.stop?.data?.id ?? null });
     out.push({
       id: r.id,
       route,
@@ -72,7 +75,64 @@ export async function fetchVehicles(signal?: AbortSignal, now = Date.now()): Pro
       crowdedness: occupancyToCrowdedness(occupancy_status, r.id),
     });
   }
+  trackStill(seen, now);
   return out;
+}
+
+// ---------------------------------------------------------------- trains standing still between stations
+
+/** A train that hasn't moved more than this (m) between polls is standing still. */
+const STILL_METERS = 30;
+/** Standing still this long between stations, not at a platform, counts as stopped. */
+export const STOPPED_MS = 3 * 60_000;
+
+export interface StoppedTrain {
+  id: string;
+  route: string;
+  lat: number;
+  lng: number;
+  /** Platform stop it's heading for, when the MBTA reports one. */
+  stopId: string | null;
+  /** When it stopped moving (ms). */
+  since: number;
+}
+
+interface TrackedTrain extends StoppedTrain {
+  /** MBTA current_status: IN_TRANSIT_TO, INCOMING_AT or STOPPED_AT. */
+  status: string;
+}
+
+const tracked = new Map<string, TrackedTrain>();
+
+function metersApart(a: { lat: number; lng: number }, b: { lat: number; lng: number }) {
+  const x = (b.lng - a.lng) * Math.cos((((a.lat + b.lat) / 2) * Math.PI) / 180) * 111_320;
+  return Math.hypot(x, (b.lat - a.lat) * 110_540);
+}
+
+function trackStill(seen: Array<Omit<TrackedTrain, "since">>, now: number) {
+  const ids = new Set<string>();
+  for (const v of seen) {
+    ids.add(v.id);
+    const prev = tracked.get(v.id);
+    if (!prev || prev.route !== v.route || metersApart(prev, v) > STILL_METERS) tracked.set(v.id, { ...v, since: now });
+    else {
+      prev.status = v.status;
+      prev.stopId = v.stopId;
+    }
+  }
+  for (const id of [...tracked.keys()]) if (!ids.has(id)) tracked.delete(id);
+}
+
+/** Trains that have stood still between stations for STOPPED_MS or more, from the vehicle polls so far. */
+export function stoppedTrains(now = Date.now()): StoppedTrain[] {
+  return [...tracked.values()]
+    .filter((t) => t.status !== "STOPPED_AT" && now - t.since >= STOPPED_MS)
+    .map((t) => ({ id: t.id, route: t.route, lat: t.lat, lng: t.lng, stopId: t.stopId, since: t.since }));
+}
+
+/** Whether the last vehicle poll still had this train. */
+export function isTracked(id: string) {
+  return tracked.has(id);
 }
 
 // ---------------------------------------------------------------- stations (GTFS stops)
@@ -157,6 +217,12 @@ export interface LiveAlert {
 }
 
 export const CLOSURE_EFFECTS = new Set(["SUSPENSION", "SHUTTLE", "STATION_CLOSURE", "STOP_CLOSURE"]);
+/** Effects that change train service (not elevator, escalator, parking or access notices). */
+const SERVICE_EFFECTS = new Set([...CLOSURE_EFFECTS, "DELAY", "DETOUR", "SERVICE_CHANGE", "MODIFIED_SERVICE", "CANCELLATION", "TRACK_CHANGE"]);
+
+export function isServiceAlert(alert: Pick<LiveAlert, "effect">) {
+  return SERVICE_EFFECTS.has(alert.effect);
+}
 
 export function isActive(alert: LiveAlert, now = Date.now()) {
   return alert.periods.some((p) => p.start <= now && (p.end === null || now < p.end));
