@@ -1,8 +1,10 @@
 // Stories helpers. Stations, mock stories, colours and labels come from the shared
 // `@/lib/mockData` and `@/lib/theme`; this file only adds what the stories UI needs on top.
-import type { Station, StationId, StoryCategory } from "@/types/tverse";
+import { Sparkles, Ticket, TriangleAlert, UtensilsCrossed, type LucideIcon } from "lucide-react";
+import type { Station, StationId, StationStory, StoryCategory } from "@/types/tverse";
 import { MOCK_STATIONS } from "@/lib/mockData";
 import { STORY_CATEGORIES } from "@/lib/theme";
+import { POCKET_CITIES } from "@/components/map/pocketCities";
 
 export type Landmark = NonNullable<Station["landmark"]>;
 
@@ -32,6 +34,31 @@ export const CATEGORY_META = Object.fromEntries(
 ) as Record<StoryCategory, (typeof STORY_CATEGORIES)[StoryCategory] & { stops: [string, string]; gradient: string }>;
 
 export const CATEGORIES = Object.keys(STORY_CATEGORIES) as StoryCategory[];
+
+/** One icon set across Stories and the T-Feed (lucide), instead of emoji. */
+export const CATEGORY_ICON: Record<StoryCategory, LucideIcon> = {
+  CHEAP_EATS: UtensilsCrossed,
+  EVENTS: Ticket,
+  VIBES: Sparkles,
+  ALERTS: TriangleAlert,
+};
+
+/** The seed stories show their own block, shot from the station's Pocket City diorama. */
+const SEED_PHOTOS: Record<string, string> = Object.fromEntries(
+  ["s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8"].map((id) => [id, `/stories/${id}.jpg`]),
+);
+
+/** A diorama shot of the station's block, for posts without a photo; null where there's no diorama. */
+export function stationPhoto(id: StationId): string | null {
+  const city = POCKET_CITIES[id];
+  return city ? `/stories/st-${city.slug}.jpg` : null;
+}
+
+/** Swaps a seed story's generated SVG art for its diorama photo. */
+export function withSeedPhoto(story: StationStory): StationStory {
+  const photo = SEED_PHOTOS[story.id];
+  return photo && (!story.imageUrl || story.imageUrl.startsWith("data:image/svg")) ? { ...story, imageUrl: photo } : story;
+}
 
 export function stationName(id: StationId, stations: Station[] = MOCK_STATIONS) {
   return stations.find((s) => s.id === id)?.name ?? MOCK_STATIONS.find((s) => s.id === id)?.name ?? id;

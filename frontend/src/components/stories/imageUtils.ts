@@ -31,7 +31,7 @@ function loadImage(src: string) {
 }
 
 /** No photo? Render a text story card (like IG "Create" mode) so posting never blocks. */
-export function renderTextCard(category: StoryCategory, caption: string, placeName: string): string {
+export function renderTextCard(category: StoryCategory, caption: string, placeName: string, lineColor = "#ffffff"): string {
   const W = 720;
   const H = 1280;
   const canvas = document.createElement("canvas");
@@ -39,26 +39,31 @@ export function renderTextCard(category: StoryCategory, caption: string, placeNa
   canvas.height = H;
   const ctx = canvas.getContext("2d");
   if (!ctx) return "";
-  const [a, b] = CATEGORY_META[category].stops;
-  const g = ctx.createLinearGradient(0, 0, W, H);
-  g.addColorStop(0, a);
-  g.addColorStop(1, b);
-  ctx.fillStyle = g;
+  // MBTA wayfinding: a matte near-black panel, the line colour as a band, white type.
+  ctx.fillStyle = "#111113";
   ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = lineColor;
+  ctx.fillRect(0, 0, W, 28);
 
-  ctx.textAlign = "center";
-  ctx.font = "160px system-ui, Apple Color Emoji, Segoe UI Emoji";
-  ctx.fillText(CATEGORY_META[category].emoji, W / 2, 420);
+  const sans = "system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif";
+  ctx.textAlign = "left";
+  ctx.fillStyle = "rgba(255,255,255,0.6)";
+  ctx.font = `600 30px ${sans}`;
+  ctx.fillText(CATEGORY_META[category].label.toUpperCase(), 72, 150);
 
-  ctx.fillStyle = "#fff";
-  ctx.font = "bold 56px system-ui, -apple-system, Segoe UI, sans-serif";
-  const lines = wrap(ctx, caption || placeName, W - 140).slice(0, 6);
-  lines.forEach((line, i) => ctx.fillText(line, W / 2, 600 + i * 72));
+  ctx.fillStyle = "#ffffff";
+  ctx.font = `bold 64px ${sans}`;
+  const lines = wrap(ctx, caption || placeName, W - 144).slice(0, 7);
+  lines.forEach((line, i) => ctx.fillText(line, 72, 330 + i * 80));
 
-  ctx.globalAlpha = 0.85;
-  ctx.font = "600 36px system-ui, -apple-system, Segoe UI, sans-serif";
-  ctx.fillText(`📍 ${placeName}`, W / 2, 600 + lines.length * 72 + 70);
-  return canvas.toDataURL("image/jpeg", 0.8);
+  ctx.fillStyle = lineColor;
+  ctx.beginPath();
+  ctx.arc(86, 330 + lines.length * 80 + 66, 14, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "rgba(255,255,255,0.85)";
+  ctx.font = `600 34px ${sans}`;
+  ctx.fillText(placeName, 116, 330 + lines.length * 80 + 78);
+  return canvas.toDataURL("image/jpeg", 0.85);
 }
 
 function wrap(ctx: CanvasRenderingContext2D, text: string, maxW: number) {

@@ -7,9 +7,16 @@ import { MOCK_STATIONS } from "@/lib/mockData";
 import { DEFAULT_RIDER_NAME, publicName, setRiderProfile, useRiderProfile } from "@/lib/riderProfile";
 import { LINE_COLORS } from "@/lib/theme";
 import { BUTTON_PRIMARY, FOCUS } from "@/lib/ui";
-import { CATEGORIES, CATEGORY_META } from "./storyData";
+import { Camera, Footprints, ImageUp, Loader2, X } from "lucide-react";
+import { CATEGORIES, CATEGORY_ICON, CATEGORY_META, stationPhoto } from "./storyData";
 import { compressImage, renderTextCard } from "./imageUtils";
 import { StoryStyles } from "./StoryStyles";
+
+/** The station's diorama shot as an absolute URL (the backend accepts http(s) or data: images only). */
+function stationShot(id: StationId): string | null {
+  const path = stationPhoto(id);
+  return path && typeof window !== "undefined" ? `${window.location.origin}${path}` : null;
+}
 import type { NewStoryDraft } from "./useStationStories";
 
 export interface PostStoryModalProps {
@@ -100,7 +107,7 @@ function PostStorySheet({
       placeName: place,
       priceTag: priceTag || undefined,
       walkMin,
-      imageUrl: imageUrl || renderTextCard(category, caption.trim(), place),
+      imageUrl: imageUrl || stationShot(stationId) || renderTextCard(category, caption.trim(), place, station ? LINE_COLORS[station.line] : undefined),
     };
     void onSubmit(draft); // optimistic: the hook shows it instantly
     onPosted?.(draft);
@@ -134,7 +141,7 @@ function PostStorySheet({
             aria-label="Close"
             className="flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-white/80 transition hover:bg-white/20"
           >
-            ✕
+            <X size={18} aria-hidden />
           </button>
         </div>
 
@@ -161,7 +168,7 @@ function PostStorySheet({
               disabled={busy}
               className={`${BUTTON_PRIMARY} h-28 flex-col gap-1 text-sm active:scale-[.97] ${FOCUS}`}
             >
-              <span className="text-3xl">{busy ? "⏳" : "📸"}</span>
+              {busy ? <Loader2 size={26} aria-hidden className="animate-spin" /> : <Camera size={26} aria-hidden />}
               {busy ? "Compressing…" : "Snap photo"}
             </button>
             <button
@@ -170,11 +177,11 @@ function PostStorySheet({
               disabled={busy}
               className={`flex h-28 flex-col items-center justify-center gap-1 rounded-lg border border-white/12 bg-white/[.05] text-sm font-semibold transition hover:bg-white/[.1] active:scale-[.97] ${FOCUS}`}
             >
-              <span className="text-3xl">🖼️</span>
+              <ImageUp size={26} aria-hidden />
               Upload
             </button>
             <p className="col-span-2 text-center text-[11px] text-white/45">
-              No photo? We&apos;ll make a text card for you.
+              {stationPhoto(stationId) ? "No photo? We\u2019ll use a shot of this block from its diorama." : "No photo? We\u2019ll make a text card for you."}
             </p>
           </div>
         )}
@@ -207,6 +214,7 @@ function PostStorySheet({
         <div className="mb-4 grid grid-cols-4 gap-2">
           {CATEGORIES.map((c) => {
             const m = CATEGORY_META[c];
+            const Icon = CATEGORY_ICON[c];
             const active = c === category;
             return (
               <button
@@ -218,7 +226,7 @@ function PostStorySheet({
                   active ? "border-white bg-white text-zinc-950" : "border-white/12 bg-white/[.04] text-zinc-300 hover:bg-white/[.08]"
                 }`}
               >
-                <span className="text-lg">{m.emoji}</span>
+                <Icon size={17} aria-hidden />
                 {m.label}
               </button>
             );
@@ -265,7 +273,7 @@ function PostStorySheet({
             <button type="button" aria-label="Less walking time" className="h-6 w-6 rounded-full hover:bg-white/10" onClick={() => setWalkMin((w) => Math.max(1, w - 1))}>
               −
             </button>
-            <span className="w-14 text-center font-semibold">🚶 {walkMin}m</span>
+            <span className="flex w-14 items-center justify-center gap-1 font-semibold"><Footprints size={12} aria-hidden /> {walkMin}m</span>
             <button type="button" aria-label="More walking time" className="h-6 w-6 rounded-full hover:bg-white/10" onClick={() => setWalkMin((w) => Math.min(30, w + 1))}>
               +
             </button>
