@@ -10,7 +10,7 @@ import { compressImage } from "./imageUtils";
 import { useRiderIdentity } from "./localStore";
 import { IdentityChip } from "./RiderBits";
 
-/** CharliePoints for a new post. */
+/** XP for a new post. */
 export const POST_POINTS = 25;
 
 export interface CreatePostModalProps {
@@ -18,7 +18,7 @@ export interface CreatePostModalProps {
   onClose: () => void;
   /** Pass `feed.addPost` from useCommunityFeed (optimistic POST /api/community/posts). */
   onSubmit: (draft: NewCommunityPost) => unknown;
-  /** Called with (25, line) on submit, for the CharliePoints counter. */
+  /** Called with (25, line) on submit, for the Transit Rank XP bar. */
   onPointsAwarded?: (points: number, line: TransitLine) => void;
   /** Fires right after submit (e.g. fly the map to the stop). */
   onPosted?: (draft: NewCommunityPost) => void;
@@ -123,7 +123,7 @@ function Composer({ onClose, onSubmit, onPointsAwarded, onPosted, defaultLine, d
     };
     void onSubmit(draft); // optimistic: the feed shows it instantly
     onPointsAwarded?.(POST_POINTS, line);
-    showFeedToast({ text: `+${POST_POINTS} CharliePoints · Posted to ${line} Line!`, emoji: "⚡", color: glow });
+    showFeedToast({ text: `+${POST_POINTS} XP · Posted to ${line} Line`, emoji: "⚡", color: glow });
     onPosted?.(draft);
     onClose();
   };
@@ -141,14 +141,14 @@ function Composer({ onClose, onSubmit, onPointsAwarded, onPosted, defaultLine, d
       <form
         onSubmit={submit}
         onPaste={(e) => takeFile(Array.from(e.clipboardData.files).find((f) => f.type.startsWith("image/")))}
-        className="tf-no-scrollbar max-h-[94dvh] w-full overflow-y-auto rounded-t-3xl border border-white/10 bg-slate-950/90 p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] text-white shadow-2xl backdrop-blur-xl sm:max-w-md sm:rounded-3xl"
-        style={{ animation: "tf-sheet-up .3s cubic-bezier(.2,.9,.3,1)", boxShadow: `0 0 60px ${glow}22, 0 25px 60px rgba(0,0,0,.6)` }}
+        className="tf-no-scrollbar max-h-[94dvh] w-full overflow-y-auto rounded-t-2xl border border-white/12 bg-zinc-950/95 p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] text-white shadow-2xl backdrop-blur-xl sm:max-w-md sm:rounded-2xl"
+        style={{ animation: "tf-sheet-up .3s cubic-bezier(.2,.9,.3,1)", boxShadow: "0 25px 60px rgba(0,0,0,.6)" }}
       >
         <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-white/25 sm:hidden" />
         <div className="mb-4 flex items-center justify-between">
           <div>
             <h2 className="flex items-center gap-2 text-lg font-bold">
-              <span className="h-2.5 w-2.5 rounded-full" style={{ background: glow, boxShadow: `0 0 10px ${glow}` }} />
+              <span className="h-2.5 w-2.5 rounded-full" style={{ background: color }} />
               New T-Feed post
             </h2>
             <p className="text-xs text-white/55">Five seconds. What&apos;s happening on your line?</p>
@@ -245,7 +245,7 @@ function Composer({ onClose, onSubmit, onPointsAwarded, onPosted, defaultLine, d
                 className="rounded-xl py-2 text-xs font-bold transition"
                 style={
                   active
-                    ? { background: lineColor(l), color: "#fff", boxShadow: `0 0 18px ${lineGlow(l)}88` }
+                    ? { background: lineColor(l), color: "#fff" }
                     : { background: "rgba(255,255,255,.05)", color: lineGlow(l), boxShadow: `inset 0 0 0 1px ${lineGlow(l)}44` }
                 }
               >
@@ -291,7 +291,7 @@ function Composer({ onClose, onSubmit, onPointsAwarded, onPosted, defaultLine, d
                 className="h-7 w-7 rounded-full text-[11px] font-extrabold transition"
                 style={
                   branch === b
-                    ? { background: color, color: "#fff", boxShadow: `0 0 12px ${glow}88` }
+                    ? { background: color, color: "#fff" }
                     : { background: "rgba(255,255,255,.05)", color: "rgba(255,255,255,.7)", boxShadow: "inset 0 0 0 1px rgba(255,255,255,.14)" }
                 }
               >
@@ -318,7 +318,7 @@ function Composer({ onClose, onSubmit, onPointsAwarded, onPosted, defaultLine, d
                 className="flex flex-col items-center gap-0.5 rounded-xl px-1 py-2 text-[10px] font-semibold leading-tight transition"
                 style={
                   active
-                    ? { background: `${m.color}26`, color: m.color, boxShadow: `inset 0 0 0 1px ${m.color}, 0 0 14px ${m.color}55` }
+                    ? { background: `${m.color}26`, color: m.color, boxShadow: `inset 0 0 0 1px ${m.color}` }
                     : { background: "rgba(255,255,255,.04)", color: "rgba(255,255,255,.7)", boxShadow: "inset 0 0 0 1px rgba(255,255,255,.12)" }
                 }
               >
@@ -349,18 +349,18 @@ function Composer({ onClose, onSubmit, onPointsAwarded, onPosted, defaultLine, d
         </div>
 
         <div className="mb-4 flex">
-          <IdentityChip accent={glow} />
+          <IdentityChip />
         </div>
 
         <button
           type="submit"
           disabled={!canPost}
-          className="w-full rounded-2xl py-3.5 text-base font-bold text-white shadow-xl transition active:scale-[.98] disabled:opacity-40"
-          style={{ background: `linear-gradient(135deg, ${color}, ${glow})`, boxShadow: canPost ? `0 0 26px ${glow}66` : undefined }}
+          className="w-full rounded-xl py-3.5 text-base font-bold text-white transition active:scale-[.98] disabled:opacity-40"
+          style={{ background: color }}
         >
-          {busy ? "Compressing photo…" : `Post to ${line} Line · ${stopName(stationId)} 🚀`}
+          {busy ? "Compressing photo…" : `Post to ${line} Line · ${stopName(stationId)}`}
         </button>
-        <p className="mt-2 text-center text-[11px] text-white/40">+{POST_POINTS} CharliePoints for posting · Enter to post</p>
+        <p className="mt-2 text-center text-[11px] text-white/40">+{POST_POINTS} XP for posting · Enter to post</p>
       </form>
     </div>
   );
