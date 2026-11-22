@@ -1,19 +1,21 @@
 "use client";
 
 import { useState } from "react";
+import { Pencil } from "lucide-react";
 import { Switch } from "@/components/hud/Switch";
 import { DEFAULT_RIDER_NAME, setRiderProfile, useRiderProfile } from "@/lib/riderProfile";
 import { FOCUS } from "@/lib/ui";
 import type { RiderBadge } from "@/types/tverse";
-import { BADGES, BADGE_KEYS, authorLabel, randomHandle } from "./feedMeta";
+import { BADGE_KEYS, authorLabel, randomHandle } from "./feedMeta";
 import { identityStore, useRiderIdentity } from "./localStore";
 
+/** A rider's initial on a matte disc. Their colour is only a thin ring, so line colours stay the loudest colour in the feed. */
 export function Avatar({ handle, color, size = 36 }: { handle: string; color: string; size?: number }) {
   return (
     <span
       aria-hidden
-      className="flex shrink-0 select-none items-center justify-center rounded-full font-bold uppercase text-white ring-1 ring-white/20"
-      style={{ width: size, height: size, fontSize: size * 0.42, background: color }}
+      className="flex shrink-0 select-none items-center justify-center rounded-full bg-zinc-800 font-semibold uppercase text-zinc-100"
+      style={{ width: size, height: size, fontSize: size * 0.4, boxShadow: `inset 0 0 0 1.5px ${color}99` }}
     >
       {handle.replace(/[^\p{L}\p{N}]/gu, "").charAt(0) || "T"}
     </span>
@@ -22,13 +24,8 @@ export function Avatar({ handle, color, size = 36 }: { handle: string; color: st
 
 export function BadgeTag({ badge }: { badge?: RiderBadge }) {
   if (!badge) return null;
-  const meta = BADGES[badge];
   return (
-    <span
-      className="inline-flex shrink-0 items-center gap-0.5 rounded px-1.5 py-px text-[10px] font-bold leading-4"
-      style={{ color: meta.color, background: `${meta.color}1a`, boxShadow: `inset 0 0 0 1px ${meta.color}40` }}
-    >
-      <span className="text-[10px]">{meta.emoji}</span>
+    <span className="inline-flex shrink-0 items-center rounded border border-white/15 px-1.5 text-[10px] font-semibold leading-4 tracking-[0.02em] text-zinc-300">
       {badge}
     </span>
   );
@@ -60,7 +57,7 @@ export function IdentityChip({ label = "Posting as" }: { label?: string; accent?
         <span className="text-zinc-400">{label}</span>
         <span className="truncate font-semibold text-white">{authorLabel(me.handle)}</span>
         <BadgeTag badge={me.badge} />
-        <span className="text-zinc-500 transition group-hover:text-white">✎</span>
+        <Pencil className="size-3 text-zinc-500 transition group-hover:text-white" aria-hidden />
       </button>
     );
   }
@@ -108,27 +105,22 @@ export function IdentityChip({ label = "Posting as" }: { label?: string; accent?
         <div className={`flex flex-wrap gap-1.5 ${profile.anonymous ? "pointer-events-none opacity-40" : ""}`} aria-disabled={profile.anonymous}>
           {BADGE_KEYS.map((b) => {
             const active = b === me.chosenBadge;
-            const meta = BADGES[b];
             return (
               <button
                 key={b}
                 type="button"
                 onClick={() => identityStore.set((v) => ({ ...v, badge: b }))}
                 aria-pressed={active}
-                className={`rounded-full px-2.5 py-1 text-[11px] font-semibold transition ${FOCUS}`}
-                style={
-                  active
-                    ? { color: "#000", background: meta.color }
-                    : { color: "rgba(255,255,255,.75)", background: "rgba(255,255,255,.04)", boxShadow: "inset 0 0 0 1px rgba(255,255,255,.14)" }
-                }
+                className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors ${FOCUS} ${
+                  active ? "border-white bg-white text-zinc-950" : "border-white/14 bg-white/[0.04] text-zinc-300 hover:bg-white/[0.09]"}`}
               >
-                {meta.emoji} {b}
+                {b}
               </button>
             );
           })}
         </div>
       ) : (
-        <p className="px-0.5 text-[11px] text-zinc-500">🔒 Rider badges (BU, MIT, NEU, Local, Tourist) unlock at Lvl 2 · Line Scout.</p>
+        <p className="px-0.5 text-[11px] text-zinc-500">Rider badges (BU, MIT, NEU, Local, Tourist) unlock at Lvl 2 · Line Scout.</p>
       )}
     </div>
   );

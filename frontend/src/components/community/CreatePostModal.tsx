@@ -1,5 +1,6 @@
 "use client";
 
+import { Camera, ImageUp } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { NewCommunityPost, PostVibe, StationId, TransitLine } from "@/types/tverse";
 import { LINES, VIBES, VIBE_KEYS, isNarrowScreen, lineColor, lineGlow, randomHandle } from "./feedMeta";
@@ -210,7 +211,7 @@ function Composer({ onClose, onSubmit, onPointsAwarded, onPosted, defaultLine, d
                   onClick={() => cameraRef.current?.click()}
                   className="flex h-20 flex-col items-center justify-center gap-0.5 rounded-lg bg-white text-sm font-semibold text-zinc-950 transition hover:bg-zinc-200 active:scale-[.97] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
                 >
-                  <span className="text-2xl">📸</span>
+                  <Camera className="size-6" strokeWidth={1.75} aria-hidden />
                   Camera
                 </button>
                 <button
@@ -218,7 +219,7 @@ function Composer({ onClose, onSubmit, onPointsAwarded, onPosted, defaultLine, d
                   onClick={() => galleryRef.current?.click()}
                   className="flex h-20 flex-col items-center justify-center gap-0.5 rounded-lg border border-white/12 bg-white/[.05] text-sm font-semibold transition hover:bg-white/[.1] active:scale-[.97] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
                 >
-                  <span className="text-2xl">🖼️</span>
+                  <ImageUp className="size-6" strokeWidth={1.75} aria-hidden />
                   Upload
                 </button>
               </div>
@@ -314,14 +315,10 @@ function Composer({ onClose, onSubmit, onPointsAwarded, onPosted, defaultLine, d
                 type="button"
                 onClick={() => setVibe(v)}
                 aria-pressed={active}
-                className="flex flex-col items-center gap-0.5 rounded-xl px-1 py-2 text-[10px] font-semibold leading-tight transition"
-                style={
-                  active
-                    ? { background: `${m.color}26`, color: m.color, boxShadow: `inset 0 0 0 1px ${m.color}` }
-                    : { background: "rgba(255,255,255,.04)", color: "rgba(255,255,255,.7)", boxShadow: "inset 0 0 0 1px rgba(255,255,255,.12)" }
-                }
+                className={`flex flex-col items-center gap-1 rounded-lg border px-1 py-2 text-[10px] font-semibold leading-tight transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white ${
+                  active ? "border-white bg-white text-zinc-950" : "border-white/12 bg-white/[0.04] text-zinc-300 hover:bg-white/[0.09]"}`}
               >
-                <span className="text-lg">{m.emoji}</span>
+                <m.icon className="size-4" strokeWidth={2} aria-hidden />
                 {m.label}
               </button>
             );

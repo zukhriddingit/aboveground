@@ -52,11 +52,10 @@ export function FeedToaster({ besideDrawer = false }: { besideDrawer?: boolean }
           className="absolute left-1/2 flex items-center gap-2 whitespace-nowrap rounded-full border border-white/12 bg-zinc-950/95 px-4 py-2.5 text-sm font-semibold text-white shadow-[0_10px_30px_rgba(0,0,0,.5)] backdrop-blur-xl"
           style={{
             bottom: (list.length - 1 - i) * 52,
-            animation: "tf-toast-in .28s cubic-bezier(.2,.9,.3,1.2) both",
+            animation: "tf-toast-in .32s cubic-bezier(.16,1,.3,1) both",
             transform: "translateX(-50%)",
           }}
         >
-          {t.emoji && <span className="text-base">{t.emoji}</span>}
           <span>{t.text}</span>
           {t.color && <span className="h-2 w-2 rounded-full" style={{ background: t.color }} />}
         </div>

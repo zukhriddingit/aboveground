@@ -1,5 +1,6 @@
 "use client";
 
+import { Heart } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import type { CommunityPost, NewCommunityReply, TransitLine } from "@/types/tverse";
 import { authorLabel, colorFor, lineGlow, randomHandle, relativeTime } from "./feedMeta";
@@ -88,13 +89,13 @@ export function ReplyThread({ post, now, onReply, onLikeReply, onPointsAwarded }
                 aria-label={r.likedByMe ? "Unlike reply" : "Like reply"}
                 className="flex w-8 shrink-0 flex-col items-center pt-0.5 text-[11px] text-white/50 transition hover:text-white"
               >
-                <span
+                <Heart
                   key={r.likedByMe ? "on" : "off"}
-                  className="text-sm leading-none"
-                  style={{ animation: r.likedByMe ? "tf-bump .35s ease-out" : undefined, filter: r.likedByMe ? "none" : "grayscale(1) opacity(.55)" }}
-                >
-                  {r.likedByMe ? "❤️" : "🤍"}
-                </span>
+                  className={`size-3.5 ${r.likedByMe ? "fill-white text-white" : "text-zinc-500"}`}
+                  strokeWidth={2}
+                  style={{ animation: r.likedByMe ? "tf-bump .35s ease-out" : undefined }}
+                  aria-hidden
+                />
                 <span className="mt-0.5 tabular-nums">{r.likes || ""}</span>
               </button>
             </li>
